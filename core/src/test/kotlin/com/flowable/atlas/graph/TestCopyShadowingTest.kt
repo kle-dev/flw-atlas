@@ -86,8 +86,10 @@ class TestCopyShadowingTest {
             for (r in refs) assertEquals(nodeFile, r["target"])
 
             val overview = com.flowable.atlas.render.OverviewRenderer.render(result, dir)
-            assertTrue(overview, overview.contains("form `DEMO-form` (`app/custom/DEMO-bar.zip!DEMO-form.form`)"))
-            assertFalse(overview, overview.contains("(`app/design/DEMO.zip!DEMO-form.form`)"))
+            // The overview names an archive by its file name, and its legend line says which one that is.
+            assertTrue(overview, overview.contains("form `DEMO-form` (`DEMO-bar.zip!DEMO-form.form`)"))
+            assertTrue(overview, overview.contains("`DEMO-bar.zip` = `app/custom/DEMO-bar.zip`"))
+            assertFalse(overview, overview.contains("DEMO.zip!DEMO-form.form"))
         } finally {
             dir.deleteRecursively()
         }

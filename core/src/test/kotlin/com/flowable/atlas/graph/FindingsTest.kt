@@ -232,7 +232,8 @@ class FindingsTest {
                 node("external:gone", "external", data = mapOf("missingModel" to true)),
                 process("p", mapOf(
                     "gateways" to listOf(gw("g1")), "userTasks" to listOf(task("a"), task("b")),
-                    "flows" to listOf(flow("a1", "g1", "a", "\${x}"), flow("a2", "g1", "b", "\${!x}")),
+                    // not opposites: x == 3 takes neither flow, which is the finding
+                    "flows" to listOf(flow("a1", "g1", "a", "\${x == 1}"), flow("a2", "g1", "b", "\${x == 2}")),
                 )),
             ),
         )

@@ -78,6 +78,21 @@ variable and expression inventory, and every finding with its `file:line`.
 It also carries the data-layer chain — service ↔ Liquibase table ↔ data object — which is the one view
 that shows whether the database and the models still agree.
 
+What it says, it says once and in the words that mean it:
+- **Processes.** A boundary event is listed right after the activity it hangs on, and says which and
+  whether it interrupts; an embedded sub-process lists its contents before what follows it. Only an
+  element no flow and no event reaches is marked *not reachable* — an event sub-process *starts on its
+  event*.
+- **Cases.** The plan tree is a list under its heading, each criterion with what its sentry waits for —
+  the events and the condition — and each rule in words (*required*, *repeats while …*, *manual
+  activation*). Only the sentries no plan item uses are listed after the tree.
+- **REST calls.** One line per method and URL, with who calls it. ⚠ marks only a call on the
+  application's own base that no endpoint of the project serves; calls to Flowable's own REST API and to
+  other systems are listed apart.
+- **Variables.** Past 60, the ones shared by the most models, each with the elements that set and read it.
+- **Paths.** A model inside a Design export is named `Name-bar.zip!entry`, and one line under the header
+  says where each archive lives.
+
 Use it when you need the whole picture and you are going to read it.
 
 ## `<project>.graph.json` — for querying
@@ -167,9 +182,9 @@ as `CLAUDE.md` (or `AGENTS.md`), or imported from one with `@<path>`. It contain
 that names the project's real files by their path from the root (and, written by the CLI, ends with the
 command that checks a model edit added no defect, `--baseline` against the generated `graph.json`), the
 platform mental model an LLM usually gets wrong, how custom code attaches to models, where this project's
-custom Java goes and which model files are Design exports not to be edited, its key conventions and wiring examples, its open
-findings, and the complete list of the expression namespaces, script bindings and platform beans that
-**actually exist** — which is the part that stops an agent inventing APIs.
+custom Java goes and which model files are Design exports not to be edited, its key conventions and
+wiring examples, its open findings, and the complete list of the expression namespaces, script
+bindings and platform beans that **actually exist** — which is the part that stops an agent inventing APIs.
 
 Not in it: the inventory, the counts, the directory layout. They are the summary's, and an overview an
 agent could derive itself is the one kind of context-file content measured not to help

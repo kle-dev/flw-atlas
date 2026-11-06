@@ -994,6 +994,28 @@ object JavaParser {
     fun callsFlowableApi(url: String?): Boolean =
         callPath(url)?.segs?.firstOrNull()?.let { it in PLATFORM_ROOTS } == true
 
+    /** Where a model's REST call goes, as [callTarget] reads it. */
+    enum class CallTarget {
+        /** The application itself: a relative or rooted path, `{{endpoints.baseUrl}}`, the local host. */
+        PROJECT,
+        /** Flowable's own REST API ([callsFlowableApi]). */
+        FLOWABLE_API,
+        /** Anything else: a client-side route, another host, a base nothing in the project names. */
+        ELSEWHERE,
+    }
+
+    /**
+     * Which of the three a URL calls — by the same rule [matchRest] applies, so a report that says "no
+     * endpoint of this project serves it" says it only where the graph would have looked for one. Only a
+     * [CallTarget.PROJECT] call that matches nothing can be a missing controller: Flowable's API and other
+     * systems never had one here to find.
+     */
+    fun callTarget(url: String?): CallTarget = when {
+        callsFlowableApi(url) -> CallTarget.FLOWABLE_API
+        callPath(url) == null -> CallTarget.ELSEWHERE
+        else -> CallTarget.PROJECT
+    }
+
     /** An endpoint path as segments, `null` for a path variable (`{id}`, `{id:\d+}`, a `*` pattern). */
     private fun endpointPath(path: String?): List<String?> =
         path.orEmpty().substringBefore('?').split('/').filter { it.isNotEmpty() }

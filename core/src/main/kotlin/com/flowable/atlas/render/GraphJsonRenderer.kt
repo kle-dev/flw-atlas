@@ -100,8 +100,10 @@ object GraphJsonRenderer {
                 // lives in its own `data.usedBy`. Left there, `.usedBy` — the one recipe CLAUDE.md gives
                 // for "who references it" — answered null for every one of them, and an agent checking
                 // before a rename was told nothing did. Moved, not copied, so the file does not grow.
+                // An empty list goes too: an operation nothing calls would otherwise keep `data.usedBy: []`
+                // as the one node still answering the old recipe.
                 val own = if (bucket == null) (data as? Map<*, *>)?.get("usedBy") as? List<*> else null
-                if (!own.isNullOrEmpty()) {
+                if (own != null) {
                     own.forEach { id -> (id as? String)?.let(refs::add) }
                     copy["data"] = LinkedHashMap(data as Map<*, *>).apply { remove("usedBy") }
                 }

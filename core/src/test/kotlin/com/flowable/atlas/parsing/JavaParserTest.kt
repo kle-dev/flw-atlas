@@ -259,6 +259,24 @@ class JavaParserTest {
         assertTrue(JavaParser.matchRest("/api/other", eps).isEmpty())
     }
 
+    /** Only a call on the application's own base can be one a missing controller should have served. */
+    @Test
+    fun callTargetTellsTheApplicationFromFlowableAndOtherSystems() {
+        val project = JavaParser.CallTarget.PROJECT
+        assertEquals(project, JavaParser.callTarget("api/x"))
+        assertEquals(project, JavaParser.callTarget("/api/x"))
+        assertEquals(project, JavaParser.callTarget("{{endpoints.baseUrl}}/api/x"))
+        assertEquals(project, JavaParser.callTarget("http://localhost:8080/api/x"))
+        val flowable = JavaParser.CallTarget.FLOWABLE_API
+        assertEquals(flowable, JavaParser.callTarget("{{endpoints.idm}}/users/{{\$id}}"))
+        assertEquals(flowable, JavaParser.callTarget("dataobject-api/dataobject-runtime/masterdata-instances?x=1"))
+        val elsewhere = JavaParser.CallTarget.ELSEWHERE
+        assertEquals(elsewhere, JavaParser.callTarget("https://crm.example.com/api/x"))
+        assertEquals(elsewhere, JavaParser.callTarget("{{endpoints.custom}}/api/x"))
+        assertEquals(elsewhere, JavaParser.callTarget("#/{{\$route.currentAppId}}/case/{{id}}"))
+        assertEquals(elsewhere, JavaParser.callTarget(null))
+    }
+
     /** The URL shapes that linked models to endpoints they never call, on real projects. */
     @Test
     fun matchRestClaimsNoEndpointWithoutEvidence() {

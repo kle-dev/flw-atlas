@@ -58,7 +58,7 @@ Advice — calls with no error path: 2 · async without retry: 1 · unused servi
 - ⚠ '(' is never closed — `Order Process · badStamp`
 - ⚠ `Fulfilment Process` references process `courierProcess`, which does not exist in this project — `courierProcess`
 - ⚠ `deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped — `Customer Service`
-- … (+5 more defects — see `miniproject.overview.md`)
+- … (+7 more defects — see `miniproject.overview.md`)
 
 ---
 _Next: `miniproject.overview.md` has every model, relationship and the access map · `miniproject.graph.json` is the traversable graph to query · `miniproject.explorer.html` is the clickable view · regenerate with `java -jar <atlas-cli>.jar <project-dir> --all -o <out-dir>`, or in the IDE *Tools → Flowable Atlas → Generate → Atlas Explorer…*._

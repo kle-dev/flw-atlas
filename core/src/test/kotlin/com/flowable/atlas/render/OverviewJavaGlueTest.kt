@@ -35,7 +35,7 @@ class OverviewJavaGlueTest {
                     """<process id="DEMO-p"><serviceTask id="t" flowable:delegateExpression="${'$'}{demoDelegate}"/></process></definitions>""",
             )
             val overview = OverviewRenderer.render(Atlas.extract(dir), dir)
-            assertTrue(overview, overview.contains("- `com.example.DemoDelegate` implements ['JavaDelegate'] — "))
+            assertTrue(overview, overview.contains("- `com.example.DemoDelegate` implements JavaDelegate — "))
             assertTrue(overview, overview.contains("- `com.example.DemoDelegate` [JavaDelegate] — "))
             assertFalse(overview, overview.contains("implements []"))
         } finally {

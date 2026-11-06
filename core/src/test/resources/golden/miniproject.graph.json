@@ -605,6 +605,7 @@
       "check": "asyncWithoutRetry",
       "element": "packTask",
       "file": "processes/fulfilment.bpmn",
+      "kind": "advice",
       "label": "Fulfilment Process",
       "line": 24,
       "message": "`Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies",
@@ -614,6 +615,7 @@
     {
       "check": "crossedColumns",
       "file": "services/customer.service",
+      "kind": "defect",
       "label": "Customer Service",
       "message": "`deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped",
       "node": "service:customerService",
@@ -624,6 +626,7 @@
       "check": "gatewayNoDefault",
       "element": "approveTask",
       "file": "processes/order.bpmn",
+      "kind": "defect",
       "label": "Order Process",
       "line": 15,
       "message": "`Approve order` leaves only through 1 conditional flow and has no default flow — when it is false the engine throws \"no outgoing sequence flow\"",
@@ -634,6 +637,7 @@
       "check": "gatewayNoDefault",
       "element": "calcTask",
       "file": "processes/order.bpmn",
+      "kind": "defect",
       "label": "Order Process",
       "line": 9,
       "message": "`Calculate total` leaves only through 1 conditional flow and has no default flow — when it is false the engine throws \"no outgoing sequence flow\"",
@@ -642,6 +646,7 @@
     },
     {
       "check": "guessedVars",
+      "kind": "advice",
       "label": "courierCode",
       "message": "only a script mentions this variable — the name is inferred, not declared",
       "node": "variable:courierCode",
@@ -650,6 +655,7 @@
     {
       "check": "hardcodedSecrets",
       "file": "knowledgebase/courier-manuals.knowledgebase",
+      "kind": "defect",
       "label": "Courier manuals",
       "message": "`vectorStore.credentials.apiKey` holds a literal value — move it to an expression or an environment setting",
       "node": "knowledgeBase:courierManuals",
@@ -659,6 +665,7 @@
     {
       "check": "invalidExpr",
       "file": "processes/order.bpmn",
+      "kind": "defect",
       "label": "${vars:bogus(}",
       "line": 23,
       "message": "Unclosed '('",
@@ -673,6 +680,7 @@
     {
       "check": "invalidExpr",
       "file": "processes/order.bpmn",
+      "kind": "defect",
       "label": "${vars:bogus(}",
       "line": 23,
       "message": "Unknown function 'vars:bogus'",
@@ -687,6 +695,7 @@
     {
       "check": "missingRefs",
       "file": "processes/fulfilment.bpmn",
+      "kind": "defect",
       "label": "courierProcess",
       "line": 38,
       "message": "`Fulfilment Process` references process `courierProcess`, which does not exist in this project",
@@ -696,6 +705,7 @@
     {
       "check": "parseIssues",
       "file": "broken.form",
+      "kind": "defect",
       "label": "broken.form",
       "message": "parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
       "node": null,
@@ -705,6 +715,7 @@
       "check": "payloadOverwrite",
       "element": "resetTotal",
       "file": "forms/order-form.form",
+      "kind": "defect",
       "label": "Order Form",
       "line": 133,
       "message": "Expression button `resetTotal` stores its result in `{{}}`, which names no variable — pressing it replaces the whole payload",
@@ -716,6 +727,7 @@
     {
       "check": "schemaGaps",
       "file": "services/customer.service",
+      "kind": "defect",
       "label": "Customer Service",
       "message": "column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service",
       "node": "service:customerService",
@@ -726,6 +738,7 @@
       "check": "scriptIssues",
       "element": "badApi",
       "file": "processes/order.bpmn",
+      "kind": "defect",
       "label": "Order Process",
       "line": 74,
       "message": "'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'?",
@@ -737,6 +750,7 @@
       "check": "scriptIssues",
       "element": "badStamp",
       "file": "processes/order.bpmn",
+      "kind": "defect",
       "label": "Order Process",
       "line": 70,
       "message": "'(' is never closed",
@@ -748,6 +762,7 @@
       "check": "unguardedTasks",
       "element": "calcTask",
       "file": "processes/order.bpmn",
+      "kind": "advice",
       "label": "Order Process",
       "line": 9,
       "message": "`Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException",
@@ -758,6 +773,7 @@
       "check": "unguardedTasks",
       "element": "notifyTask",
       "file": "processes/order.bpmn",
+      "kind": "advice",
       "label": "Order Process",
       "line": 25,
       "message": "`Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException",
@@ -766,6 +782,7 @@
     },
     {
       "check": "unreadInputs",
+      "kind": "advice",
       "label": "orderId",
       "message": "mapped into `process:fulfilmentProcess`, which never reads it — written by an in parameter on `Fulfil`",
       "node": "variable:orderId",
@@ -774,6 +791,7 @@
     },
     {
       "check": "unusedOps",
+      "kind": "advice",
       "label": "score",
       "message": "no model or code calls this operation",
       "node": "serviceOperation:scoringService#score",
@@ -781,6 +799,7 @@
     },
     {
       "check": "unusedVars",
+      "kind": "advice",
       "label": "approved",
       "message": "written but never read — written by a decision output of `approved`",
       "node": "variable:approved",
@@ -788,6 +807,7 @@
     },
     {
       "check": "unusedVars",
+      "kind": "advice",
       "label": "shippingStamp",
       "message": "written but never read — written by a script on `Broken stamp`, a script on `Stamp order`",
       "node": "variable:shippingStamp",
@@ -795,6 +815,7 @@
     },
     {
       "check": "unusedVars",
+      "kind": "advice",
       "label": "subOrderId",
       "message": "written but never read — written by an in parameter on `Fulfil`",
       "node": "variable:subOrderId",
