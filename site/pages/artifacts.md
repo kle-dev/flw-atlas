@@ -89,6 +89,9 @@ It is designed to make that easy:
 - A **`_generated`** key beside it says when the file was written and by which Atlas version, so a
   graph pasted into a ticket or kept as a pipeline artifact carries its own age.
 - Every node carries **`usedBy`**, so relationships resolve in both directions without a second pass.
+  That includes the nodes no edge points at — a variable, an expression, a service operation — whose
+  `usedBy` lists the models that use them; a variable's `data.writes` and `data.reads` say which element
+  sets and reads it.
 - An `expression` node that is a Spring property placeholder — `${mail.imap-url:imap://localhost/inbox}`,
   the shape a channel URL takes when the environment fills it in — carries **`placeholder: true`**
   instead of a JUEL verdict, and its segments are not harvested as variables.
@@ -287,11 +290,14 @@ java -jar cli-<version>-all.jar <project> --slice process:orderProcess --stdout
 ```
 
 One node with what it uses, **who uses it**, the findings that touch it, and its own attributes — sized
-for an agent that has been asked to change exactly one model. A bare key without a type matches any
-type and renders every match. So does what an agent usually has in hand instead: the model's file path
-(`--slice processes/order.bpmn`, or its absolute path), a Java class's simple name, a label, or the key
-in another case — the slice then opens with a line saying what it matched by. A target that matches
-nothing names the nearest ids instead.
+for an agent that has been asked to change exactly one model. A process, case, decision, form or page
+also gets its *Contents*, exactly as the overview lists them — the steps in execution order with what
+follows each, the plan tree, the rule rows, the fields — and its *Variables*, each with the elements of
+the model that set and read it. A variable's slice names every model that uses it, and under *Set by*
+and *Read by* the element and how. A bare key without a type matches any type and renders every match.
+So does what an agent usually has in hand instead: the model's file path (`--slice processes/order.bpmn`,
+or its absolute path), a Java class's simple name, a label, or the key in another case — the slice then
+opens with a line saying what it matched by. A target that matches nothing names the nearest ids instead.
 
 ## Uncertain links
 

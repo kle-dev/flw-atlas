@@ -19,7 +19,9 @@ import com.flowable.atlas.model.MiniJson
  *     default; `--pretty` restores the indented form for reading by eye.
  *  3. **There was no reverse index**, although `CLAUDE.md` tells the agent that relationships are
  *     bidirectional and to "check who references it (both directions)". Answering that meant scanning
- *     every edge. Each node now carries `usedBy` — the ids that reference it.
+ *     every edge. Each node now carries `usedBy` — the ids that reference it: the sources of its edges
+ *     and, for the nodes no edge points at (variables, expressions, bindings, strings, service operations,
+ *     custom functions), the models the extract recorded in their `data.usedBy`, moved up to the node.
  *
  * A `_schema` block up front states the node/edge shape, the `dataIn` rule and the file's own size, so a
  * consumer can learn the format from the file instead of from documentation it does not have.
@@ -93,8 +95,17 @@ object GraphJsonRenderer {
                 val data = n["data"]
                 val bucket = if (data != null) bucketOf[data] else null
                 if (bucket != null) copy["data"] = linkedMapOf<String, Any?>("dataIn" to bucket)
-                val refs = usedBy[n["id"]]
-                if (!refs.isNullOrEmpty()) copy["usedBy"] = refs.toList()
+                val refs = LinkedHashSet(usedBy[n["id"]] ?: emptySet<String>())
+                // A variable, an expression or a service operation is never an edge's target: who uses it
+                // lives in its own `data.usedBy`. Left there, `.usedBy` — the one recipe CLAUDE.md gives
+                // for "who references it" — answered null for every one of them, and an agent checking
+                // before a rename was told nothing did. Moved, not copied, so the file does not grow.
+                val own = if (bucket == null) (data as? Map<*, *>)?.get("usedBy") as? List<*> else null
+                if (!own.isNullOrEmpty()) {
+                    own.forEach { id -> (id as? String)?.let(refs::add) }
+                    copy["data"] = LinkedHashMap(data as Map<*, *>).apply { remove("usedBy") }
+                }
+                if (refs.isNotEmpty()) copy["usedBy"] = refs.toList()
                 copy
             }
             projected["edges"] = edges ?: emptyList<Any?>()
@@ -111,8 +122,10 @@ object GraphJsonRenderer {
         "edge" to "{s: <sourceNodeId>, t: <targetNodeId>, rel, suspect?, dynamic?}",
         "dataIn" to "A model node's data lives once in the named top-level bucket — find it by matching " +
             "type+key there (e.g. data.dataIn='processes' -> .processes[] | select(.key==\"<key>\")).",
-        "usedBy" to "Node ids that reference this node (app 'contains' membership excluded). The " +
-            "relation itself is in `edges`.",
+        "usedBy" to "Node ids that reference this node: the sources of its edges (app 'contains' " +
+            "membership excluded; the relation itself is in `edges`) and, for variable, expression, " +
+            "binding, string, serviceOperation and customFunction nodes, the models that use them " +
+            "(where and how: data.reads, data.writes, data.usages).",
         "findings" to "{check, severity, node, label, message, file?, element?, subject?, line?, " +
             "scriptLine?, models?, snippet?, waived?} — what Atlas thinks is wrong; `checks` counts the open " +
             "ones per kind plus a `waived` total. `subject` tells apart several findings of one check on one " +
@@ -132,7 +145,7 @@ object GraphJsonRenderer {
             "who references X:            jq '.graph.nodes[] | select(.id==\"process:X\") | .usedBy'",
             "what X references:           jq '.graph.edges[] | select(.s==\"process:X\")'",
             "a model's body:              jq '.processes[] | select(.key==\"X\")'",
-            "models using variable V:     jq '.graph.nodes[] | select(.id==\"variable:V\") | .data.usedBy'",
+            "models using variable V:     jq '.graph.nodes[] | select(.id==\"variable:V\") | .usedBy'",
             "controller serving a form:   jq '.restCalls[] | select(.source|test(\"X\")) | .matches'",
             "everything broken:           jq '.findings[] | select(.severity==\"error\" and (.waived|not))'",
             "what we accepted, and why:   jq '.findings[] | select(.waived) | {check, label, reason: .waived.reason}'",

@@ -31,9 +31,10 @@ look — so an agent knows which number to act on. This is the right thing to pa
 when the question is "what is this project".
 
 **3 · `--slice <type:key>`** — one model with its full context, both directions, plus the findings that
-touch it. The right size when the task is about one model, which it usually is. An agent that knows
-the model by its file rather than its key can pass the path instead, relative or absolute; a target that
-matches nothing names the nearest ids.
+touch it, what it contains in the overview's words, and the variables it sets and reads. A variable's
+slice names the elements that set it and read it. The right size when the task is about one model, which
+it usually is. An agent that knows the model by its file rather than its key can pass the path instead,
+relative or absolute; a target that matches nothing names the nearest ids.
 
 **4 · `--json`** — the full graph. **Never paste it whole**; query it with `jq`. The file documents
 itself: a `_schema` key at the top describes the shape and ships seven ready-made recipes.
@@ -45,7 +46,8 @@ itself: a `_schema` key at the top describes the shape and ships seven ready-mad
 Three properties make `graph.json` usable by an agent without a retrieval layer:
 
 - **Both directions resolve.** Every node carries `usedBy`, so "what would break if I change this" is
-  one lookup, not a scan.
+  one lookup, not a scan — for a variable, an expression or a service operation too, which no edge
+  points at.
 - **Stable ids.** Every node is `<type>:<key>` — the same id in the graph, in a `--slice`, in a
   finding, and in an explorer permalink.
 - **It says what it does not know.** Suspect and dynamic links are flagged rather than presented as
@@ -75,7 +77,8 @@ jq '.findings[] | select(.severity=="error") | {check, label, message, file}' gr
    Either way, regenerate when the models change materially.
 2. **Starting a task:** give the agent `--summary`, or let it read the `CLAUDE.md` you committed.
 3. **Working on one model:** `--slice <type:key>`. It contains the callers, which is the context an
-   agent most often lacks and most confidently guesses at.
+   agent most often lacks and most confidently guesses at. Before a rename, the slice of the variable
+   says which elements set and read it.
 4. **Answering a structural question:** `jq` over `graph.json`.
 5. **Before believing the result:** check the [findings](../checks/). Atlas already knows which
    references are broken; an agent should not spend its context rediscovering that.

@@ -119,158 +119,7 @@ object OverviewRenderer {
         if (processes.isNotEmpty()) {
             hdr(2, "Processes (BPMN)")
             for (pAny in processes) {
-                val p = asMap(pAny)
-                L.add("### ${orE(p["name"])} (`${pyStr(p["key"])}`) — `${pyStr(p["file"])}`")
-                if (truthy(p["documentation"])) L.add("> ${pyStr(p["documentation"])}")
-                if (truthy(p["candidateStarterGroups"]))
-                    L.add("- starter groups: `${pyStr(p["candidateStarterGroups"])}`")
-                // Elements are collected first and emitted in **execution order** (see [flowOrder]).
-                // Grouped-by-type listing put the start and end events last and left a reader unable to
-                // tell what runs after what — the first thing anyone needs to know about a process.
-                // `id` is not unique across buckets (a DMN service task is both a serviceTask and a
-                // ruleTask), so rows are a list, not a map, and sorting is stable.
-                val rows = ArrayList<Triple<String, String, Boolean>>() // (elementId, line, isSubLine)
-                var synthetic = 0
-                fun row(id: Any?, line: String) {
-                    rows.add(Triple(if (truthy(id)) pyStr(id) else "?unnamed-${synthetic++}", line, false))
-                }
-                fun subRow(id: Any?, line: String) {
-                    if (truthy(id)) rows.add(Triple(pyStr(id), line, true))
-                }
-
-                for (utAny in asList(p["userTasks"])) {
-                    val ut = asMap(utAny)
-                    val extra = if (truthy(ut["formKey"])) " form=`${pyStr(ut["formKey"])}`" else ""
-                    row(
-                        ut["id"],
-                        Fmt.join(
-                            "- 👤 ${DesignTerms.label("el", "userTask")} `${pyStr(ut["id"])}`",
-                            orE(ut["name"]), extra,
-                            if (truthy(ut["assignee"])) "assignee=${pyStr(ut["assignee"])}" else "",
-                        )
-                    )
-                }
-                for (stAny in asList(p["serviceTasks"])) {
-                    val st = asMap(stAny)
-                    val impl = orAny(st["class"], st["delegateExpression"], st["expression"], st["type"], "?")
-                    val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
-                    row(st["id"], "- ⚙️ ${DesignTerms.label("el", "serviceTask")} `${pyStr(st["id"])}` " +
-                        "${orE(st["name"])} → ${pyStr(impl)}$rv")
-                }
-                // Script tasks were missing from this report entirely — a process could run a script and
-                // nothing in the Markdown said so.
-                for (stAny in asList(p["scriptTasks"])) {
-                    val st = asMap(stAny)
-                    val fmt = if (truthy(st["format"])) " (${pyStr(st["format"])})" else ""
-                    val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
-                    val probs = asList(st["problems"])
-                    val warn = if (probs.isEmpty()) ""
-                        else " — ⚠ ${probs.size} syntax finding${if (probs.size > 1) "s" else ""}"
-                    row(st["id"], "- 🧾 ${DesignTerms.label("el", "scriptTask")} `${pyStr(st["id"])}` " +
-                        "${orE(st["name"])}$fmt$rv$warn")
-                }
-                for (rtAny in asList(p["ruleTasks"])) {
-                    val rt = asMap(rtAny)
-                    row(rt["id"], "- 📊 ${DesignTerms.label("el", "serviceTask/dmn")} `${pyStr(rt["id"])}` " +
-                        "→ decision table `${pyStr(rt["decisionRef"])}`")
-                }
-                // Gateways and receive/send/manual tasks are parsed but were never rendered: a branch
-                // point missing from the listing makes the flow below it unreadable.
-                for (gwAny in asList(p["gateways"])) {
-                    val gw = asMap(gwAny)
-                    row(gw["id"], Fmt.join(
-                        "- ◆ ${DesignTerms.label("el", gw["type"])} `${pyStr(gw["id"])}`", orE(gw["name"]),
-                    ))
-                }
-                for (otAny in asList(p["otherTasks"])) {
-                    val ot = asMap(otAny)
-                    row(ot["id"], Fmt.join(
-                        "- ▫ ${DesignTerms.label("el", ot["type"])} `${pyStr(ot["id"])}`", orE(ot["name"]),
-                    ))
-                }
-                for (spAny in asList(p["subProcesses"])) {
-                    val sp = asMap(spAny)
-                    row(sp["id"], Fmt.join(
-                        "- ▣ ${DesignTerms.label("el", orAny(sp["type"], "subProcess"))} `${pyStr(sp["id"])}`",
-                        orE(sp["name"]),
-                    ))
-                }
-                for (caAny in asList(p["callActivities"])) {
-                    val ca = asMap(caAny)
-                    // `<flowable:in>`/`<flowable:out>` live in the model's flat `parameters` rollup, stamped
-                    // with the element that declares them (see Ctx.addParams).
-                    val io = asList(p["ioParameters"]).map { asMap(it) }
-                        .filter { it["element"] == ca["id"] && it["kind"] in listOf("in", "out") }
-                        .joinToString("") { " ${pyStr(it["dir"])}(${pyStr(it["source"])}→${pyStr(it["target"])})" }
-                    row(ca["id"], "- 📞 ${DesignTerms.label("el", "callActivity")} `${pyStr(ca["id"])}` " +
-                        "→ process `${pyStr(ca["calledElement"])}`$io")
-                }
-                for (miAny in asList(p["multiInstance"])) {
-                    val mi = asMap(miAny)
-                    subRow(
-                        mi["activity"],
-                        "    - 🔁 Multi-instance " + Fmt.fields(
-                            "collection" to Fmt.codeList(mi["collection"]),
-                            "elementVar" to Fmt.codeList(mi["elementVariable"]),
-                        )
-                    )
-                }
-                for (evAny in asList(p["events"])) {
-                    val ev = asMap(evAny)
-                    val d = if (truthy(ev["def"]))
-                        " (${pyStr(ev["def"])}${if (truthy(ev["value"])) "=" + pyStr(ev["value"]) else ""})"
-                    else ""
-                    row(ev["id"], Fmt.join(
-                        "- 🔔 ${DesignTerms.label("el", ev["type"])}$d `${pyStr(ev["id"])}`", orE(ev["name"]),
-                    ))
-                }
-                // Listeners of the process AND of its elements. Only the process-level ones were listed,
-                // and a script-only listener was skipped entirely because it has no class/expression —
-                // both cases hid code that runs at runtime.
-                // Element listeners now sit under their element instead of in one block at the end, so a
-                // reader sees the code that runs at a step next to the step.
-                for (bucket in ELEMENT_BUCKETS) {
-                    for (elAny in asList(p[bucket])) {
-                        val el = asMap(elAny)
-                        for (lsAny in asList(el["listeners"])) {
-                            listenerLine(asMap(lsAny))?.let { subRow(el["id"], "    - $it") }
-                        }
-                    }
-                }
-
-                // --- emit in execution order, each step naming what follows it ---
-                val order = flowOrder(p, rows.map { it.first }.distinct())
-                val successors = successorsByElement(p)
-                val ordered = rows.sortedWith(
-                    compareBy({ order[it.first] ?: Int.MAX_VALUE }, { if (it.third) 1 else 0 })
-                )
-                // An element no sequence flow mentions is *not* the next step of the line above it, even
-                // though document order lands it there — say so rather than imply a sequence that the
-                // model does not have. (Only worth saying when the process has flows at all.)
-                val connected = HashSet<String>()
-                for (fAny in asList(p["flows"])) {
-                    val f = asMap(fAny)
-                    f["from"]?.toString()?.let { connected.add(it) }
-                    f["to"]?.toString()?.let { connected.add(it) }
-                }
-                val hasFlows = connected.isNotEmpty()
-                val annotated = HashSet<String>()
-                for ((id, line, sub) in ordered) {
-                    if (sub) { L.add(line); continue }
-                    val next = successors[id]
-                    // The same id can be described by two rows (a DMN service task is both); the
-                    // successor belongs to the element, so state it once.
-                    val suffix = when {
-                        !annotated.add(id) -> ""
-                        !next.isNullOrEmpty() -> " · next: ${Fmt.cap(next, 6)}"
-                        hasFlows && id !in connected -> " · _(no sequence flow — not reachable)_"
-                        else -> ""
-                    }
-                    L.add(line + suffix)
-                }
-                // Process-level listeners are not steps, so they follow the flow rather than interrupt it.
-                for (lsAny in asList(p["listeners"])) listenerLine(asMap(lsAny))?.let { L.add("- $it") }
-                L.add("")
+                renderProcess(asMap(pAny), L)
             }
         }
 
@@ -279,32 +128,7 @@ object OverviewRenderer {
         if (cases.isNotEmpty()) {
             hdr(3, "Cases (CMMN)")
             for (cAny in cases) {
-                val c = asMap(cAny)
-                L.add("### ${orE(c["name"])} (`${pyStr(c["key"])}`) — `${pyStr(c["file"])}`")
-                if (truthy(c["documentation"])) L.add("> ${pyStr(c["documentation"])}")
-                for (mrAny in asList(c["modelRefs"])) {
-                    val mr = asMap(mrAny)
-                    L.add("- ${pyStr(mr["rel"])}: `${pyStr(mr["key"])}`")
-                }
-                // Index the sentries so the plan tree can show each criterion's actual condition.
-                val sentryIndex = asList(c["sentries"]).map { asMap(it) }
-                    .mapNotNull { sen -> sen["id"]?.toString()?.ifEmpty { null }?.let { it to sen } }
-                    .toMap()
-                if (truthy(c["planModel"])) renderStage(asMap(c["planModel"]), L, 1, sentryIndex)
-                for (sAny in asList(c["sentries"])) {
-                    val sen = asMap(sAny)
-                    val cond = if (truthy(sen["condition"])) " if `${pyStr(sen["condition"])}`" else ""
-                    val on = Fmt.list(sen["onParts"])
-                    L.add("- 🚪 Sentry `${pyStr(sen["id"])}`$cond" + (if (on.isNotEmpty()) " on $on" else ""))
-                }
-                for (eAny in asList(c["eventListeners"])) {
-                    val e = asMap(eAny)
-                    val t = if (truthy(e["timer"])) " timer=`${pyStr(e["timer"])}`" else ""
-                    L.add("- ⏰ ${DesignTerms.label("el", e["type"])} `${pyStr(e["id"])}`$t")
-                }
-                // the case's own lifecycle listeners, as a process's listeners follow its flow
-                for (lsAny in asList(c["listeners"])) listenerLine(asMap(lsAny))?.let { L.add("- $it") }
-                L.add("")
+                renderCase(asMap(cAny), L)
             }
         }
 
@@ -313,28 +137,7 @@ object OverviewRenderer {
         if (decisions.isNotEmpty()) {
             hdr(4, "Decision tables (DMN)")
             for (dAny in decisions) {
-                val d = asMap(dAny)
-                L.add(
-                    "- `${pyStr(d["key"])}` (${pyStr(d["hitPolicy"])}, ${pyStr(d["ruleCount"])} rules) — " +
-                        "in: ${Fmt.codeList(d["inputs"])} → out: ${Fmt.codeList(d["outputs"])} — " +
-                        "`${pyStr(d["file"])}`"
-                )
-                // The rule rows — the actual business logic. They were parsed into `rules` and then only
-                // ever shown in the explorer, so the report described a decision table without saying
-                // what it decides.
-                val rules = asList(d["rules"]).map { asMap(it) }
-                for (r in rules.take(DMN_RULES_LISTED)) {
-                    val ins = Fmt.list(r["inputs"], " · ")
-                    val outs = Fmt.list(r["outputs"], " · ")
-                    val note = if (truthy(r["annotation"])) " _(${pyStr(r["annotation"])})_" else ""
-                    L.add("    - when ${ins.ifEmpty { "—" }} → ${outs.ifEmpty { "—" }}$note")
-                }
-                if (rules.size > DMN_RULES_LISTED) {
-                    L.add("    - … (+${rules.size - DMN_RULES_LISTED} more rules)")
-                }
-                if (d["rulesTruncated"] == true) {
-                    L.add("    - _(rule list truncated during parsing — see the model file)_")
-                }
+                renderDecision(asMap(dAny), L)
             }
             L.add("")
         }
@@ -344,50 +147,7 @@ object OverviewRenderer {
         if (forms.isNotEmpty()) {
             hdr(5, "Forms & pages")
             for (fAny in forms) {
-                val f = asMap(fAny)
-                L.add("### ${orE(f["name"])} (`${pyStr(f["key"])}`) — `${pyStr(f["file"])}`")
-                val fields = asList(f["fields"])
-                for (fldAny in fields.take(FORM_FIELDS_LISTED)) {
-                    val fld = asMap(fldAny)
-                    val label = orE(fld["label"])
-                    // A link button's caption *is* its `value`, so printing both says it twice.
-                    val b = if (truthy(fld["value"]) && pyStr(fld["value"]) != label)
-                        "← `${pyStr(fld["value"])}`" else ""
-                    val req = if (truthy(fld["required"])) "*(req)*" else ""
-                    // A button's line has to say what pressing it does: the model it invokes, and — on an
-                    // expression button — the expression it evaluates. Without those, a form's own section
-                    // named the button and left the reader to guess which action it was that the
-                    // references list said the form triggers. A data-source component's callee and a
-                    // button's endpoint are left out: the Data sources and REST calls lists below already
-                    // name both, and repeating them here only costs a reader tokens.
-                    val callee = asMap(fld["callee"])
-                    val to = if (truthy(callee["key"]) && callee["kind"] != "rest" &&
-                        fld["type"] in ModelJsonReader.BUTTON_TYPES)
-                        "→ ${pyStr(callee["kind"])} `${pyStr(callee["key"])}`" else ""
-                    val settings = asMap(fld["settings"])
-                    val script = settings["script"]
-                    val ex = if (truthy(script)) "= `${oneLine(script)}`" else ""
-                    L.add("- " + Fmt.join("`${pyStr(fld["id"])}`", "[${pyStr(fld["type"])}]",
-                        label, req, b, to, ex, gates(settings)))
-                }
-                if (fields.size > FORM_FIELDS_LISTED) {
-                    L.add("- … (+${fields.size - FORM_FIELDS_LISTED} more fields — `fields` on the form " +
-                        "node in `$an.graph.json`)")
-                }
-                val outcomes = asList(f["outcomes"])
-                if (outcomes.isNotEmpty()) {
-                    L.add(
-                        "- outcomes: " + outcomes.map { asMap(it) }.filter { truthy(it["value"]) }
-                            .joinToString(", ") { "`${pyStr(it["value"])}`" }
-                    )
-                }
-                for (dsAny in asList(f["dataSources"])) {
-                    L.add("- 🔌 data source: ${Fmt.dataSource(dsAny)}")
-                }
-                for (sfAny in asList(f["subforms"])) {
-                    L.add("- 📑 subform → `${pyStr(sfAny)}`")
-                }
-                L.add("")
+                renderForm(asMap(fAny), L, "`$an.graph.json`")
             }
         }
 
@@ -934,6 +694,269 @@ object OverviewRenderer {
         // parse/read failures the findings above now report as `unparseable files`, with their file and
         // message — so the section only repeated itself. `warnings`/`diagnostics` remain in graph.json.)
         return L.joinToString("\n")
+    }
+
+    /**
+     * One process as the report lists it: its heading, then every element in execution order with what
+     * follows it. A function of its own so `--slice` can show a process's contents exactly as the report
+     * does — two renderings of one model would drift, and the overview golden pins this one.
+     */
+    internal fun renderProcess(p: Map<String, Any?>, L: MutableList<String>) {
+        L.add("### ${orE(p["name"])} (`${pyStr(p["key"])}`) — `${pyStr(p["file"])}`")
+        if (truthy(p["documentation"])) L.add("> ${pyStr(p["documentation"])}")
+        if (truthy(p["candidateStarterGroups"]))
+            L.add("- starter groups: `${pyStr(p["candidateStarterGroups"])}`")
+        // Elements are collected first and emitted in **execution order** (see [flowOrder]).
+        // Grouped-by-type listing put the start and end events last and left a reader unable to
+        // tell what runs after what — the first thing anyone needs to know about a process.
+        // `id` is not unique across buckets (a DMN service task is both a serviceTask and a
+        // ruleTask), so rows are a list, not a map, and sorting is stable.
+        val rows = ArrayList<Triple<String, String, Boolean>>() // (elementId, line, isSubLine)
+        var synthetic = 0
+        fun row(id: Any?, line: String) {
+            rows.add(Triple(if (truthy(id)) pyStr(id) else "?unnamed-${synthetic++}", line, false))
+        }
+        fun subRow(id: Any?, line: String) {
+            if (truthy(id)) rows.add(Triple(pyStr(id), line, true))
+        }
+
+        for (utAny in asList(p["userTasks"])) {
+            val ut = asMap(utAny)
+            val extra = if (truthy(ut["formKey"])) " form=`${pyStr(ut["formKey"])}`" else ""
+            row(
+                ut["id"],
+                Fmt.join(
+                    "- 👤 ${DesignTerms.label("el", "userTask")} `${pyStr(ut["id"])}`",
+                    orE(ut["name"]), extra,
+                    if (truthy(ut["assignee"])) "assignee=${pyStr(ut["assignee"])}" else "",
+                )
+            )
+        }
+        for (stAny in asList(p["serviceTasks"])) {
+            val st = asMap(stAny)
+            val impl = orAny(st["class"], st["delegateExpression"], st["expression"], st["type"], "?")
+            val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
+            row(st["id"], "- ⚙️ ${DesignTerms.label("el", "serviceTask")} `${pyStr(st["id"])}` " +
+                "${orE(st["name"])} → ${pyStr(impl)}$rv")
+        }
+        // Script tasks were missing from this report entirely — a process could run a script and
+        // nothing in the Markdown said so.
+        for (stAny in asList(p["scriptTasks"])) {
+            val st = asMap(stAny)
+            val fmt = if (truthy(st["format"])) " (${pyStr(st["format"])})" else ""
+            val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
+            val probs = asList(st["problems"])
+            val warn = if (probs.isEmpty()) ""
+                else " — ⚠ ${probs.size} syntax finding${if (probs.size > 1) "s" else ""}"
+            row(st["id"], "- 🧾 ${DesignTerms.label("el", "scriptTask")} `${pyStr(st["id"])}` " +
+                "${orE(st["name"])}$fmt$rv$warn")
+        }
+        for (rtAny in asList(p["ruleTasks"])) {
+            val rt = asMap(rtAny)
+            row(rt["id"], "- 📊 ${DesignTerms.label("el", "serviceTask/dmn")} `${pyStr(rt["id"])}` " +
+                "→ decision table `${pyStr(rt["decisionRef"])}`")
+        }
+        // Gateways and receive/send/manual tasks are parsed but were never rendered: a branch
+        // point missing from the listing makes the flow below it unreadable.
+        for (gwAny in asList(p["gateways"])) {
+            val gw = asMap(gwAny)
+            row(gw["id"], Fmt.join(
+                "- ◆ ${DesignTerms.label("el", gw["type"])} `${pyStr(gw["id"])}`", orE(gw["name"]),
+            ))
+        }
+        for (otAny in asList(p["otherTasks"])) {
+            val ot = asMap(otAny)
+            row(ot["id"], Fmt.join(
+                "- ▫ ${DesignTerms.label("el", ot["type"])} `${pyStr(ot["id"])}`", orE(ot["name"]),
+            ))
+        }
+        for (spAny in asList(p["subProcesses"])) {
+            val sp = asMap(spAny)
+            row(sp["id"], Fmt.join(
+                "- ▣ ${DesignTerms.label("el", orAny(sp["type"], "subProcess"))} `${pyStr(sp["id"])}`",
+                orE(sp["name"]),
+            ))
+        }
+        for (caAny in asList(p["callActivities"])) {
+            val ca = asMap(caAny)
+            // `<flowable:in>`/`<flowable:out>` live in the model's flat `parameters` rollup, stamped
+            // with the element that declares them (see Ctx.addParams).
+            val io = asList(p["ioParameters"]).map { asMap(it) }
+                .filter { it["element"] == ca["id"] && it["kind"] in listOf("in", "out") }
+                .joinToString("") { " ${pyStr(it["dir"])}(${pyStr(it["source"])}→${pyStr(it["target"])})" }
+            row(ca["id"], "- 📞 ${DesignTerms.label("el", "callActivity")} `${pyStr(ca["id"])}` " +
+                "→ process `${pyStr(ca["calledElement"])}`$io")
+        }
+        for (miAny in asList(p["multiInstance"])) {
+            val mi = asMap(miAny)
+            subRow(
+                mi["activity"],
+                "    - 🔁 Multi-instance " + Fmt.fields(
+                    "collection" to Fmt.codeList(mi["collection"]),
+                    "elementVar" to Fmt.codeList(mi["elementVariable"]),
+                )
+            )
+        }
+        for (evAny in asList(p["events"])) {
+            val ev = asMap(evAny)
+            val d = if (truthy(ev["def"]))
+                " (${pyStr(ev["def"])}${if (truthy(ev["value"])) "=" + pyStr(ev["value"]) else ""})"
+            else ""
+            row(ev["id"], Fmt.join(
+                "- 🔔 ${DesignTerms.label("el", ev["type"])}$d `${pyStr(ev["id"])}`", orE(ev["name"]),
+            ))
+        }
+        // Listeners of the process AND of its elements. Only the process-level ones were listed,
+        // and a script-only listener was skipped entirely because it has no class/expression —
+        // both cases hid code that runs at runtime.
+        // Element listeners now sit under their element instead of in one block at the end, so a
+        // reader sees the code that runs at a step next to the step.
+        for (bucket in ELEMENT_BUCKETS) {
+            for (elAny in asList(p[bucket])) {
+                val el = asMap(elAny)
+                for (lsAny in asList(el["listeners"])) {
+                    listenerLine(asMap(lsAny))?.let { subRow(el["id"], "    - $it") }
+                }
+            }
+        }
+
+        // --- emit in execution order, each step naming what follows it ---
+        val order = flowOrder(p, rows.map { it.first }.distinct())
+        val successors = successorsByElement(p)
+        val ordered = rows.sortedWith(
+            compareBy({ order[it.first] ?: Int.MAX_VALUE }, { if (it.third) 1 else 0 })
+        )
+        // An element no sequence flow mentions is *not* the next step of the line above it, even
+        // though document order lands it there — say so rather than imply a sequence that the
+        // model does not have. (Only worth saying when the process has flows at all.)
+        val connected = HashSet<String>()
+        for (fAny in asList(p["flows"])) {
+            val f = asMap(fAny)
+            f["from"]?.toString()?.let { connected.add(it) }
+            f["to"]?.toString()?.let { connected.add(it) }
+        }
+        val hasFlows = connected.isNotEmpty()
+        val annotated = HashSet<String>()
+        for ((id, line, sub) in ordered) {
+            if (sub) { L.add(line); continue }
+            val next = successors[id]
+            // The same id can be described by two rows (a DMN service task is both); the
+            // successor belongs to the element, so state it once.
+            val suffix = when {
+                !annotated.add(id) -> ""
+                !next.isNullOrEmpty() -> " · next: ${Fmt.cap(next, 6)}"
+                hasFlows && id !in connected -> " · _(no sequence flow — not reachable)_"
+                else -> ""
+            }
+            L.add(line + suffix)
+        }
+        // Process-level listeners are not steps, so they follow the flow rather than interrupt it.
+        for (lsAny in asList(p["listeners"])) listenerLine(asMap(lsAny))?.let { L.add("- $it") }
+        L.add("")
+    }
+
+    /** One case: its heading, the models it references, the plan tree with each criterion's condition. */
+    internal fun renderCase(c: Map<String, Any?>, L: MutableList<String>) {
+        L.add("### ${orE(c["name"])} (`${pyStr(c["key"])}`) — `${pyStr(c["file"])}`")
+        if (truthy(c["documentation"])) L.add("> ${pyStr(c["documentation"])}")
+        for (mrAny in asList(c["modelRefs"])) {
+            val mr = asMap(mrAny)
+            L.add("- ${pyStr(mr["rel"])}: `${pyStr(mr["key"])}`")
+        }
+        // Index the sentries so the plan tree can show each criterion's actual condition.
+        val sentryIndex = asList(c["sentries"]).map { asMap(it) }
+            .mapNotNull { sen -> sen["id"]?.toString()?.ifEmpty { null }?.let { it to sen } }
+            .toMap()
+        if (truthy(c["planModel"])) renderStage(asMap(c["planModel"]), L, 1, sentryIndex)
+        for (sAny in asList(c["sentries"])) {
+            val sen = asMap(sAny)
+            val cond = if (truthy(sen["condition"])) " if `${pyStr(sen["condition"])}`" else ""
+            val on = Fmt.list(sen["onParts"])
+            L.add("- 🚪 Sentry `${pyStr(sen["id"])}`$cond" + (if (on.isNotEmpty()) " on $on" else ""))
+        }
+        for (eAny in asList(c["eventListeners"])) {
+            val e = asMap(eAny)
+            val t = if (truthy(e["timer"])) " timer=`${pyStr(e["timer"])}`" else ""
+            L.add("- ⏰ ${DesignTerms.label("el", e["type"])} `${pyStr(e["id"])}`$t")
+        }
+        // the case's own lifecycle listeners, as a process's listeners follow its flow
+        for (lsAny in asList(c["listeners"])) listenerLine(asMap(lsAny))?.let { L.add("- $it") }
+        L.add("")
+    }
+
+    /** One decision table: its signature line and the rule rows, capped at [DMN_RULES_LISTED]. */
+    internal fun renderDecision(d: Map<String, Any?>, L: MutableList<String>) {
+        L.add(
+            "- `${pyStr(d["key"])}` (${pyStr(d["hitPolicy"])}, ${pyStr(d["ruleCount"])} rules) — " +
+                "in: ${Fmt.codeList(d["inputs"])} → out: ${Fmt.codeList(d["outputs"])} — " +
+                "`${pyStr(d["file"])}`"
+        )
+        // The rule rows — the actual business logic. They were parsed into `rules` and then only
+        // ever shown in the explorer, so the report described a decision table without saying
+        // what it decides.
+        val rules = asList(d["rules"]).map { asMap(it) }
+        for (r in rules.take(DMN_RULES_LISTED)) {
+            val ins = Fmt.list(r["inputs"], " · ")
+            val outs = Fmt.list(r["outputs"], " · ")
+            val note = if (truthy(r["annotation"])) " _(${pyStr(r["annotation"])})_" else ""
+            L.add("    - when ${ins.ifEmpty { "—" }} → ${outs.ifEmpty { "—" }}$note")
+        }
+        if (rules.size > DMN_RULES_LISTED) {
+            L.add("    - … (+${rules.size - DMN_RULES_LISTED} more rules)")
+        }
+        if (d["rulesTruncated"] == true) {
+            L.add("    - _(rule list truncated during parsing — see the model file)_")
+        }
+    }
+
+    /**
+     * One form or page: its heading, its fields with what each button does, its outcomes and data
+     * sources. [graphRef] is where the fields past the cap can be looked up.
+     */
+    internal fun renderForm(f: Map<String, Any?>, L: MutableList<String>, graphRef: String) {
+        L.add("### ${orE(f["name"])} (`${pyStr(f["key"])}`) — `${pyStr(f["file"])}`")
+        val fields = asList(f["fields"])
+        for (fldAny in fields.take(FORM_FIELDS_LISTED)) {
+            val fld = asMap(fldAny)
+            val label = orE(fld["label"])
+            // A link button's caption *is* its `value`, so printing both says it twice.
+            val b = if (truthy(fld["value"]) && pyStr(fld["value"]) != label)
+                "← `${pyStr(fld["value"])}`" else ""
+            val req = if (truthy(fld["required"])) "*(req)*" else ""
+            // A button's line has to say what pressing it does: the model it invokes, and — on an
+            // expression button — the expression it evaluates. Without those, a form's own section
+            // named the button and left the reader to guess which action it was that the
+            // references list said the form triggers. A data-source component's callee and a
+            // button's endpoint are left out: the Data sources and REST calls lists below already
+            // name both, and repeating them here only costs a reader tokens.
+            val callee = asMap(fld["callee"])
+            val to = if (truthy(callee["key"]) && callee["kind"] != "rest" &&
+                fld["type"] in ModelJsonReader.BUTTON_TYPES)
+                "→ ${pyStr(callee["kind"])} `${pyStr(callee["key"])}`" else ""
+            val settings = asMap(fld["settings"])
+            val script = settings["script"]
+            val ex = if (truthy(script)) "= `${oneLine(script)}`" else ""
+            L.add("- " + Fmt.join("`${pyStr(fld["id"])}`", "[${pyStr(fld["type"])}]",
+                label, req, b, to, ex, gates(settings)))
+        }
+        if (fields.size > FORM_FIELDS_LISTED) {
+            L.add("- … (+${fields.size - FORM_FIELDS_LISTED} more fields — `fields` on the form " +
+                "node in $graphRef)")
+        }
+        val outcomes = asList(f["outcomes"])
+        if (outcomes.isNotEmpty()) {
+            L.add(
+                "- outcomes: " + outcomes.map { asMap(it) }.filter { truthy(it["value"]) }
+                    .joinToString(", ") { "`${pyStr(it["value"])}`" }
+            )
+        }
+        for (dsAny in asList(f["dataSources"])) {
+            L.add("- 🔌 data source: ${Fmt.dataSource(dsAny)}")
+        }
+        for (sfAny in asList(f["subforms"])) {
+            L.add("- 📑 subform → `${pyStr(sfAny)}`")
+        }
+        L.add("")
     }
 
     /** Port of `_render_stage(node, L, depth)`. */

@@ -114,13 +114,18 @@ class CliTest {
             resolved++
         }
         assertTrue("no model node used the dataIn indirection at all", resolved > 0)
-        // The reverse index is present and agrees with the edges.
+        // The reverse index is present and agrees with the edges — plus, for the nodes no edge points at
+        // (variables, expressions, operations…), the models their own data names, moved up to the node.
         val edges = (written["graph"] as Map<String, Any?>)["edges"] as List<Map<String, Any?>>
         val expectedUsers = edges.filter { it["rel"] != "contains" }
             .groupBy({ it["t"] }, { it["s"] }).mapValues { it.value.distinct().toSet() }
+        val goldenNodes = ((golden["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).associateBy { it["id"] }
         for (n in nodes) {
             val declared = (n["usedBy"] as? List<*>)?.toSet() ?: emptySet()
-            assertEquals("usedBy of ${n["id"]}", expectedUsers[n["id"]] ?: emptySet<Any?>(), declared)
+            val goldenData = goldenNodes[n["id"]]?.get("data") as? Map<String, Any?>
+            val own = if ((n["data"] as? Map<*, *>)?.containsKey("dataIn") == true) emptySet()
+                else (goldenData?.get("usedBy") as? List<*>)?.toSet() ?: emptySet()
+            assertEquals("usedBy of ${n["id"]}", (expectedUsers[n["id"]] ?: emptySet<Any?>()) + own, declared)
         }
     }
 

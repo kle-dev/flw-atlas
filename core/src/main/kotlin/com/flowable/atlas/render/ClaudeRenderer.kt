@@ -157,7 +157,8 @@ object ClaudeRenderer {
                 "open findings. A few KB; read it whole.")
         // The launcher always adds `--all`, which `--slice` refuses; only the jar form works as typed.
         steps.add("For one model, ask for its slice: `java -jar <atlas-cli>.jar <project-dir> --slice process:<key> --stdout` — " +
-                "what it uses, **who uses it**, and the findings that touch it, on one page.")
+                "what it contains, what it uses, **who uses it**, the variables it sets and reads, and the " +
+                "findings that touch it, on one page.")
         steps.add("For the wider picture, **`${art("overview.md")}`** — every model in execution order, the " +
                 "access map, the data layer, the findings.")
         // Telling an agent to "query the graph" without saying how, or how big it is, invites it to read
@@ -174,7 +175,8 @@ object ClaudeRenderer {
                 "   ```\n" +
                 "   A model node's body is stored once in its bucket; the node carries " +
                 "`data.dataIn` naming that bucket. Every node carries `usedBy`, so relationships are " +
-                "traversable in both directions.")
+                "traversable in both directions; for a variable, `.data.writes` and `.data.reads` say which " +
+                "element sets and reads it.")
         steps.add("Open **`${art("explorer.html")}`** for the clickable view (for humans).")
         steps.add("Read the actual source to verify, then implement.")
         // An agent that edits a model has no way to see that it broke a reference; this is the check that
