@@ -241,24 +241,24 @@ object SummaryRenderer {
         val waivedN = (checks["waived"] as? Number)?.toInt() ?: 0
         if (open > 0) {
             val all = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
-            val findings = all.filter { it["waived"] == null }
             // Defects and advice are two different questions — "what is wrong" and "what could be
             // better" — so the headline and the count lines keep them apart.
             L.add("## Health — ${Fmt.healthHeadline(result["stats"] as? Map<*, *>)}" +
                 if (waivedN > 0) " ($waivedN waived)" else "")
             L.addAll(Fmt.healthLines(checks))
-            // Name the worst few; the overview lists them all with file/line.
+            // Name the worst few of what the headline counts as defects; the overview lists them all
+            // with file/line.
             val labels by lazy { Fmt.nodeLabels(result) }
-            for (f in findings.filter { it["severity"] == "error" }.take(5)) {
+            val defects = Fmt.openDefects(all)
+            for (f in defects.take(5)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")
                 // an expression is no model: name the models it sits in
                 val models = Fmt.findingModels(f, labels)
-                L.add("- ⚠ ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else "") +
+                L.add("- ${Fmt.severityMark(f)} ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else "") +
                     (if (models.isNotEmpty()) " $models" else ""))
             }
-            val errors = findings.count { it["severity"] == "error" }
-            if (errors > 5) L.add("- … (+${errors - 5} more errors — see `$an.overview.md`)")
+            if (defects.size > 5) L.add("- … (+${defects.size - 5} more defects — see `$an.overview.md`)")
             L.add("")
         }
         // A waived error is still an error somebody decided to carry. The summary is the surface a

@@ -41,6 +41,19 @@ object Fmt {
         return parts.joinToString(" · ")
     }
 
+    /**
+     * The open findings the headline counts as defects, errors first and otherwise in check order — what
+     * a text surface names under that headline. Selecting by severity instead named only the errors, so a
+     * project whose defects were all warnings (a gateway with no way out) announced "2 defects" and then
+     * listed none of them.
+     */
+    fun openDefects(findings: List<Map<String, Any?>>): List<Map<String, Any?>> =
+        findings.filter { it["waived"] == null && CheckCatalog.kind(it["check"].toString()) == CheckCatalog.DEFECT }
+            .sortedBy { if (it["severity"] == "error") 0 else 1 }
+
+    /** `⚠` for an error, `·` for anything milder — the marks the overview's findings list uses. */
+    fun severityMark(f: Map<String, Any?>): String = if (f["severity"] == "error") "⚠" else "·"
+
     /** The per-check count lines of a health block, defects and advice on separate lines. */
     fun healthLines(checks: Map<String, Any?>): List<String> {
         val perCheck = checks.entries.filter { it.key != "open" && it.key != "waived" }

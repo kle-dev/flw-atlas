@@ -62,8 +62,8 @@ jq '._schema.recipes' graph.json
 jq '.graph.edges[] | select(.s=="process:orderProcess")' graph.json
 jq '.graph.nodes[] | select(.id=="form:orderForm") | .usedBy'  graph.json
 
-# everything already known to be wrong, worst first
-jq '.findings[] | select(.severity=="error") | {check, label, message, file}' graph.json
+# everything already known to be wrong, and not accepted by a waiver
+jq '.findings[] | select(.kind=="defect" and (.waived|not)) | {check, label, message, file}' graph.json
 ```
 
 ## A workable agent loop

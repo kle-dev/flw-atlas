@@ -171,7 +171,9 @@ object ClaudeRenderer {
                 "   jq '.graph.nodes[] | select(.id==\"process:KEY\") | .usedBy' $g  # who references it\n" +
                 "   jq '.graph.edges[] | select(.s==\"process:KEY\")'          $g  # what it references\n" +
                 "   jq '.processes[] | select(.key==\"KEY\")'                  $g  # the model body\n" +
-                "   jq '.findings[] | select(.severity==\"error\")'            $g  # what is broken\n" +
+                // By kind, not severity: half the defect checks only ever warn, and a waived finding is
+                // one a team already decided to live with.
+                "   jq '.findings[] | select(.kind==\"defect\" and (.waived|not))' $g  # what is broken\n" +
                 "   ```\n" +
                 "   A model node's body is stored once in its bucket; the node carries " +
                 "`data.dataIn` naming that bucket. Every node carries `usedBy`, so relationships are " +
@@ -342,20 +344,22 @@ object ClaudeRenderer {
         val checks = result["checks"] as? Map<String, Any?> ?: emptyMap()
         val open = (checks["open"] as? Number)?.toInt() ?: 0
         if (open > 0) {
-            val findings = (result["findings"] as? List<Map<String, Any?>> ?: emptyList())
-                .filter { it["waived"] == null }
+            val findings = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
             val headline = Fmt.healthHeadline(result["stats"] as? Map<*, *>).ifEmpty { "$open" }
             L.add("\n**Known issues in this project ($headline) — do not copy these patterns, and expect " +
                     "them when something behaves oddly:**")
             // The per-check tallies are the summary's Health block verbatim; the worst few are what an
-            // agent needs in front of it before it mirrors one of them as the house style.
+            // agent needs in front of it before it mirrors one of them as the house style. Taken from
+            // what the headline counts as defects, one per check in turn: by severity alone, a project
+            // whose defects all warn announced "2 defects" and named neither, and three findings of one
+            // check name one problem three times.
             val labels by lazy { Fmt.nodeLabels(result) }
-            for (f in findings.filter { it["severity"] == "error" }.take(3)) {
+            for (f in roundRobinByCheck(Fmt.openDefects(findings), 3)) {
                 val at = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")
                 // an expression is no model: name the models it sits in
                 val models = Fmt.findingModels(f, labels)
-                L.add("- ⚠ ${f["message"]}" + (if (at.isEmpty()) "" else " — `$at`") +
+                L.add("- ${Fmt.severityMark(f)} ${f["message"]}" + (if (at.isEmpty()) "" else " — `$at`") +
                     (if (models.isNotEmpty()) " $models" else ""))
             }
             L.add("- Full list: `${art("overview.md")}` §Findings, or `findings` in `${art("graph.json")}`.")
@@ -377,6 +381,21 @@ object ClaudeRenderer {
         // Reference material goes last: it is looked up, not read top to bottom.
         L.addAll(expressionCheatsheet(result))
         return L.joinToString("\n")
+    }
+
+    /**
+     * Up to [n] of [findings], the first of each check before the second of any — so a few lines name a
+     * few different problems. The order of [findings] decides which check comes first.
+     */
+    internal fun roundRobinByCheck(findings: List<Map<String, Any?>>, n: Int): List<Map<String, Any?>> {
+        val groups = findings.groupBy { it["check"]?.toString() }.values.toList()
+        val out = ArrayList<Map<String, Any?>>()
+        var round = 0
+        while (out.size < n && groups.any { it.size > round }) {
+            for (g in groups) if (g.size > round && out.size < n) out.add(g[round])
+            round++
+        }
+        return out
     }
 
     /**

@@ -114,8 +114,9 @@ It is designed to make that easy:
   queries them. A credential written into a model is the exception: a secret-named literal, the
   credentials in a URL and a secret-named query parameter are kept as `***` — see
   [`hardcodedSecrets`](../checks/#hardcodedsecrets-a-secret-written-into-a-model).
-- **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
-  check plus `open` and `waived`. A finding's `line` is a line of its `file`: the element's
+- **`findings`** is the itemised list every other surface summarises, each finding with the `kind` of
+  its check — `defect` or `advice`, whatever its severity — **`checks`** the open count per check plus
+  `open` and `waived`. A finding's `line` is a line of its `file`: the element's
   declaration, the line that names a missing model, or the line of the script a script problem sits on.
   A script problem whose file line cannot be found — the script of an action or of a service operation
   is a JSON string — carries `scriptLine`, its line within the script; a service operation's also has the
@@ -150,8 +151,8 @@ jq '.graph.edges[] | select(.s=="process:orderProcess")' graph.json
 # what would break if I changed this form?
 jq '.graph.nodes[] | select(.id=="form:orderForm") | .usedBy' graph.json
 
-# every open finding, worst first
-jq '.findings[] | select(.severity=="error")' graph.json
+# every open defect — what is wrong now, warnings included
+jq '.findings[] | select(.kind=="defect" and (.waived|not))' graph.json
 ```
 
 ## `<project>.CLAUDE.md` — context for an agent

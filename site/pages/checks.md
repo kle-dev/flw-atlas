@@ -597,10 +597,10 @@ eight cases in which this check deliberately says nothing.
 | Surface | What you get |
 |---|---|
 | The CLI status line | The counts, in one line on stderr. |
-| `<project>.summary.md` | A *Health* block: per-check counts and up to five errors. |
+| `<project>.summary.md` | A *Health* block: per-check counts and up to five open defects, errors first. |
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
-| `<project>.graph.json` | `findings` (itemised), `checks` (per-check counts plus `open` and `waived`) and `stats.defects` / `stats.advice`. |
-| `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
+| `<project>.graph.json` | `findings` (itemised, each with its check's `kind`), `checks` (per-check counts plus `open` and `waived`) and `stats.defects` / `stats.advice`. |
+| `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong: the headline counts and up to three open defects, each from a different check where there are three. |
 | The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its tone in words (*error*, *warning*, *advice*), the clean ones folded with what they examined — then a block per check with the finding's tone, model, element (a jump into the model), message and `file:line`, headed by one line saying what the check means with *why · what to do* beside it, and an **accept…** control on every row. A model's own page lists its findings on its Findings tab, with a ⌖ button that puts the element in view on the diagram. |
 | The IDE | The same explorer page, opened as an editor tab. |
 

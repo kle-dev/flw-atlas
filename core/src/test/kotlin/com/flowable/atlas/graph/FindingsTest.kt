@@ -220,6 +220,31 @@ class FindingsTest {
         )
     }
 
+    /**
+     * A consumer of graph.json asks "what is broken" by kind: severity alone leaves out every
+     * warning-level defect. The kind sits next to the check it comes from.
+     */
+    @Test
+    fun everyFindingCarriesTheKindOfItsCheck() {
+        val r = run(
+            nodes = listOf(
+                node("variable:guessed", "variable", data = mapOf("heuristic" to true)),
+                node("external:gone", "external", data = mapOf("missingModel" to true)),
+                process("p", mapOf(
+                    "gateways" to listOf(gw("g1")), "userTasks" to listOf(task("a"), task("b")),
+                    "flows" to listOf(flow("a1", "g1", "a", "\${x}"), flow("a2", "g1", "b", "\${!x}")),
+                )),
+            ),
+        )
+        assertTrue(findings(r).size >= 3)
+        for (f in findings(r)) {
+            assertEquals("kind of ${f["check"]}", CheckCatalog.kind(f["check"].toString()), f["kind"])
+            assertEquals("kind follows the check", listOf("check", "kind"), f.keys.take(2))
+        }
+        val gateway = findings(r).single { it["check"] == "gatewayNoDefault" }
+        assertEquals("a warning can be a defect", "warning" to CheckCatalog.DEFECT, gateway["severity"] to gateway["kind"])
+    }
+
     // ---- how a process is wired and configured ----------------------------------------------------
 
     private fun process(id: String, data: Map<String, Any?>) = node("process:$id", "process", data = data)

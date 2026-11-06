@@ -16,10 +16,10 @@ import java.util.IdentityHashMap
  * one definition of each check rather than one per surface.
  *
  * Three result keys are produced:
- *  - **`findings`** — the itemized list, most severe first: `{check, severity, node, label, message}`
- *    plus `file`/`element`/`subject`/`line`/`snippet` when known, `models` on an expression's, `scriptLine`
- *    on a script problem no file line could be given, and `waived` on the ones a waiver covers. This is
- *    what a report can name.
+ *  - **`findings`** — the itemized list, most severe first: `{check, kind, severity, node, label,
+ *    message}` plus `file`/`element`/`subject`/`line`/`snippet` when known, `models` on an
+ *    expression's, `scriptLine` on a script problem no file line could be given, and `waived` on the
+ *    ones a waiver covers. This is what a report can name. `kind` is the check's [CheckCatalog.Check.kind].
  *  - **`checks`** — `check → count` of the **open** ones, plus `open` (the total) and `waived`.
  *    This is what a badge or a headline shows.
  *  - **`waivers`** — present only when a waiver file was read: what it covered, and what went wrong
@@ -393,9 +393,17 @@ object Findings {
         // silent" is the promise the whole report is built on, and a suppression that also hides the
         // thing it suppressed leaves a reader unable to see what a team decided to live with.
         val matching = Waivers.Matching(waivers)
-        val marked = sorted.map { f ->
+        val marked = sorted.map { raw ->
+            // Every record says its kind, next to its check: the headline counts defects and advice, and
+            // a consumer of graph.json asking "what is broken" otherwise had only `severity` to go on —
+            // which leaves out every warning-level defect, a gateway the engine cannot leave among them.
+            val f = LinkedHashMap<String, Any?>().apply {
+                put("check", raw["check"])
+                CheckCatalog.kind(raw["check"].toString())?.let { put("kind", it) }
+                putAll(raw)
+            }
             val w = matching.match(f) ?: return@map f
-            LinkedHashMap(f).apply {
+            f.apply {
                 put("waived", linkedMapOf<String, Any?>("reason" to w.reason).also { m ->
                     w.by?.let { m["by"] = it }
                     w.at?.let { m["at"] = it }

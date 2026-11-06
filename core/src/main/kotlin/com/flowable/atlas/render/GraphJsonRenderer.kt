@@ -126,9 +126,10 @@ object GraphJsonRenderer {
             "membership excluded; the relation itself is in `edges`) and, for variable, expression, " +
             "binding, string, serviceOperation and customFunction nodes, the models that use them " +
             "(where and how: data.reads, data.writes, data.usages).",
-        "findings" to "{check, severity, node, label, message, file?, element?, subject?, line?, " +
-            "scriptLine?, models?, snippet?, waived?} — what Atlas thinks is wrong; `checks` counts the open " +
-            "ones per kind plus a `waived` total. `subject` tells apart several findings of one check on one " +
+        "findings" to "{check, kind, severity, node, label, message, file?, element?, subject?, line?, " +
+            "scriptLine?, models?, snippet?, waived?} — what Atlas thinks is wrong. `kind` is 'defect' " +
+            "(wrong now) or 'advice' (worth a look), whatever the severity; `checks` counts the open ones " +
+            "per check plus a `waived` total. `subject` tells apart several findings of one check on one " +
             "node (the scope, the column), where `message` is prose that rewords. `line` is a line of " +
             "`file`: the element's declaration, the reference a missing model is named by, or the script " +
             "line a script problem sits on; `scriptLine` is a line within the script body, given when no " +
@@ -147,7 +148,7 @@ object GraphJsonRenderer {
             "a model's body:              jq '.processes[] | select(.key==\"X\")'",
             "models using variable V:     jq '.graph.nodes[] | select(.id==\"variable:V\") | .usedBy'",
             "controller serving a form:   jq '.restCalls[] | select(.source|test(\"X\")) | .matches'",
-            "everything broken:           jq '.findings[] | select(.severity==\"error\" and (.waived|not))'",
+            "everything broken:           jq '.findings[] | select(.kind==\"defect\" and (.waived|not))'",
             "what we accepted, and why:   jq '.findings[] | select(.waived) | {check, label, reason: .waived.reason}'",
         ),
     )

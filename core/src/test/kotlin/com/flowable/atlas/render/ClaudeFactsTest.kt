@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -257,6 +258,64 @@ class ClaudeFactsTest {
     fun repeatedDigitPatternsDoBecomeAConvention() {
         val out = render(listOf(proc("DEMO-P001"), proc("DEMO-P002"), proc("DEMO-P003")))
         assertTrue(out, out.contains("**Key conventions:** process `DEMO-P#` (e.g. `DEMO-P00"))
+    }
+
+    private fun finding(check: String, severity: String, message: String): Map<String, Any?> = mapOf(
+        "check" to check, "kind" to com.flowable.atlas.graph.CheckCatalog.kind(check), "severity" to severity,
+        "node" to "process:p", "label" to "p", "message" to message,
+    )
+
+    private fun renderFindings(findings: List<Map<String, Any?>>): String {
+        val open = findings.groupingBy { it["check"] as String }.eachCount()
+        val kinds = findings.groupingBy { it["kind"] }.eachCount()
+        val result = mapOf(
+            "stats" to mapOf("models" to 0, "java" to 0, "archives" to 0,
+                "defects" to (kinds["defect"] ?: 0), "advice" to (kinds["advice"] ?: 0)),
+            "graph" to mapOf("nodes" to emptyList<Any?>(), "edges" to emptyList<Any?>()),
+            "findings" to findings,
+            "checks" to open + ("open" to findings.size),
+        )
+        return ClaudeRenderer.render(result, tmp.root)
+    }
+
+    /**
+     * The headline counts defects by kind, so the list under it does too: a project whose only defect is
+     * a warning — a gateway the engine cannot leave — used to announce "1 defect" and name nothing.
+     */
+    @Test
+    fun aDefectThatOnlyWarnsIsNamedUnderTheKnownIssues() {
+        val out = renderFindings(listOf(
+            finding("gatewayNoDefault", "warning", "`gw` has 2 conditional outgoing flows and no default"),
+            finding("unusedForms", "warning", "form `lonely` is never used"),
+        ))
+        val block = out.substringAfter("**Known issues in this project (1 defect · 1 advice)").substringBefore("- Full list")
+        assertTrue(out, block.contains("- · `gw` has 2 conditional outgoing flows and no default — `p`"))
+        assertFalse("advice is not a known issue: $block", block.contains("never used"))
+    }
+
+    /** Three lines name three problems: the first of each defect check before the second of any. */
+    @Test
+    fun theKnownIssuesTakeOneDefectPerCheckErrorsFirst() {
+        val out = renderFindings(listOf(
+            finding("invalidExpr", "error", "bad expression one"),
+            finding("invalidExpr", "error", "bad expression two"),
+            finding("invalidExpr", "error", "bad expression three"),
+            finding("gatewayNoDefault", "warning", "a gateway with no way out"),
+            finding("missingRefs", "error", "a key nothing answers"),
+        ))
+        val items = out.substringAfter("**Known issues in this project").substringBefore("- Full list")
+            .lines().filter { it.startsWith("- ") }
+        assertEquals(items.toString(), 3, items.size)
+        assertTrue(items.toString(), items[0].startsWith("- ⚠ bad expression one"))
+        assertTrue(items.toString(), items[1].startsWith("- ⚠ a key nothing answers"))
+        assertTrue(items.toString(), items[2].startsWith("- · a gateway with no way out"))
+    }
+
+    @Test
+    fun theBrokenRecipeSelectsOpenDefectsByKind() {
+        val out = render()
+        assertTrue(out, out.contains("jq '.findings[] | select(.kind==\"defect\" and (.waived|not))'"))
+        assertFalse(out, out.contains("select(.severity==\"error\")"))
     }
 
     @Test
