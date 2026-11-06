@@ -568,6 +568,10 @@ object GraphBuilder {
         }
 
         for ((v, perModel) in varUsages) {
+            // A script's bare `demoLookupBean.createTaskQuery()` names a Spring bean, which the script's
+            // binding resolves by name like a variable. With nothing but that bare mention behind it, a name
+            // shaped like a bean is one; a name anything else reads or writes keeps its node and its read.
+            if (v !in solidVars && Constants.looksLikeBeanName(v)) continue
             val usedBy = perModel.keys.mapNotNull { kn(it) }.toSortedSet().toList()
             if (usedBy.isEmpty()) continue
             val scopes = usedBy.mapNotNull { nodes[it]?.get("type") as? String }.toSortedSet().toList()

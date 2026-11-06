@@ -96,6 +96,8 @@ object ScriptVars {
     private val FOR_EACH_RE = Regex("\\bfor\\s*\\(\\s*(?:final\\s+)?(?:[\\w.<>\\[\\]]+\\s+)?([A-Za-z_]\\w*)\\s*:")
     private val LAST_IDENT_RE = Regex("([A-Za-z_]\\w*)\\s*$")
     private val IDENT_RE = Regex("[A-Za-z_][A-Za-z0-9_]*")
+    /** `import a.b.C`, `import static a.b.C.m`, `import x from 'y'`, `package a.b` — names, no reads. */
+    private val IMPORT_RE = Regex("^\\s*(?:import|package)\\b[^\\n;]*", RegexOption.MULTILINE)
 
     /** Script languages whose bare identifiers are scope variables. `juel` is an expression, not a script. */
     private val SCRIPT_LANGS = ScriptLanguages.SCRIPT_LANGS
@@ -113,6 +115,10 @@ object ScriptVars {
         "historyService", "cmmnRuntimeService", "cmmnTaskService", "identityService", "formService",
         "managementService", "cmmnHistoryService", "cmmnManagementService", "processEngineConfiguration",
         "engineConfiguration", "cmmnEngineConfiguration", "identityServiceKey",
+        // the engine configurations Flowable's Spring Boot auto-configuration declares as beans — a script
+        // reaches them by bean name, and a bean is no variable
+        "springProcessEngineConfiguration", "springAppEngineConfiguration", "dmnEngineConfiguration",
+        "eventEngineConfiguration", "idmEngineConfiguration",
         "flwApi", "flwApiOutputContainer", "flwActionContext", "httpRequest", "httpResponse",
         "dmnEngine", "eventRegistry", "beans", "bean", "logger", "log", "out", "err", "args", "it", "this",
         // language builtins / literals
@@ -173,9 +179,9 @@ object ScriptVars {
         if (lang != null && lang.isNotEmpty() && lang !in SCRIPT_LANGS) {
             return ScriptVarUse(writes, apiReads, emptySet(), undecided, wholeScope, api)
         }
-        return ScriptVarUse(
-            writes, apiReads, bareIdentifiers(stripLiterals(script), api), undecided, wholeScope, api,
-        )
+        // An `import com.example.X` names a package, and its root (`com`) read as a variable of the scope.
+        val code = IMPORT_RE.replace(stripLiterals(script), " ")
+        return ScriptVarUse(writes, apiReads, bareIdentifiers(code, api), undecided, wholeScope, api)
     }
 
     /**
@@ -240,6 +246,27 @@ object ScriptVars {
                     i += 2
                     while (i + 1 < s.length && !(s[i] == '*' && s[i + 1] == '/')) i++
                     i = minOf(s.length, i + 2)
+                }
+                // A Groovy `"""…"""` / `'''…'''` is one literal however many quotes it holds. Read as single
+                // quotes it flipped in and out of string mode at every embedded `"`, so the markup of an XML
+                // document built in a GString came out as twenty guessed variables, and a `//` in one of
+                // its URLs started a comment that swallowed the code after it.
+                s.startsWith("\"\"\"", i) || s.startsWith("'''", i) -> {
+                    val delim = s.substring(i, i + 3)
+                    sb.append(' ')
+                    i += 3
+                    while (i < s.length && !s.startsWith(delim, i)) {
+                        if (s[i] == '\\') { i += 2; continue }
+                        if (delim[0] == '"' && s[i] == '$' && i + 1 < s.length && s[i + 1] == '{') {
+                            i += 2
+                            while (i < s.length && s[i] != '}') { sb.append(s[i]); i++ }
+                            if (i < s.length) i++      // the closing brace
+                            sb.append(' ')
+                            continue
+                        }
+                        i++
+                    }
+                    i = minOf(s.length, i + 3)
                 }
                 c == '\'' || c == '"' || c == '`' -> {
                     val quote = c

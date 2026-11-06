@@ -59,8 +59,11 @@ Neither is anything that names another scope than a process or case variable:
 - the id of a component that binds no value of its own — a data table, an HTML component, a work list;
 - a field of a form that is only ever embedded through a bound subform: under `{{address}}` its `street`
   is `address.street`;
-- an EL function's namespace (`json:object()`), a lambda's parameter, a script's own locals, and in a
-  template a `<#list … as x>` or `<#assign x>` local and a `?built_in`;
+- an EL function's namespace (`json:object()`), a lambda's parameter, a script's own locals, the text
+  of a script's strings — a Groovy `"""…"""` included — and the packages it imports, and in a template a
+  `<#list … as x>` or `<#assign x>` local and a `?built_in`;
+- a bean a script names bare — `demoLookupBean.createTaskQuery()`, Spring Boot's
+  `springProcessEngineConfiguration` — when nothing but that mention backs the name;
 - in Java, a Spring `@Value("${…}")` placeholder and any SpEL `#{…}`, and in a channel a SpEL `#{…}`.
 
 A name several models use is only the same variable where a flow connects them. The explorer's

@@ -84,4 +84,35 @@ class ScriptBodyHarvestTest {
         assertFalse("external:flwTimeUtils" in ids)
         assertFalse("a Groovy local is not a process variable", "variable:name" in ids)
     }
+
+    @Test
+    fun aBeanAScriptNamesIsNoGuessedVariable() {
+        // Bean-shaped bare names with nothing else behind them are beans; the same shape a form also binds
+        // is a variable that keeps its script read.
+        val d = Files.createTempDirectory("atlas-script-bean-test").toFile()
+        try {
+            File(d, "p.bpmn").writeText(
+                """<definitions xmlns:flowable="http://flowable.org/bpmn"><process id="DEMO-guess2" name="Guess">
+                     <scriptTask id="t1" name="Query" scriptFormat="groovy"><script><![CDATA[import com.example.util.Helper
+                       def em = springProcessEngineConfiguration.getExpressionManager();
+                       def tasks = demoLookupBean.createTaskQuery().list();
+                       def r = reviewTask.size() + tasks.size();]]></script></scriptTask>
+                     <userTask id="u" flowable:formKey="DEMO-guess-form"/>
+                   </process></definitions>""")
+            File(d, "f.form").writeText(
+                """{"metadata":{"key":"DEMO-guess-form","name":"F","modelType":"form"},"rows":[[
+                    {"id":"reviewTask","type":"number","label":"Review task"}]]}""")
+            val r = Atlas.extract(d)
+            @Suppress("UNCHECKED_CAST")
+            val nodes = ((r["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).associateBy { it["id"].toString() }
+            for (n in listOf("com", "springProcessEngineConfiguration", "demoLookupBean")) assertFalse(n, "variable:$n" in nodes)
+            @Suppress("UNCHECKED_CAST")
+            val reads = ((nodes.getValue("variable:reviewTask")["data"] as Map<String, Any?>)["reads"] as List<Map<String, Any?>>).map { it["via"] }
+            assertTrue("$reads", "scriptRead" in reads)
+            @Suppress("UNCHECKED_CAST")
+            assertTrue((r["findings"] as List<Map<String, Any?>>).none { it["check"] == "guessedVars" })
+        } finally {
+            d.deleteRecursively()
+        }
+    }
 }
