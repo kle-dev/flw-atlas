@@ -312,6 +312,13 @@ object BackendModelParsers {
                         // hard-coded names and then discarded.
                         val fields = XmlHelpers.readFields(el)
                         if (fields.isNotEmpty()) st["fields"] = fields
+                        // What can turn a failure into a BPMN error — the only thing an error boundary or an
+                        // error event subprocess catches: a `mapException`, and an HTTP task's own response
+                        // handler. Written only when present; a triggerable task waits for its trigger.
+                        val ext = XmlHelpers.extEl(el)
+                        if (ext != null && ext.findChildren("mapException").isNotEmpty()) st["mapsExceptions"] = true
+                        if (type == "http" && ext?.findChild("httpResponseHandler") != null) st["responseHandler"] = true
+                        if (el.attr("triggerable") == "true") st["triggerable"] = "true"
                         // Names only: a password written as a literal field is a finding, its value is not data.
                         SecretScan.secretFields(XmlHelpers.readLiteralFields(el)).takeIf { it.isNotEmpty() }
                             ?.let { st["secretFields"] = it }

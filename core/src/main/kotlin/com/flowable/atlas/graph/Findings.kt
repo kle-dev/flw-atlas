@@ -468,7 +468,7 @@ object Findings {
         // A task inside a subprocess is guarded by a boundary event on that subprocess, and the element
         // lists are flat, so containment cannot be recovered here. Rather than report a task that is
         // already handled one level up, the check stands down for the whole process when a subprocess
-        // carries an error boundary.
+        // carries an error boundary — for every task whose failure that boundary could catch.
         val subprocessGuarded = (data["subProcesses"] as? List<Map<String, Any?>> ?: emptyList())
             .any { guarded.contains(it["id"]) }
 
@@ -494,31 +494,143 @@ object Findings {
             }
         }
 
-        if (catchesEverywhere || subprocessGuarded) return
+        // Only a BPMN error reaches an error boundary or an error event subprocess: any other exception out
+        // of a class, delegate, mail or HTTP task is rethrown unless the task maps it to an error code
+        // (ClassDelegate, ErrorPropagation.mapException). So a guard counts only for a task that can
+        // raise one — see [raisesBpmnError].
+        val centrally = catchesEverywhere || subprocessGuarded
+        val runsInAJob = jobOnlyReach(data)
         for (el in (data["serviceTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
             val id = el["id"] as? String ?: continue
             // An async task's failure is a failed job — retried, then an incident for an administrator —
             // and never an exception to whoever completed the previous step. That *is* its error path;
             // `asyncWithoutRetry` judges the rest. (83 async mail tasks on one project said otherwise.)
             if (el["async"] != null) continue
-            if (!leavesTheEngine(el, serviceTypes, projectBeans) || guarded.contains(id)) continue
-            // An HTTP task told to swallow failures, or to map status codes itself, has its error path.
+            // The same holds for a task that only ever runs inside a job: every way to it starts at a
+            // timer or an async step, with no wait state between, so the job is its caller.
+            if (runsInAJob(id)) continue
+            if (!leavesTheEngine(el, serviceTypes, projectBeans)) continue
             val fields = el["fields"] as? Map<*, *>
-            if (fields != null && (fields.containsKey("ignoreException") || fields.containsKey("handleStatusCodes"))) continue
+            val statusCodes = (fields?.get("handleStatusCodes") as? String)?.trim()?.ifEmpty { null }
+            // An HTTP task told to swallow failures has its error path — unless it also maps status codes:
+            // those become BPMN errors, which ignoreException does not swallow (DefaultBpmnHttpActivityDelegate
+            // rethrows a BusinessError first).
+            if (fields != null && fields.containsKey("ignoreException") && statusCodes == null) continue
+            val caught = id in guarded || centrally
+            if (caught && raisesBpmnError(el)) continue
             val what = (el["name"] as? String)?.ifEmpty { null } ?: id
             // The message names the fix for the kind of call: a synchronous mail task is made async far
             // more often than it is given a boundary event, and the reader should be told both.
-            val message = when (el["type"]) {
-                "mail" -> "`$what` sends mail synchronously with no error path — a failure fails the caller's " +
-                    "transaction; mark the task async (a failed job is retried and reported) or add a boundary error event"
-                in LEAVING_TASK_TYPES, "service-registry" -> "`$what` calls out of the engine with no error boundary event — " +
-                    "a failure propagates to the caller"
+            val message = when {
+                // handleStatusCodes is a promise that something catches HTTP<code>: with nothing catching it,
+                // the instance fails on exactly those codes
+                el["type"] == "http" && statusCodes != null ->
+                    "`$what` raises BPMN error HTTP<code> for status codes $statusCodes and nothing in this process " +
+                        "catches it — the instance fails on those codes unless a caller catches it; attach an error " +
+                        "boundary event or an error event subprocess"
+                // there is an error path in the model, and this failure cannot take it — worded so it holds
+                // whether or not the task is inside the guarded subprocess
+                caught && el["type"] == "mail" -> "`$what` sends mail, and no error boundary or error event " +
+                    "subprocess can catch its failure — a failed mail is not a BPMN error unless flowable:mapException " +
+                    "turns it into one; mark the task async or set ignoreException instead"
+                caught && el["type"] == "http" -> "`$what` calls out of the engine, and no error boundary or error " +
+                    "event subprocess can catch its failure — a failed call is not a BPMN error unless " +
+                    "flowable:mapException or handleStatusCodes turns it into one"
+                el["type"] == "mail" -> "`$what` sends mail synchronously with no error path — a failure fails the caller's " +
+                    "transaction; mark the task async (a failed job is retried and reported), set ignoreException, or map " +
+                    "the failure to an error code with flowable:mapException and catch it"
+                el["type"] in LEAVING_TASK_TYPES || el["type"] == "service-registry" -> "`$what` calls out of the engine with " +
+                    "no error boundary event — a failure propagates to the caller"
                 else -> "`$what` calls code of the project's own with no error boundary event — an exception " +
-                    "propagates to the caller"
+                    "propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task " +
+                    "maps the exception with flowable:mapException"
             }
             report("unguardedTasks", message, id)
         }
     }
+
+    /**
+     * Whether a failure of this task can come out as a BPMN error — the only thing an error boundary or
+     * an error event subprocess catches. A mail task's failure is a FlowableException
+     * (BaseMailActivityDelegate) and an HTTP task's is an exception too, unless `flowable:mapException`
+     * maps it or the HTTP task maps status codes (handleStatusCodes) or handles the response itself. The
+     * project's own code, an external worker and an agent can throw or report a BpmnError, so their guard
+     * is taken at its word.
+     */
+    private fun raisesBpmnError(el: Map<String, Any?>): Boolean = when (el["type"]) {
+        "mail" -> el["mapsExceptions"] == true
+        "http" -> el["mapsExceptions"] == true || el["responseHandler"] == true ||
+            !((el["fields"] as? Map<*, *>)?.get("handleStatusCodes") as? String).isNullOrBlank()
+        else -> true
+    }
+
+    /**
+     * Which elements of a process only ever run inside a job: walking back over the sequence flows from
+     * the element, every path reaches a timer event or an async step before it reaches a wait state or the
+     * start of the process. Wait states win over async — an async user task is still a user task, whose
+     * completion is the caller of what follows it. An element with no incoming flow and anything unknown
+     * count as a caller, and a flow back into a step already walked adds no way in — so a loop entered
+     * from a timer stays in the job, and a loop nothing enters is no job. The answer is "in a job" only when
+     * every way in says so. Elements inside an embedded subprocess carry no parent here, so a none start
+     * inside one counts as a caller too: the finding stays, which is the safe side.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun jobOnlyReach(data: Map<String, Any?>): (String) -> Boolean {
+        val flows = data["flows"] as? List<Map<String, Any?>> ?: return { false }
+        val byId = HashMap<String, Pair<String, Map<String, Any?>>>()
+        for (list in ELEMENT_LISTS) for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
+            (el["id"] as? String)?.let { byId.putIfAbsent(it, list to el) }
+        }
+        val incoming = HashMap<String, MutableList<String>>()
+        for (f in flows) {
+            val from = f["from"] as? String ?: continue
+            val to = f["to"] as? String ?: continue
+            incoming.getOrPut(to) { ArrayList() }.add(from)
+        }
+        // What a step tells a walk arriving from what follows it: true = a job starts here, false = a
+        // caller (a wait state, or something unknown), null = it ran synchronously, keep walking.
+        fun origin(id: String): Boolean? {
+            val (list, el) = byId[id] ?: return false
+            // async-leave: what follows this step is a job of its own
+            if (el["asyncLeave"] != null) return true
+            val type = el["type"]
+            val wait = list == "userTasks" || list == "callActivities" || list == "subProcesses" ||
+                (list == "otherTasks" && type == "receiveTask") ||
+                (list == "serviceTasks" && (type == "external-worker" || el["triggerable"] == "true")) ||
+                (list == "events" && type in WAIT_EVENT_TYPES && el["def"] != "timer")
+            if (wait) return false
+            if (list == "events" && el["def"] == "timer") return true
+            if (el["async"] != null) return true
+            return null
+        }
+        val memo = HashMap<String, Boolean>()
+        return fun(start: String): Boolean = memo.getOrPut(start) {
+            val seen = HashSet<String>()
+            var reachedJob = false
+            val stack = ArrayDeque<String>().apply { addLast(start) }
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                if (!seen.add(cur)) continue
+                val preds = incoming[cur].orEmpty()
+                // the task itself, or a step on the way, that nothing leads into: someone called it
+                if (preds.isEmpty()) return@getOrPut false
+                for (p in preds) {
+                    when (origin(p)) {
+                        true -> reachedJob = true
+                        false -> return@getOrPut false
+                        null -> if (p !in seen) stack.addLast(p)
+                    }
+                }
+            }
+            reachedJob
+        }
+    }
+
+    /**
+     * Events that wait: a start, catch or boundary event that is not a timer was set off by something —
+     * a start call, a message, a signal, an error — and that is the caller of what follows it.
+     */
+    private val WAIT_EVENT_TYPES = setOf("startEvent", "intermediateCatchEvent", "boundaryEvent")
 
     /** Skip diagnostics about files that are not Flowable models — recorded, not reported (see the diagnostics loop). */
     private val NOT_A_MODEL_SKIPS = listOf("not a JSON document", "JSON is not an object", "JSON carries no model key")

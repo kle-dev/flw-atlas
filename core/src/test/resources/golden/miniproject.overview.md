@@ -483,8 +483,8 @@ Advice — calls with no error path: 2 · async without retry: 1 · unused servi
 *Advice — nothing below is broken; each is a pattern worth a look.*
 
 **calls with no error path** (2)
-- · `Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn`
-- · `Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn`
+- · `Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn`
+- · `Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn`
 
 **async without retry** (1)
 - · `Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies — in: `Fulfilment Process` · at: `packTask` · file: `processes/fulfilment.bpmn`

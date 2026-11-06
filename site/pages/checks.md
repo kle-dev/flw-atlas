@@ -484,18 +484,37 @@ the task delegates Design writes, the Engage conversation tasks, the platform se
 call — and includes `flw`, the platform's scripting-API root, so `${flw.setOutput(…)}` in a task listener
 is platform API as well. Measured on real projects before this distinction, 94 % of the findings sat
 on such beans. The message names the fix for the kind of call: a synchronous mail task is told to go
-async (a failed job is retried and reported) or get a boundary event, an HTTP, worker, agent or REST
-service task to get a boundary event, and a call into the project's own code says so. An HTTP task that
-carries `ignoreException` or `handleStatusCodes` has said what happens
-on failure and stays quiet too — and so does any **async** task: its failure is a failed job, retried
-and then an incident for an administrator, never an exception to whoever completed the previous step.
-That is its error path; `asyncWithoutRetry` judges how good a one it is.
+async (a failed job is retried and reported), set `ignoreException`, or map the failure to an error code,
+an HTTP, worker, agent or REST service task to get a boundary event, and a call into the project's own
+code says so.
+
+**Only a BPMN error reaches an error boundary event or an error event subprocess.** Any other exception
+out of a delegate, a class, a mail task or an HTTP task is rethrown past them, unless the task maps it to
+an error code with `flowable:mapException`. So a boundary counts as the error path of a mail task only
+when the task declares a `mapException`, and of an HTTP task only when it maps the failure — with
+`mapException`, `handleStatusCodes` or its own response handler; a mail or HTTP task behind a boundary
+that can never fire is reported, and the message says why. Code of your own, an external worker and an
+agent can throw or report a BPMN error themselves, so their boundary is taken at its word, and the
+project-code message adds that the boundary catches only a `BpmnError` or a mapped exception.
+
+An HTTP task that carries `ignoreException` swallows its failures and stays quiet. One with
+`handleStatusCodes` does the opposite of saying what happens: the engine turns each listed status into
+the BPMN error `HTTP<code>`, so it is reported until an error boundary event or an error event subprocess
+catches that — even with `ignoreException`, which swallows connection failures but not those errors.
+
+Any **async** task stays quiet too: its failure is a failed job, retried and then an incident for an
+administrator, never an exception to whoever completed the previous step. That is its error path;
+`asyncWithoutRetry` judges how good a one it is. The same holds for a synchronous task that only ever runs
+inside a job: every path to it starts at a timer — a timer start, an intermediate timer catch, a timer
+boundary — or at an async step, with no wait state in between. A wait state wins over async — an async
+user task still waits for the user, whose completion calls what follows — and a task with no incoming
+flow, or reached from any start or catch that is not a timer, keeps its caller.
 
 Letting an error bubble up is a legitimate design, so this one is deliberately quiet wherever it cannot
-be sure: it says nothing about a process that catches errors centrally in an error event subprocess, and
-nothing at all about a process whose subprocess carries an error boundary — the element lists are flat,
-so a task inside that subprocess cannot be told from one beside it, and reporting a task that is already
-handled one level up is worse than missing one.
+be sure: it says nothing about a task whose failure an error event subprocess catches for the whole
+process, and nothing about such a task in a process whose subprocess carries an error boundary — the
+element lists are flat, so a task inside that subprocess cannot be told from one beside it, and reporting
+a task that is already handled one level up is worse than missing one.
 
 ### `asyncWithoutRetry` — async work that does not say how often to try
 

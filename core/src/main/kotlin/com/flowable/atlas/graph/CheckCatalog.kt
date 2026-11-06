@@ -261,11 +261,16 @@ object CheckCatalog {
             clean = "every outbound call is guarded",
             why = "A failure in an HTTP call, an external worker, an agent, a mail task, a REST service or " +
                 "a delegate of your own propagates to whatever called the process, with nothing in the " +
-                "model saying what happens then. A platform bean that stays inside the engine — init " +
-                "variables, audit log, data object — is not one of them, and neither is an async task: its " +
+                "model saying what happens then. Only a BPMN error reaches an error boundary or an error " +
+                "event subprocess: a failed mail or HTTP call is not one unless the task maps it. A platform " +
+                "bean that stays inside the engine — init variables, audit log, data object — is not one of " +
+                "them, and neither is an async task, or a task only a timer or an async step leads to: its " +
                 "failure is a failed job, retried and then reported, not an exception to the caller.",
-            fix = "Attach an error boundary event or catch centrally in an error event subprocess. Accept " +
-                "the finding when letting the error reach the caller is the design.",
+            fix = "Throw a BpmnError from your code, or map the exception to an error code with " +
+                "flowable:mapException, and catch it with an error boundary event or an error event " +
+                "subprocess. A mail or HTTP task can instead go async or set ignoreException (an HTTP task " +
+                "can map status codes with handleStatusCodes). Accept the finding when letting the error " +
+                "reach the caller is the design.",
             docs = "unguardedtasks-a-call-out-of-the-engine-with-nothing-catching-it",
         ),
         Check(

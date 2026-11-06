@@ -457,14 +457,77 @@ class FindingsTest {
         assertTrue(msgs["ownBean"]!!, msgs["ownBean"]!!.contains("code of the project's own"))
         assertTrue(msgs["restSvc"]!!, msgs["restSvc"]!!.contains("calls out of the engine"))
         assertTrue(msgs["agent"]!!, msgs["agent"]!!.contains("calls out of the engine"))
+        // an error event subprocess catches for the whole process — what can raise a BPMN error
+        val own = task("own", "class" to "com.example.X")
         val r3 = run(listOf(process("p", mapOf(
-            "serviceTasks" to listOf(leaving),
+            "serviceTasks" to listOf(own, leaving),
             "events" to listOf(mapOf("id" to "catchAll", "type" to "startEvent", "def" to "error"))))))
-        assertTrue("an error event subprocess catches for the whole process", elements(r3, "unguardedTasks").isEmpty())
+        assertEquals("a failed HTTP call is no BPMN error: nothing catches it", listOf("http"), elements(r3, "unguardedTasks"))
         val r4 = run(listOf(process("p", mapOf(
-            "serviceTasks" to listOf(leaving), "subProcesses" to listOf(task("sub")),
+            "serviceTasks" to listOf(own, leaving), "subProcesses" to listOf(task("sub")),
             "events" to listOf(mapOf("id" to "e", "type" to "boundaryEvent", "def" to "error", "attachedTo" to "sub"))))))
-        assertTrue("a subprocess with an error boundary may contain the task", elements(r4, "unguardedTasks").isEmpty())
+        assertEquals("a subprocess with an error boundary may contain the task", listOf("http"), elements(r4, "unguardedTasks"))
+    }
+
+    @Test
+    fun onlyABpmnErrorReachesAnErrorBoundary() {
+        fun boundary(on: String) = mapOf("id" to "b-$on", "type" to "boundaryEvent", "def" to "error", "attachedTo" to on)
+        val r = run(listOf(process("p", mapOf(
+            "serviceTasks" to listOf(
+                // a failed mail is a FlowableException: the boundary never fires…
+                task("mail", "type" to "mail"),
+                // …unless the task maps it to an error code
+                task("mappedMail", "type" to "mail", "mapsExceptions" to true),
+                task("http", "type" to "http", "fields" to mapOf("requestUrl" to "https://x")),
+                task("mappedHttp", "type" to "http", "mapsExceptions" to true),
+                task("ownCode", "class" to "com.example.X"),
+                // status codes become BPMN error HTTP<code>: a promise that something catches them
+                task("statusMapped", "type" to "http", "fields" to mapOf("requestUrl" to "https://x", "handleStatusCodes" to "4XX,5XX")),
+                task("statusCaught", "type" to "http", "fields" to mapOf("handleStatusCodes" to "5XX")),
+                // ignoreException swallows a failed call, but not the BPMN error a mapped status raises
+                task("both", "type" to "http", "fields" to mapOf("requestUrl" to "https://x", "ignoreException" to "true", "handleStatusCodes" to "5XX")),
+                task("tolerant", "type" to "http", "fields" to mapOf("ignoreException" to "true")),
+            ),
+            "events" to listOf(boundary("mail"), boundary("mappedMail"), boundary("http"), boundary("mappedHttp"),
+                boundary("ownCode"), boundary("statusCaught")),
+        ))))
+        assertEquals(listOf("mail", "http", "statusMapped", "both"), elements(r, "unguardedTasks"))
+        val msgs = findings(r).filter { it["check"] == "unguardedTasks" }.associate { it["element"] to it["message"].toString() }
+        assertTrue(msgs["mail"]!!, msgs["mail"]!!.contains("mapException") && msgs["mail"]!!.contains("no error boundary"))
+        assertTrue(msgs["statusMapped"]!!, msgs["statusMapped"]!!.contains("HTTP<code>") && msgs["statusMapped"]!!.contains("4XX,5XX"))
+        assertTrue(msgs["both"]!!, msgs["both"]!!.contains("HTTP<code>"))
+    }
+
+    @Test
+    fun aTaskOnlyAJobReachesHasNoCaller() {
+        fun ev(id: String, type: String, def: String? = null, vararg extra: Pair<String, Any?>) =
+            linkedMapOf<String, Any?>("id" to id, "type" to type, "def" to def, *extra)
+        fun bean(id: String, vararg extra: Pair<String, Any?>) = task(id, "delegateExpression" to "\${orderService}", *extra)
+        val r = run(listOf(process("p", mapOf(
+            "events" to listOf(
+                ev("timerStart", "startEvent", "timer"), ev("noneStart", "startEvent"),
+                ev("tb", "boundaryEvent", "timer", "attachedTo" to "wait"),
+                ev("timerCatch", "intermediateCatchEvent", "timer"),
+            ),
+            "userTasks" to listOf(task("wait"), task("asyncWait", "async" to "true")),
+            "gateways" to listOf(gw("join"), gw("loop")),
+            "serviceTasks" to listOf(
+                bean("afterTimer"), task("afterBoundary", "type" to "mail"), bean("afterUser"), bean("afterAsyncUser"),
+                bean("asyncStep", "async" to "true"), bean("afterAsyncStep"), bean("afterJoin"), bean("inLoop"),
+                bean("orphan"), bean("afterTimerCatch"),
+            ),
+            "flows" to listOf(
+                flow("1", "timerStart", "afterTimer"),                  // a timer start: the job is the caller
+                flow("2", "tb", "afterBoundary"),                       // a timer boundary: the same
+                flow("3", "noneStart", "wait"), flow("4", "wait", "afterUser"),           // a user completes it
+                flow("5", "asyncWait", "afterAsyncUser"),               // async or not, a user task waits
+                flow("6", "afterTimer", "asyncStep"), flow("7", "asyncStep", "afterAsyncStep"), // an async step's job
+                flow("8", "timerCatch", "join"), flow("9", "wait", "join"), flow("10", "join", "afterJoin"), // one way has a caller
+                flow("11", "afterTimer", "loop"), flow("12", "loop", "inLoop"), flow("13", "inLoop", "loop"), // a loop entered from a job
+                flow("14", "timerCatch", "afterTimerCatch"),
+            ),
+        ))))
+        assertEquals(listOf("afterUser", "afterAsyncUser", "afterJoin", "orphan"), elements(r, "unguardedTasks"))
     }
 
     @Test

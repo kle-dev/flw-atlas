@@ -714,7 +714,7 @@
       "element": "calcTask",
       "file": "processes/order.bpmn",
       "label": "Order Process",
-      "message": "`Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller",
+      "message": "`Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException",
       "node": "process:orderProcess",
       "severity": "warning"
     },
@@ -723,7 +723,7 @@
       "element": "notifyTask",
       "file": "processes/order.bpmn",
       "label": "Order Process",
-      "message": "`Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller",
+      "message": "`Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException",
       "node": "process:orderProcess",
       "severity": "warning"
     },

@@ -298,4 +298,28 @@ class BackendModelParsersTest {
         val case = BackendModelParsers.parseCmmn(bytes("miniproject/cases/review.cmmn"), Ctx(), "cases/review.cmmn")[0]
         assertFalse(case.containsKey("listeners"))
     }
+
+    /** What turns a task's failure into a BPMN error — the only thing an error boundary catches — and a wait. */
+    @Test
+    fun aServiceTaskSaysWhatCanMakeItsFailureABpmnError() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
+              <process id="p">
+                <serviceTask id="mail" flowable:type="mail">
+                  <extensionElements><flowable:mapException errorCode="E">com.example.X</flowable:mapException></extensionElements>
+                </serviceTask>
+                <serviceTask id="http" flowable:type="http">
+                  <extensionElements><flowable:httpResponseHandler class="com.example.Handler"/></extensionElements>
+                </serviceTask>
+                <serviceTask id="wait" flowable:class="com.example.Y" flowable:triggerable="true"/>
+                <serviceTask id="plain" flowable:type="mail"/>
+              </process>
+            </definitions>"""
+        val tasks = listOfMaps(BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")[0]["serviceTasks"]).associateBy { it["id"] }
+        assertEquals(true, tasks["mail"]!!["mapsExceptions"])
+        assertEquals(true, tasks["http"]!!["responseHandler"])
+        assertEquals("true", tasks["wait"]!!["triggerable"])
+        // written only when present
+        assertEquals(setOf<String>(), setOf("mapsExceptions", "responseHandler", "triggerable").filter { it in tasks["plain"]!! }.toSet())
+    }
 }
