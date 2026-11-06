@@ -657,7 +657,7 @@ object Atlas {
             exprAllowlist = exprAllowlist, custom = custom,
         )
         attachPropertyDefinitions(result, discovered.configs, ::relOf)
-        IdentitySetup.apply(result, discovered.identity, ::relOf)
+        IdentitySetup.apply(result, discovered.identity, ::relOf) { kind, path, msg -> diag(kind, path, msg) }
         TestDeployments.apply(result, discovered.testSources, ::relOf)
 
         // Mirror Python's `result.update({... "customFunctions": {...} if custom else None ...})`:

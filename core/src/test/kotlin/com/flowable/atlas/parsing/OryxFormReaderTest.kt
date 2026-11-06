@@ -106,4 +106,28 @@ class OryxFormReaderTest {
             "custom" to listOf(mapOf("expression" to "{{claimEmail != 'x'}}", "errorMsg" to "Not x"))),
             ModelParsers.validationOf(c))
     }
+
+    /** A subform the way an older export names it: by its Design model id, with the key in `form-id`. */
+    private fun subformById(formId: String?): Pair<Map<String, Any?>, Ctx> {
+        val props = linkedMapOf<String, Any?>(
+            "id" to "approvers", "stencilid" to "cloud-sub-form", "value" to "{{approvers}}",
+            "form-ref" to "FORM_MODEL-00000000-0000-0000-0000-000000000002",
+        )
+        if (formId != null) props["form-id"] = formId
+        val body = mapOf("childShapes" to listOf(mapOf("stencil" to mapOf("id" to "Container"), "properties" to props)))
+        val doc = LinkedHashMap<String, Any?>(OryxFormReader.toModern(body))
+        doc["metadata"] = mapOf("key" to "DEMO-F001", "name" to "Request", "modelType" to "form")
+        val ctx = Ctx()
+        return ModelParsers.parseForm(MiniJson.stringify(doc).toByteArray(), ctx, "form-models/DEMO-F001.json") to ctx
+    }
+
+    @Test
+    fun aSubformNamedByItsModelIdIsReferencedByItsKey() {
+        val (form, ctx) = subformById("DEMO-F002")
+        assertEquals(listOf("DEMO-F002"), form["subforms"])
+        assertTrue(ctx.refs.toString(), Triple("subform", "form", "DEMO-F002") in ctx.refs.map { Triple(it["rel"], it["kind"], it["value"]) })
+        // without a key beside it the id is all there is, and it stays
+        val (bare, _) = subformById(null)
+        assertEquals(listOf("FORM_MODEL-00000000-0000-0000-0000-000000000002"), bare["subforms"])
+    }
 }

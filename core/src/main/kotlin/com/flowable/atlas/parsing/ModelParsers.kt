@@ -13,9 +13,9 @@ import com.flowable.atlas.script.ScriptValidator
  * project-relative path; it returns the parsed model as an ordered map (or a list of them, for XML
  * containers that may declare several definitions).
  *
- * [PARSERS] maps a model type to its structured parser. A type without an entry (master data, dashboard
- * components, palettes — no corpus to design a parser against yet) goes through [parseGeneric], which
- * registers it by key, name and description so it is indexed, searchable and navigable all the same.
+ * [PARSERS] maps a model type to its structured parser. A type without an entry (dashboard components,
+ * palettes — no corpus to design a parser against yet) goes through [parseGeneric], which registers it by
+ * key, name and description so it is indexed, searchable and navigable all the same.
  */
 object ModelParsers {
 
@@ -1724,10 +1724,19 @@ object ModelParsers {
         return info
     }
 
-    /** Fallback for model types without a dedicated parser (masterData/dashboardComponent/palette/…) → `others`. */
+    /**
+     * Fallback for model types without a dedicated parser (dashboardComponent/palette/…) → `others`.
+     *
+     * A body that does not parse, or is no JSON object, throws — like every structured parser — so the
+     * extractor records a `parse` diagnostic and parseIssues reports it. It used to come back as a record
+     * with no key, which nothing could index: a truncated palette or dashboard component vanished from the
+     * report without a word, although the platform fails to deploy it.
+     */
     fun parseGeneric(data: ByteArray, ctx: Ctx, ffile: String, mtype: String): Map<String, Any?> {
-        val doc = try { MiniJson.parse(String(data, Charsets.UTF_8)) } catch (e: Exception) { null }
-        if (doc !is Map<*, *>) return linkedMapOf("key" to null, "name" to null, "file" to ffile, "modelType" to mtype)
+        val doc = MiniJson.parse(String(data, Charsets.UTF_8))
+        if (doc !is Map<*, *>) {
+            throw IllegalArgumentException("JSON is ${if (doc is List<*>) "an array" else "not an object"} — a $mtype model is one JSON object")
+        }
         @Suppress("UNCHECKED_CAST") val d = doc as Map<String, Any?>
         val out = linkedMapOf<String, Any?>("file" to ffile, "modelType" to mtype)
         for (k in GENERIC_KEYS) if (truthy(d[k])) out[k] = d[k]

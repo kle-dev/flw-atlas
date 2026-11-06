@@ -138,6 +138,13 @@ object OryxFormReader {
             // a `{id, key}` model reference is the key; the id is the editor's, not the model's
             es[to] = items(v) ?: refKey(v) ?: v
         }
+        // An older export names the subform by its Design model id (`FORM_MODEL-<uuid>`, the subform file's
+        // own `id`) and keeps the key beside it in `form-id`. The id is the editor's; the key is what
+        // Flowable resolves — read as the reference, the id was a missing model and the subform it names an
+        // unused one. Without a `form-id` the value stays as it is.
+        (es["formRef"] as? String)?.takeIf { DESIGN_MODEL_ID_RE.matches(it) }?.let {
+            str(props["form-id"])?.takeIf { k -> k.isNotBlank() && k != "null" }?.let { k -> es["formRef"] = k }
+        }
         caption(props, "button-text")?.let { es["text"] = it }
         // a data table's `url` is where a row click goes, not an endpoint; everything else's is the endpoint
         str(props["url"])?.takeIf { it.isNotBlank() }?.let { es[if (stencilId in STENCILS_WITH_ROW_LINK) "navigationUrl" else "url"] = it }
@@ -188,6 +195,9 @@ object OryxFormReader {
     }
 
     private val LOCALE_RE = Regex("^(label|button-text)_([a-z]{2}_[a-z]{2})$")
+
+    /** A Design model id — `FORM_MODEL-<uuid>` — as opposed to a model key. */
+    private val DESIGN_MODEL_ID_RE = Regex("^[A-Z_]*MODEL-[0-9a-fA-F-]{36}$")
 
     /** The `key` of a `{id, key}` model reference, or null when [v] is not one. */
     private fun refKey(v: Any?): String? {

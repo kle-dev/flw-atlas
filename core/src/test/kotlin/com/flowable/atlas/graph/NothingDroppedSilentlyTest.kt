@@ -112,4 +112,41 @@ class NothingDroppedSilentlyTest {
         assertEquals(diagnostics().size - 2, parse.size)
         assertTrue(parse.all { it["severity"] == "warning" })
     }
+
+    /**
+     * A truncated palette, dashboard component, user definition or tenant setup — files the platform
+     * fails on at deployment or startup — is a parse issue like a truncated form. The first two used to
+     * come back as a record without a key and the last two were dropped, all without a word.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aBrokenPaletteDashboardOrIdentityFileIsAParseIssue() {
+        val d = Files.createTempDirectory("atlas-broken-generic-test").toFile()
+        try {
+            fun put(rel: String, text: String) = File(d, rel).apply { parentFile.mkdirs(); writeText(text) }
+            val broken = listOf(
+                "models/DEMO-pal.palette" to """{"Palette-Id":"DEMO-pal"""",
+                "models/DEMO-dash.dashboardcomponent" to """{"key":"DEMO-dash","name":""",
+                "src/main/resources/com/flowable/users/custom/DEMO-broken.user.json" to """[{"key":"DEMO-broken",""",
+                "src/main/resources/com/flowable/tenant-setup/DEMO-broken.json" to """{"groups":[""",
+            )
+            for ((rel, text) in broken) put(rel, text)
+            put("models/DEMO-list.palette", """[{"Palette-Id":"DEMO-list"}]""")
+            put("src/main/resources/com/flowable/users/custom/DEMO-ok.user.json", """[{"key":"DEMO-ok","memberGroups":["g1"]}]""")
+            val r = Atlas.extract(d)
+
+            val parse = (r["diagnostics"] as List<Map<String, Any?>>).filter { it["kind"] == "parse" }
+            assertEquals((broken.map { it.first } + "models/DEMO-list.palette").sorted(), parse.map { it["path"].toString() }.sorted())
+            assertTrue(parse.toString(), parse.single { it["path"] == "models/DEMO-list.palette" }["message"].toString().contains("an array"))
+            assertTrue(parse.toString(), parse.single { it["path"].toString().endsWith(".user.json") }["message"].toString().startsWith("(userDefinition)"))
+            val issues = (r["findings"] as List<Map<String, Any?>>).filter { it["check"] == "parseIssues" && it["severity"] == "error" }
+            assertEquals(parse.map { it["path"].toString() }.sorted(), issues.map { it["file"].toString() }.sorted())
+            assertTrue("no keyless record", (r["others"] as List<Map<String, Any?>>).none { it["key"] == null })
+            // a file that parses is still read, and says nothing
+            val nodes = (r["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+            assertTrue(nodes.any { it["id"] == "userDefinition:DEMO-ok" })
+        } finally {
+            d.deleteRecursively()
+        }
+    }
 }

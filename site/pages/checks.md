@@ -78,9 +78,11 @@ The message is prose and rewords as a model changes; the subject is meant to sta
 
 ### `parseIssues` — files Atlas could not read
 
-Every entry in the run's diagnostics: a model whose XML or JSON would not parse, a file that could not
-be read, an archive entry that could not be opened, a Java source that could not be read, and any
-failure while extracting custom functions. It also lists what Atlas decided **not** to read, as `skip`
+Every entry in the run's diagnostics: a model whose XML or JSON would not parse — a palette or a
+dashboard component included, and a user definition (`.user.json`), tenant setup or master-data rows
+file under `com/flowable/`, which the platform reads at startup — a file that could not be read, an
+archive entry that could not be opened, a Java source that could not be read, and any failure while
+extracting custom functions. It also lists what Atlas decided **not** to read, as `skip`
 entries at warning level — a legacy wrapper without a body, a
 wrapper in a folder Design does not use, a template variation whose template is not in the project, a
 process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
@@ -93,10 +95,12 @@ app) is opened one level down and its models are read like any other. A Design-w
 legacy editor's `form-models` and `page-models` JSON, whose bodies are a tree of `childShapes` — is read
 in full since 0.24.0: its components are rewritten into the shape the current Design writes and
 parsed by the same reader, so such a form has its fields, subforms, references and REST calls instead of
-being an empty shell registered by key. The same export keeps a query as `query-models/<key>.query` and
-a variable extractor as `variable-extractor-models/<key>.extractor`, wrapper and all: both, and a
-template's variations, are read from inside the wrapper, so a project whose only copy is the export has
-its query parameters and extracted variables.
+being an empty shell registered by key; a subform an older export names by its Design model id
+(`FORM_MODEL-<uuid>`) is the form whose key it keeps beside it in `form-id`. The same export keeps a
+query as `query-models/<key>.query` and a variable extractor as
+`variable-extractor-models/<key>.extractor`, wrapper and all: both are read from inside the wrapper, and
+a template's variations are read in the shape Design's editor writes them, so a project whose only copy
+is the export has its query parameters, extracted variables and template texts.
 
 A UTF-8 byte-order mark at the start of a JSON model is not a parse failure; the model is read like any
 other.

@@ -232,6 +232,30 @@ class LegacyDesignExportTest {
         }
     }
 
+    /**
+     * An older export names a subform by its Design model id and keeps the key in `form-id`: read as the
+     * reference, the id was a missing model and the subform it embeds an unused form.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aSubformNamedByItsDesignModelIdResolvesToTheSubform() {
+        val root = tmp.newFolder("subform-by-id")
+        val main = """{"id": "FORM_MODEL-00000000-0000-0000-0000-000000000001", "key": "DEMO-F001", "name": "Request",
+            "editorJson": {"stencil": {"id": "XForm"}, "childShapes": [
+              {"stencil": {"id": "Container"}, "properties": {"id": "approvers", "stencilid": "cloud-sub-form",
+               "value": "{{approvers}}", "form-ref": "FORM_MODEL-00000000-0000-0000-0000-000000000002", "form-id": "DEMO-F002"}}]}}"""
+        val sub = """{"id": "FORM_MODEL-00000000-0000-0000-0000-000000000002", "key": "DEMO-F002", "name": "Approver",
+            "editorJson": {"stencil": {"id": "XForm"}, "childShapes": [
+              {"stencil": {"id": "Text"}, "properties": {"id": "approverName", "stencilid": "cloud-text", "value": "{{approverName}}"}}]}}"""
+        zip(File(root, "DEMO App.zip"), listOf("form-models/DEMO-F001.json" to main, "form-models/DEMO-F002.json" to sub))
+        val result = Atlas.extract(root)
+        val findings = result["findings"] as List<Map<String, Any?>>
+        assertEquals("no missing model", emptyList<Any?>(), findings.filter { it["check"] == "missingRefs" })
+        assertTrue("the subform is used", findings.none { it["check"] == "unusedForms" && it["node"] == "form:DEMO-F002" })
+        val edges = (result["graph"] as Map<String, Any?>)["edges"] as List<Map<String, Any?>>
+        assertTrue(edges.toString(), edges.any { it["s"] == "form:DEMO-F001" && it["t"] == "form:DEMO-F002" && it["rel"] == "subform" })
+    }
+
     /** The same models deployed beside their Design export are one model each, not two that disagree. */
     @Test
     fun aDesignExportBesideItsBarIsNoCopyConflict() {

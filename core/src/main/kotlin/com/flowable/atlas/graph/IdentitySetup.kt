@@ -30,8 +30,27 @@ internal object IdentitySetup {
 
     private val FORM_RELS = linkedMapOf("init" to "user-init-form", "view" to "user-view-form", "edit" to "user-edit-form")
 
+    /** What a file of [isIdentityFile] is, for a diagnostic about it. */
+    private fun kindOf(rel: String): String {
+        val low = rel.lowercase()
+        return when {
+            low.endsWith(".user.json") -> "userDefinition"
+            isMasterDataRows(low) -> "masterDataRows"
+            else -> "tenantSetup"
+        }
+    }
+
+    /**
+     * Draw the relationships of [files]. One that is too large or does not parse is told through [diag]
+     * (`kind, path, message`, the extractor's own), as a model file would be: the platform reads these at
+     * startup — a malformed custom user definition stops the IDM auto-deployment — and one that silently
+     * vanished from the report left nothing to say why its users, groups or forms were missing.
+     */
     @Suppress("UNCHECKED_CAST")
-    fun apply(result: Map<String, Any?>, files: List<File>, relOf: (File) -> String) {
+    fun apply(
+        result: Map<String, Any?>, files: List<File>, relOf: (File) -> String,
+        diag: (kind: String, path: String, message: String) -> Unit,
+    ) {
         val graph = result["graph"] as? MutableMap<String, Any?> ?: return
         val nodes = graph["nodes"] as? MutableList<Any?> ?: return
         val edges = graph["edges"] as? MutableList<Any?> ?: return
@@ -45,9 +64,19 @@ internal object IdentitySetup {
         fun group(g: String) = "group:$g".also { if (it !in ids) addNode(it, "group", g, g, null, linkedMapOf()) }
 
         val parsed = files.mapNotNull { f ->
-            if (f.length() > Atlas.MAX_MODEL_BYTES) return@mapNotNull null
-            val json = runCatching { MiniJson.parse(f.readText(Charsets.UTF_8)) }.getOrNull() ?: return@mapNotNull null
-            Triple(f, relOf(f), json)
+            val rel = relOf(f)
+            if (f.length() > Atlas.MAX_MODEL_BYTES) {
+                diag("skip", rel, "${f.length() shr 20} MB is above the ${Atlas.MAX_MODEL_BYTES shr 20} MB limit for one model file — not read")
+                return@mapNotNull null
+            }
+            // No cancellation check runs in here, so a plain catch cannot swallow one.
+            val json = try {
+                MiniJson.parse(f.readText(Charsets.UTF_8))
+            } catch (e: Exception) {
+                diag("parse", rel, "(${kindOf(rel)}) ${e.message ?: e}")
+                return@mapNotNull null
+            } ?: return@mapNotNull null
+            Triple(f, rel, json)
         }
         // User definitions first, so a tenant setup's users can point at them.
         for ((_, rel, json) in parsed.filter { it.second.lowercase().endsWith(".user.json") }) {
