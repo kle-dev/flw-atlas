@@ -2,6 +2,7 @@ package com.flowable.atlas.generate
 
 import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.action.GenerateModelConstantsAction
+import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.notification.NotificationAction
@@ -24,8 +25,13 @@ class ModelConstantsService(private val project: Project) {
 
     /** User-initiated: generate/overwrite the class at [fqcn] under [sourceRoot], remember it, return the file. */
     fun generateAndWrite(fqcn: String, sourceRoot: VirtualFile): VirtualFile? {
-        val source = ProgressManager.getInstance().runProcessWithProgressSynchronously<String, RuntimeException>(
-            { buildSource(fqcn) },
+        // index(), not cachedOrRequest(): this is the user asking, behind a modal progress that exists so it
+        // can wait. A cold index — the scan after opening the project, after any model save — used to come
+        // back null here and end in a NullPointerException balloon. The task's thread holds no read lock,
+        // so index() joins the background build (or starts one, retrying a failed one) and honours Cancel;
+        // a build that fails reaches the action's error balloon with its own message.
+        val source: String = ProgressManager.getInstance().runProcessWithProgressSynchronously<String, RuntimeException>(
+            { buildSource(fqcn, project.service<FlowableModelIndexService>().index()) },
             "Generating Flowable Model Constants",
             true,
             project,
@@ -52,7 +58,8 @@ class ModelConstantsService(private val project: Project) {
 
         // A cold index is asked for, not built here under the read lock; the rebuild it triggers ends in
         // another modelIndexUpdated, which brings the refresher (ModelConstantsAutoRefresher) round again.
-        val source = buildSource(fqcn) ?: return
+        val index = project.service<FlowableModelIndexService>().cachedOrRequest() ?: return
+        val source = buildSource(fqcn, index)
         val current = ReadAction.computeBlocking<String?, RuntimeException> {
             if (existing.isValid) VfsUtilCore.loadText(existing) else null
         }
@@ -82,8 +89,7 @@ class ModelConstantsService(private val project: Project) {
             .notify(project)
     }
 
-    private fun buildSource(fqcn: String): String? {
-        val index = project.service<FlowableModelIndexService>().cachedOrRequest() ?: return null
+    private fun buildSource(fqcn: String, index: FlowableIndex): String {
         val models = index.allDistinct().map { ModelInfo(it.type, it.key, it.name) }
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return ModelConstantsGenerator.generate(models, fqcn, settings.constantNaming, settings.constantFormat)

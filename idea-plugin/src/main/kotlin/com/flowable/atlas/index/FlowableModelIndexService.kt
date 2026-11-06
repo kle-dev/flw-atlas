@@ -79,6 +79,16 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      *  and an older scan that is still finishing must lose). */
     private val generation = AtomicLong()
 
+    /** False lets a test take the production path of [ensureBuilding] — a pooled build — instead of the
+     *  inline one every inspection test relies on. */
+    @Volatile
+    internal var inlineBuildsInTests = true
+
+    /** Runs on the building thread once the files are scanned and before the result is cached — where a
+     *  test blocks a build to invalidate under it, makes it fail, or asks which lock the scan ran under. */
+    @Volatile
+    internal var afterScanHook: (() -> Unit)? = null
+
     init {
         project.messageBus.connect(this).subscribe(
             VirtualFileManager.VFS_CHANGES,
@@ -117,6 +127,11 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     private fun drop() {
         generation.incrementAndGet()
+        // A build started before this invalidation must not be joined by those who ask after it: its
+        // result is discarded (see buildAndCache), so a Hub that reacted to the drop by joining it waited
+        // for a snapshot that was never cached nor announced, and said *scanning…* until something
+        // unrelated asked again. Its own `finally` only clears the slot if it still holds that build.
+        inFlight.set(null)
         cached = null; lastFailure = null; dataObjectTablesCache = null
         serviceTablesCache = null; backingServiceKeyCache.clear(); operationsCache.clear()
     }
@@ -136,6 +151,10 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      * Inside a read action the build runs inline rather than waiting for another thread's: that
      * thread needs the read lock too, and with a write action pending the wait would deadlock. The
      * phase-1/phase-2 split in [buildAndCache] keeps the lock held for milliseconds either way.
+     *
+     * Unlike [ensureBuilding], this retries a build that failed: every caller is an explicit action,
+     * where trying again is what the user asked for. Nothing event-driven may call it for that reason —
+     * a listener that rebuilt on `modelIndexUpdated` turned one failed build into an endless loop.
      */
     fun index(): FlowableIndex {
         cached?.let { return it }
@@ -171,11 +190,13 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      * when it lands the daemon restarts so markers, hints and inspections appear without retyping.
      */
     fun ensureBuilding() {
-        if (cached != null || project.isDisposed) return
+        // The no-retry rule of [ensureBuildingAsync] holds on the inline path too: a test that opens the
+        // playground after a failed build would otherwise rebuild on the EDT on every index event.
+        if (cached != null || project.isDisposed || lastFailure != null) return
         // A light test runs highlighting synchronously on the EDT and asserts on its result at once; a
         // build that lands later would make every inspection test a race. Inline there — the production
         // path is [ensureBuildingAsync], and ModelIndexEnsureBuildingTest exercises it on purpose.
-        if (ApplicationManager.getApplication().isUnitTestMode) { buildAndCache(); return }
+        if (ApplicationManager.getApplication().isUnitTestMode && inlineBuildsInTests) { buildAndCache(); return }
         ensureBuildingAsync()
     }
 
@@ -203,15 +224,20 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             val future = CompletableFuture<FlowableIndex>()
             if (inFlight.compareAndSet(null, future)) {
                 ApplicationManager.getApplication().executeOnPooledThread {
+                    val gen = generation.get()
                     try {
                         future.complete(buildAndCache())
                     } catch (pce: ProcessCanceledException) {
                         future.completeExceptionally(pce)          // a cancel, not a failure: nothing to record
                     } catch (t: Throwable) {
                         LOG.warn("The Flowable model index could not be built", t)
-                        lastFailure = t
+                        // A build of a scope that was invalidated meanwhile failed for files that may be gone:
+                        // recorded, it would stop the current scope from building at all (ensureBuildingAsync
+                        // does not retry a failure) until somebody pressed Rebuild.
+                        val current = generation.get() == gen
+                        if (current) lastFailure = t               // before the joiners hear of it
                         future.completeExceptionally(t)
-                        publishUpdated()                           // the Hub shows the failure instead of scanning forever
+                        if (current) publishUpdated()              // the Hub shows the failure instead of scanning forever
                     } finally {
                         inFlight.compareAndSet(future, null)
                     }
@@ -231,8 +257,11 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val gen = generation.get()
         val candidates = ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> { collectCandidates() }
         val built = build(candidates)
+        afterScanHook?.invoke()
         if (project.isDisposed) return built           // don't cache what a dying scan produced
-        if (generation.get() != gen) return built      // invalidated meanwhile — a newer build owns the cache
+        // Invalidated meanwhile: drop() released this build, so whoever asks next starts the one that owns
+        // the cache — and whoever had joined this one gets the complete pre-change snapshot it asked for.
+        if (generation.get() != gen) return built
         cached = built
         publishUpdated()
         restartDaemon()
@@ -542,6 +571,10 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                 // unreadable / not valid — skip this model, but leave a trace: a systematically
                 // mis-parsed model type would otherwise silently never be indexed
                 LOG.debug("skipping unindexable model $fileName", e)
+            } catch (e: StackOverflowError) {
+                // A parser recursing too deep on one pathological model used to fail the whole build — every
+                // model unindexed for one. The stack has unwound by now; no other Error is caught.
+                LOG.warn("skipping model $fileName: parser recursion too deep", e)
             }
         }
 

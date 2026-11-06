@@ -538,24 +538,17 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
     /**
      * Populates the scope items without ever building the model index on the EDT. The cached index fills
-     * the list immediately; a cache miss loads on a pooled thread and applies the items when ready.
+     * the list immediately; on a cache miss a background build is asked for and a placeholder shown —
+     * the build announces itself with `modelIndexUpdated`, which brings this round again.
+     *
+     * Asked for, not waited on: this runs on every index event, and waiting through `index()` retried a
+     * failed build each time — whose failure published another event, so one bad build became a full
+     * rescan every few hundred milliseconds, each logged as an IDE error, for as long as the playground
+     * was open. [FlowableModelIndexService.cachedOrRequest] does not retry a recorded failure.
      */
     private fun reloadScopeItems() {
-        val service = project.service<FlowableModelIndexService>()
-        val dialectAtRequest = dialect
-        val cached = service.cachedOrNull()
-        if (cached != null) {
-            applyScopeItems(scopeItems(dialectAtRequest) { type -> cached.keysOfType(type) })
-            return
-        }
-        applyScopeItems(scopeItems(dialectAtRequest) { emptyList() })   // placeholder until loaded
-        ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
-            val items = scopeItems(dialectAtRequest) { type -> service.keysOfType(type) }
-            ApplicationManager.getApplication().invokeLater({
-                if (!project.isDisposed && dialect == dialectAtRequest) applyScopeItems(items)
-            }, ModalityState.any())
-        }
+        val cached = project.service<FlowableModelIndexService>().cachedOrRequest()
+        applyScopeItems(scopeItems(dialect) { type -> cached?.keysOfType(type).orEmpty() })
     }
 
     private fun scopeItems(dialect: ExpressionDialect, keysOfType: (ModelType) -> List<ModelEntry>): List<ScopeItem> {
