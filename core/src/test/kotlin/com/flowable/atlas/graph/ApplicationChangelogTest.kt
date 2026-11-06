@@ -178,6 +178,18 @@ class ApplicationChangelogTest {
     }
 
     @Test
+    fun aRepositoryWithoutServiceModelsDoesNotJudgeTheServicesItsChangelogsName() {
+        // the models are deployed from elsewhere: the service a changelog names is simply not here
+        val r = extract(mapOf(
+            "src/main/resources/db/changelog/data-objects/DEMO-L4-audit.xml" to changelog(null, """
+                <property name="serviceDefinitionReferences" value="DEMO-S9"/>
+                <changeSet id="1" author="demo"><createTable tableName="DEMO_AUDIT_"><column name="ID_" type="int"/></createTable></changeSet>"""),
+        ))
+        assertNull(r.authority("DEMO-L4-audit"))
+        assertTrue(r.list("findings").none { it["check"] == "changelogIssues" })
+    }
+
+    @Test
     fun twoFilesOfOneNameInVersionFoldersAreTwoChangelogs() {
         val r = extract(mapOf(
             "src/main/resources/db/changelog/db.changelog-master.xml" to changelog(null, """<includeAll path="db/changelog/versions/"/>"""),

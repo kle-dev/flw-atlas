@@ -464,8 +464,9 @@ deployment to the editor removes an entire class of incident.
 Nearest-candidate suggestions compare only against the indexed keys of the *expected type*, so the
 proposal is always a key that would be valid there. Inside model XML the same check covers
 `calledElement`, `formKey`, `decisionRef`, `caseDefinitionKey` and the rest — in attributes and in the
-text of extension elements such as `eventType` alike. An event the platform ships itself
-(`_flowableMailEvent`) is not missing, as the report agrees.
+text of extension elements such as `eventType` alike. A model the platform ships itself — the
+`_flowableMailEvent` event, a default form such as `F07-deactivateUser` — is not missing when the site
+expects its type, as the report agrees.
 
 A key inside a **JSON** model — a data object's backing service, a form component's subform, data object,
 service or action, a document's forms, an app's models, a channel's event — is both a link and checked:

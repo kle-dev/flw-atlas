@@ -76,6 +76,18 @@ class FlowableJsonBrokenKeyInspectionTest : BasePlatformTestCase() {
         assertEquals(1, unknownKeyWarnings().size)
     }
 
+    /** The report's platform-provided models, by kind: a default form the platform ships is a form, not an event. */
+    fun testAFormThePlatformShipsIsNotMissingWhereAFormIsExpected() {
+        addTargets()
+        myFixture.configureByText("DEMO-review.form", subform("F07-deactivateUser"))
+        assertTrue("a copied action's platform form resolves in the report", unknownKeyWarnings().isEmpty())
+        myFixture.configureByText(
+            "DEMO-mail3.channel",
+            """{"key":"DEMO-mail3","name":"Mail","channelEventKeyDetection":{"fixedValue":"F07-deactivateUser"}}""",
+        )
+        assertEquals("the platform ships no event of that key", 1, unknownKeyWarnings().size)
+    }
+
     fun testNoVerdictWithoutAnyModelOfTheType() {
         addTargets()
         myFixture.configureByText(

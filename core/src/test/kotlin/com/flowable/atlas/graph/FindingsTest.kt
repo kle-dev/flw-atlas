@@ -238,7 +238,7 @@ class FindingsTest {
             "gateways" to listOf(gw("g1"), gw("g2", default = "b2"), gw("g3"), gw("g4", type = "parallelGateway"), gw("g5")),
             "userTasks" to listOf(task("a"), task("b")),
             "flows" to listOf(
-                flow("a1", "g1", "a", "\${x}"), flow("a2", "g1", "b", "\${!x}"),   // the finding
+                flow("a1", "g1", "a", "\${x == 1}"), flow("a2", "g1", "b", "\${x == 2}"),   // the finding
                 flow("b1", "g2", "a", "\${x}"), flow("b2", "g2", "b"),            // has a default
                 flow("c1", "g3", "a", "\${x}"), flow("c2", "g3", "b"),            // an unconditional flow is the way out
                 flow("d1", "g4", "a", "\${x}"), flow("d2", "g4", "b", "\${y}"),    // a parallel gateway takes every flow
@@ -248,6 +248,94 @@ class FindingsTest {
         assertEquals(listOf("g1", "g5"), elements(r, "gatewayNoDefault"))
         assertTrue(findings(r).all { it["check"] != "gatewayNoDefault" || it["message"].toString().contains("no outgoing sequence flow") })
         assertTrue(findings(r).single { it["element"] == "g5" }["message"].toString().contains("1 conditional outgoing flow and"))
+    }
+
+    @Test
+    fun exactOppositesAlwaysLeaveAWayOut() {
+        // Between two exact opposites an unset value makes the condition itself throw — no default could
+        // catch that — so a gateway whose flows include such a pair always has a way out.
+        val silent = listOf(
+            listOf("\${x}", "\${ !x }"),
+            listOf("#{a == b}", "#{a != b}"),
+            listOf("\${b eq a}", "\${a ne b}"),
+            listOf("\${vars:isEmpty(c)}", "\${variables:notEmpty(c)}"),
+            listOf("\${not(x)}", "\${x}"),
+            listOf("\${(a.b == 'x')}", "\${a.b != 'x'}"),
+            listOf("\${y > 3}", "\${!x}", "\${x}"),   // two of three flows are opposites
+        )
+        // …and these are not opposites: null makes both false, or the halves differ
+        val reported = listOf(
+            listOf("\${approved == true}", "\${approved == false}"),
+            listOf("\${vars:equals(x,'a')}", "\${vars:notEquals(x,'a')}"),
+            listOf("\${amount > 10}", "\${amount <= 10}"),
+            listOf("\${x && y}", "\${!x && y}"),
+            listOf("\${a}\${b}", "\${!a}\${b}"),
+            listOf("\${vars:isEmpty(a) || vars:isEmpty(b)}", "\${vars:isNotEmpty(a) || vars:isEmpty(b)}"),
+            listOf("\${a == b}", "\${a == c}"),
+        )
+        fun gateway(i: Int, conds: List<String>) = conds.mapIndexed { k, c -> flow("f$i-$k", "g$i", "t", c) }
+        val all = silent + reported
+        val r = run(listOf(process("p", mapOf(
+            "gateways" to all.indices.map { gw("g$it") },
+            "flows" to all.flatMapIndexed { i, c -> gateway(i, c) },
+        ))))
+        assertEquals(reported.indices.map { "g${it + silent.size}" }, elements(r, "gatewayNoDefault"))
+        assertTrue(Findings.hasComplementaryPair(listOf("\${x}", "\${!x}")))
+    }
+
+    @Test
+    fun aFlowAfterAnUnconditionalOneIsNeverTaken() {
+        fun dflt(id: String, from: String) = linkedMapOf<String, Any?>("id" to id, "from" to from, "to" to "t", "default" to true)
+        val r = run(listOf(process("p", mapOf(
+            "gateways" to listOf(
+                gw("g1", default = "slow"), gw("g2"), gw("g3"),
+                gw("g4", type = "inclusiveGateway", default = "d4"), gw("g5", type = "parallelGateway"),
+                gw("g6", default = "d6"),
+            ),
+            "flows" to listOf(
+                // the default can never be reached past a flow with no condition
+                linkedMapOf<String, Any?>("id" to "fast", "name" to "≥ 15 km/h", "from" to "g1", "to" to "t"), dflt("slow", "g1"),
+                // an unconditional flow written last is an implicit default: quiet
+                flow("c2", "g2", "t", "\${x}"), flow("u2", "g2", "t"),
+                // written first, it shadows everything after it
+                flow("u3", "g3", "t"), flow("c3", "g3", "t", "\${x}"), flow("c3b", "g3", "t", "\${y}"),
+                // an inclusive gateway takes every true flow; only its default dies
+                flow("u4", "g4", "t"), flow("c4", "g4", "t", "\${x}"), dflt("d4", "g4"),
+                // a parallel gateway takes every flow anyway
+                flow("u5", "g5", "t"), flow("v5", "g5", "t"),
+                // every other flow conditional: the default is the way out, nothing is shadowed
+                flow("c6", "g6", "t", "\${x}"), dflt("d6", "g6"),
+            ),
+        ))))
+        assertEquals(listOf("g1", "g3", "g4"), elements(r, "shadowedFlow"))
+        val msg = findings(r).filter { it["check"] == "shadowedFlow" }.associate { it["element"] to it["message"].toString() }
+        assertEquals("`g1` always leaves through `≥ 15 km/h`, which has no condition — the default `slow` is never taken", msg["g1"])
+        assertEquals("`g3` always leaves through `u3`, which has no condition — `c3`, `c3b` are never taken", msg["g3"])
+        assertEquals("`g4` always leaves through `u4`, which has no condition — the default `d4` is never taken", msg["g4"])
+        // a gateway with an unconditional flow has a way out: gatewayNoDefault is not the question here
+        assertTrue(elements(r, "gatewayNoDefault").isEmpty())
+    }
+
+    @Test
+    fun anActivityWhoseEveryFlowIsConditionalNeedsADefault() {
+        val r = run(listOf(process("p", mapOf(
+            "userTasks" to listOf(task("t1"), task("t2"), task("t3"), task("end"), task("t5")),
+            "serviceTasks" to listOf(task("dmn", "type" to "dmn")), "ruleTasks" to listOf(task("dmn")),
+            "flows" to listOf(
+                flow("a", "t1", "x", "\${x}"),                                   // one condition, no way out
+                flow("b1", "t2", "x", "\${x}"), flow("b2", "t2", "y", "\${y}"),  // two, neither the default
+                flow("c1", "t3", "x", "\${x}"),                                  // with its default flow: quiet
+                linkedMapOf<String, Any?>("id" to "c2", "from" to "t3", "to" to "y", "default" to true),
+                flow("e1", "t5", "x", "\${ok}"), flow("e2", "t5", "y", "\${!ok}"), // exact opposites: quiet
+                flow("d1", "dmn", "x", "\${hit}"),                                // listed twice, judged once
+            ),
+        ))))
+        assertEquals(listOf("dmn", "t1", "t2"), elements(r, "gatewayNoDefault").sortedBy { it.toString() })
+        val msg = findings(r).filter { it["check"] == "gatewayNoDefault" }.associate { it["element"] to it["message"].toString() }
+        assertEquals("`t1` leaves only through 1 conditional flow and has no default flow — when it is false the " +
+            "engine throws \"no outgoing sequence flow\"", msg["t1"])
+        assertTrue(msg["t2"]!!, msg["t2"]!!.contains("none of them is true"))
+        assertTrue(elements(r, "implicitSplit").isEmpty())
     }
 
     @Test

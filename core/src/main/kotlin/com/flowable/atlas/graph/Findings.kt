@@ -601,16 +601,40 @@ object Findings {
         val outgoing = HashMap<String, MutableList<Map<String, Any?>>>()
         for (f in flows) (f["from"] as? String)?.let { outgoing.getOrPut(it) { ArrayList() }.add(f) }
 
+        fun flowName(f: Map<String, Any?>) = (f["name"] as? String)?.ifEmpty { null } ?: f["id"].toString()
+
         for (g in (data["gateways"] as? List<Map<String, Any?>> ?: emptyList())) {
             val id = g["id"] as? String ?: continue
             // Only the gateways that choose: a parallel gateway takes every flow, an event gateway waits.
             if (g["type"] != "exclusiveGateway" && g["type"] != "inclusiveGateway") continue
             val outs = outgoing[id] ?: continue
+            val what = (g["name"] as? String)?.ifEmpty { null } ?: id
+
+            // The engine walks a gateway's flows in file order and takes the first one whose condition
+            // holds — and a flow with no condition always holds (ExclusiveGatewayActivityBehavior,
+            // ConditionUtil.hasTrueCondition). The default is consulted only when nothing was taken. So
+            // once an unconditional flow comes up, the default is dead, and so is every flow after it out
+            // of an exclusive gateway; an inclusive gateway takes every true flow, so there only the
+            // default dies. An unconditional flow written *last* is an implicit default and kills nothing.
+            fun isDefault(f: Map<String, Any?>) = f["default"] == true || (g["default"] != null && f["id"] == g["default"])
+            val first = outs.firstOrNull { it["condition"] == null && !isDefault(it) }
+            if (first != null) {
+                val dead = if (g["type"] == "exclusiveGateway") {
+                    outs.drop(outs.indexOf(first) + 1).filter { !isDefault(it) } + outs.filter { isDefault(it) }
+                } else outs.filter { isDefault(it) }
+                if (dead.isNotEmpty()) {
+                    val names = dead.joinToString(", ") { (if (isDefault(it)) "the default " else "") + "`${flowName(it)}`" }
+                    report("shadowedFlow",
+                        "`$what` always leaves through `${flowName(first)}`, which has no condition — $names " +
+                            "${if (dead.size == 1) "is" else "are"} never taken", id)
+                }
+            }
+
             if (g["default"] != null) continue
             // An unconditional flow is the way out when nothing else matches; with one there is no risk. A
             // single conditional flow is no choice, but it throws the very same exception when it is false.
             if (outs.any { it["condition"] == null }) continue
-            val what = (g["name"] as? String)?.ifEmpty { null } ?: id
+            if (hasComplementaryPair(outs.mapNotNull { it["condition"] as? String })) continue
             val n = outs.size
             report("gatewayNoDefault",
                 "`$what` has $n conditional outgoing flow${if (n == 1) "" else "s"} and no default — when " +
@@ -625,20 +649,176 @@ object Findings {
                 val id = el["id"] as? String ?: continue
                 if (!seen.add(id)) continue
                 val outs = outgoing[id] ?: continue
+                val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+                // Conditional flows straight out of a task, an event or a subprocess are a choice drawn
+                // without a gateway, and the engine leaves the activity the way it leaves a gateway
+                // (TakeOutgoingSequenceFlowsOperation): false flows drop out, the activity's own default
+                // flow is the fallback, and with nothing left it throws "no outgoing sequence flow".
+                if (outs.all { it["condition"] != null } && outs.none { it["default"] == true } &&
+                    !hasComplementaryPair(outs.mapNotNull { it["condition"] as? String })) {
+                    val n = outs.size
+                    report("gatewayNoDefault",
+                        "`$what` leaves only through $n conditional flow${if (n == 1) "" else "s"} and has no default " +
+                            "flow — when ${if (n == 1) "it is false" else "none of them is true"} the engine throws " +
+                            "\"no outgoing sequence flow\"", id)
+                    continue
+                }
                 if (outs.size < 2) continue
                 // The engine takes every unconditional flow, so two of them are a fork with no gateway
                 // saying so. A set of flows that are all conditional is a choice someone drew on purpose,
-                // and stays quiet — and so does an activity's own default flow, which BPMN allows and the
-                // engine takes only when no condition holds.
+                // and is gatewayNoDefault's question — and so is an activity's own default flow, which BPMN
+                // allows and the engine takes only when no condition holds.
                 val plain = outs.count { it["condition"] == null && it["default"] != true }
                 if (plain == 0) continue
-                val what = (el["name"] as? String)?.ifEmpty { null } ?: id
                 val how = if (plain == outs.size) "all of them run in parallel"
                     else "the unconditional one${if (plain > 1) "s" else ""} run${if (plain > 1) "" else "s"} in parallel with whichever condition holds"
                 report("implicitSplit", "`$what` has ${outs.size} outgoing flows and no gateway — $how", id)
             }
         }
     }
+
+    /**
+     * Whether two of [conds] are exact opposites — `${x}`/`${!x}`, `${a == b}`/`${a != b}`,
+     * `${vars:isEmpty(v)}`/`${vars:isNotEmpty(v)}` — so that one of them always holds and a default
+     * could never be reached. The engine takes the first flow whose condition is true, and a condition
+     * that evaluates to null or to something not boolean makes the *condition* throw
+     * (UelExpressionCondition) before any default is consulted; EL's `!=` is the negation of `==`, `!null`
+     * is true, and the platform defines `isNotEmpty` as `!isEmpty`. Deliberately *not* opposites:
+     * `== true`/`== false` and `vars:equals`/`vars:notEquals` (both false on null), and `<`/`>=` (EL
+     * comparisons with null are false) — those still leave the engine nowhere to go.
+     */
+    internal fun hasComplementaryPair(conds: List<String>): Boolean {
+        val bodies = conds.map { conditionBody(it) }
+        for (i in bodies.indices) for (j in bodies.indices) {
+            if (i == j) continue
+            val a = bodies[i] ?: continue
+            val b = bodies[j] ?: continue
+            if (negated(a) == b) return true
+            val ea = comparison(a)
+            val eb = comparison(b)
+            if (ea != null && eb != null && ea.first && !eb.first &&
+                (ea.second == eb.second || ea.second == eb.second.reversed())) return true
+            val ca = emptyCall(a)
+            val cb = emptyCall(b)
+            if (ca != null && cb != null && !ca.first && cb.first && ca.second == cb.second) return true
+        }
+        return false
+    }
+
+    /** `vars:isEmpty(x)` / `variables:notEmpty(x)`: prefix, function, argument text. */
+    private val EMPTY_CALL_RE = Regex("^(?:variables|vars|var)\\s*:\\s*(isEmpty|empty|isNotEmpty|notEmpty)\\s*(\\()(.*)\\)$")
+
+    /** `vars:isEmpty(x)` → (false, "x"); `vars:notEmpty(x)` → (true, "x"); null for anything else. */
+    private fun emptyCall(s: String): Pair<Boolean, String>? {
+        val m = EMPTY_CALL_RE.matchEntire(s) ?: return null
+        // `vars:isEmpty(a) || vars:isEmpty(b)` also ends in `)` — the call has to be the whole text
+        if (!closesAtEnd(s, m.groups[2]!!.range.first)) return null
+        return m.groupValues[1].let { it == "isNotEmpty" || it == "notEmpty" } to m.groupValues[3].trim()
+    }
+
+    /** The body of a condition that is exactly one `${…}` / `#{…}`, whitespace collapsed, outer parentheses gone. */
+    private fun conditionBody(c: String): String? {
+        val t = c.trim()
+        if (!(t.startsWith("\${") || t.startsWith("#{")) || !t.endsWith("}")) return null
+        val body = t.substring(2, t.length - 1)
+        // `${a}${b}` is two expressions; comparing their halves would compare nothing
+        if ("\${" in body || "#{" in body) return null
+        return stripParens(body.replace(Regex("\\s+"), " ").trim())
+    }
+
+    /** `(a == b)` → `a == b`, as often as the outer pair encloses the whole text. */
+    private fun stripParens(s: String): String {
+        var t = s
+        while (t.startsWith("(") && closesAtEnd(t, 0)) t = t.substring(1, t.length - 1).trim()
+        return t
+    }
+
+    /** Whether the bracket opened at [open] closes at the very end of [s] — quotes respected. */
+    private fun closesAtEnd(s: String, open: Int): Boolean {
+        if (open < 0 || open >= s.length || s[open] != '(' || !s.endsWith(")")) return false
+        var depth = 0
+        var quote = '\u0000'
+        var i = open
+        while (i < s.length) {
+            val c = s[i]
+            if (quote != '\u0000') {
+                if (c == '\\') i++ else if (c == quote) quote = '\u0000'
+            } else when (c) {
+                '\'', '"' -> quote = c
+                '(' -> depth++
+                ')' -> { depth--; if (depth == 0) return i == s.length - 1 }
+            }
+            i++
+        }
+        return false
+    }
+
+    /**
+     * The operators at the top level of [s] — outside brackets and string literals — that make it more
+     * than one operand: logical, relational, ternary, and EL's word forms. A word preceded by `:` or `.`
+     * is a function or property name (`vars:empty(x)`), not an operator.
+     */
+    private fun topLevelOperators(s: String): List<Pair<Int, String>> {
+        val out = ArrayList<Pair<Int, String>>()
+        var depth = 0
+        var quote = '\u0000'
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (quote != '\u0000') {
+                if (c == '\\') i++ else if (c == quote) quote = '\u0000'
+                i++; continue
+            }
+            when {
+                c == '\'' || c == '"' -> quote = c
+                c == '(' || c == '[' || c == '{' -> depth++
+                c == ')' || c == ']' || c == '}' -> depth--
+                depth != 0 -> {}
+                s.startsWith("&&", i) || s.startsWith("||", i) || s.startsWith("==", i) || s.startsWith("!=", i) ||
+                    s.startsWith("<=", i) || s.startsWith(">=", i) -> { out.add(i to s.substring(i, i + 2)); i += 2; continue }
+                c == '<' || c == '>' || c == '?' -> out.add(i to c.toString())
+                c.isLetter() && (i == 0 || !(s[i - 1].isLetterOrDigit() || s[i - 1] == '_' || s[i - 1] == '$')) -> {
+                    var e = i
+                    while (e < s.length && (s[e].isLetterOrDigit() || s[e] == '_')) e++
+                    val word = s.substring(i, e)
+                    val before = s.substring(0, i).trimEnd().lastOrNull()
+                    if (word in EL_WORD_OPERATORS && before != ':' && before != '.') out.add(i to word)
+                    i = e; continue
+                }
+            }
+            i++
+        }
+        return out
+    }
+
+    private val EL_WORD_OPERATORS = setOf("and", "or", "not", "eq", "ne", "lt", "gt", "le", "ge", "empty", "instanceof", "div", "mod")
+
+    /** `!x`, `!(x && y)`, `not x` → what they negate, or null when the negation is not of the whole text. */
+    private fun negated(s: String): String? {
+        val rest = when {
+            s.startsWith("!") && !s.startsWith("!=") -> s.substring(1).trim()
+            s.startsWith("not ") || s.startsWith("not(") -> s.substring(3).trim()
+            else -> return null
+        }
+        if (rest.isEmpty()) return null
+        // `!x && y` negates x, not the whole: only a parenthesised group or a single operand counts
+        if (rest.startsWith("(") && closesAtEnd(rest, 0)) return stripParens(rest)
+        return rest.takeIf { topLevelOperators(it).isEmpty() && !it.startsWith("!") }
+    }
+
+    /** `L == R` → (true, (L, R)); `L != R` → (false, (L, R)); null unless that is the whole condition. */
+    private fun comparison(s: String): Pair<Boolean, Pair<String, String>>? {
+        val ops = topLevelOperators(s)
+        if (ops.size != 1) return null
+        val (at, op) = ops.single()
+        val eq = when (op) { "==", "eq" -> true; "!=", "ne" -> false; else -> return null }
+        val l = s.substring(0, at).trim()
+        val r = s.substring(at + op.length).trim()
+        if (l.isEmpty() || r.isEmpty()) return null
+        return eq to (stripParens(l) to stripParens(r))
+    }
+
+    private fun <A> Pair<A, A>.reversed(): Pair<A, A> = second to first
 
     /**
      * Why one button writes over the payload, in the words its value gives: an empty binding, no value, or

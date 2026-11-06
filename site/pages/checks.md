@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs twenty-five checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs twenty-six checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -38,7 +38,7 @@ The explorer and the IDE's findings tool window label every advice finding *advi
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The twenty-five checks
+## The twenty-six checks
 
 | Check | Kind | Severity | What it means |
 |---|---|---|---|
@@ -52,7 +52,8 @@ The explorer and the IDE's findings tool window label every advice finding *advi
 | `changelogIssues` | defect | warning | A Liquibase changelog is orphaned or superseded. |
 | `changelogDrift` | defect | warning | An app's copy of a changelog differs from the one in the code. |
 | `schemaGaps` | defect | warning | A database column and the model that should describe it disagree. |
-| `gatewayNoDefault` | defect | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
+| `gatewayNoDefault` | defect | warning | An exclusive or inclusive gateway, or an activity, whose every outgoing flow is conditional, with no default. |
+| `shadowedFlow` | defect | warning | A gateway flow that can never be taken, because an unconditional flow is chosen first. |
 | `implicitSplit` | defect | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
 | `payloadOverwrite` | defect | warning | An expression or REST button whose value names no variable, so its result replaces the whole payload. |
 | `suspectExpr` | defect | warning | An expression calls a function or namespace Atlas does not know. |
@@ -175,9 +176,12 @@ name a policy and an SLA of its own. A renamed one is missing whichever of these
 
 An action's `channels` — `menu`, `quick-menu`, `slash-menu`, the mobile menus — say where in the UI the
 action is offered; they are not channel models and are not looked up (before 0.24.0 every action with a
-placement reported two missing models). Likewise the event models the platform ships itself —
-`_flowableMailEvent` and the `_flowableEngage…Received…` family — resolve to a platform-provided
-external node rather than to a missing model.
+placement reported two missing models). Likewise the models the platform ships in its default-models
+modules resolve to a platform-provided external node rather than to a missing model: its default forms
+(such as the `F07-deactivateUser` form that a copied `deactivate-user.action` keeps), its permission
+decisions, templates, documents, actions and security policies, and the events it ships —
+`_flowableMailEvent` and the `_flowableEngage…Received…` family. The match is by kind and key: a
+misspelling of one is still a missing model, and so is a call activity that names a platform *form*'s key.
 
 Some references sit where nobody looks for one, and renaming the model behind them leaves the
 referencing model silently empty at run time, so they are resolved like any other: a query's
@@ -265,7 +269,9 @@ below). A changelog is then reported when it is:
 - **orphan** — nothing explains why its table exists: a schema definition no service or data object
   references, or an application changelog whose `serviceDefinitionReferences` names a service the project
   does not define, which the finding names. An application changelog that names no service, and whose
-  tables no service maps, backs a table the code owns — a JPA entity, a lock table — and is not reported;
+  tables no service maps, backs a table the code owns — a JPA entity, a lock table — and is not reported.
+  In a repository that defines no service and no data object at all, the services live elsewhere — Design
+  deploys them — and a changelog naming one is not reported either;
 - **superseded** — the services of its table are bound to another changelog, of another Liquibase run,
   and the finding names it: typically an older schema definition the app still carries for a table the
   project's own changelog builds. Changelogs of one run are one history and never supersede each other —
@@ -380,8 +386,37 @@ not reported; a parallel gateway takes every flow and an event gateway waits, so
 A gateway with a *single* conditional flow and no default is reported too: it is no choice, but when
 that one condition is false the engine throws the very same exception.
 
-Mark one flow as the gateway's default, or add an unconditional flow. Accept the finding when the
-conditions are provably exhaustive — `${approved}` and `${!approved}` on a boolean that is always set.
+Conditional flows straight out of a task, an event or a subprocess are a choice drawn without a gateway,
+and the engine leaves the activity the same way: the flows whose condition is false drop out, the
+activity's own default flow is the fallback, and with nothing left it throws the same exception. So an
+activity whose every outgoing flow is conditional, with no default flow among them, is reported on the
+activity — a single conditional flow included, since when it is false the instance fails there.
+
+Two flows whose conditions are exact opposites always leave one way out and are not reported:
+`${x}` and `${!x}`, `${a == b}` and `${a != b}` (or `eq`/`ne`), `vars:isEmpty(v)` and
+`vars:isNotEmpty(v)`. An unset value cannot slip between them: it makes the condition itself throw, which
+no default would catch. `== true` and `== false` are *not* opposites — both are false when the value is
+null — so the demo's `DEMO-onboarding` gateway stays reported, and so do `vars:equals`/`vars:notEquals`
+and `> 10`/`<= 10`.
+
+Mark one flow as the default — the gateway's `default`, or the activity's default flow — or add an
+unconditional flow. Accept the finding when any other set of conditions is provably exhaustive.
+
+### `shadowedFlow` — a flow the gateway never takes
+
+An exclusive gateway leaves through the first outgoing flow, in the order the file lists them, whose
+condition holds — and a flow with no condition always holds. The default is consulted only when nothing
+was taken. So once an unconditional flow comes up, every flow listed after it and the gateway's default
+can never be taken, and the routing silently ignores them: a flow labelled *≥ 15 km/h* with no condition
+next to a default *< 15 km/h* means the slow branch never runs. The message names the unconditional flow
+and every flow it shadows. An inclusive gateway takes every flow that holds, so there only its default is
+dead.
+
+The engine's own validator only warns about an unconditional flow out of an exclusive gateway, and the
+deployment goes through. An unconditional flow written **last** is an implicit default — nothing comes
+after it, and with no `default` set nothing is shadowed — and is not reported.
+
+Give the unconditional flow its condition, or make it the gateway's default.
 
 ### `implicitSplit` — a fork nobody drew
 
@@ -389,7 +424,7 @@ An activity — a task, an event, a subprocess — with two or more outgoing seq
 between. The engine takes every flow whose condition holds *and* every flow without one, so two
 unconditional flows out of one task run in parallel: a fork that is invisible on the diagram and easy to
 read as a choice. When every outgoing flow is conditional the check stays quiet — that is a choice someone
-drew as conditions, and whether it needs a default is a question for the gateway they should have used.
+drew as conditions, and whether it has a way out is [`gatewayNoDefault`](#gatewaynodefault-a-choice-with-no-way-out)'s question.
 
 An activity's own **default flow** — BPMN allows one on a task, and the engine takes it only when no
 condition holds — is not an unconditional flow, so a task with conditions plus a default stays quiet. A

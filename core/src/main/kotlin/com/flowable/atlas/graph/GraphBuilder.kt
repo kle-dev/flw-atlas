@@ -11,6 +11,7 @@ import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.JavaParser
 import com.flowable.atlas.parsing.ModelKinds
+import com.flowable.atlas.parsing.PlatformDefaultModels
 
 /**
  * The navigable-graph builder — a faithful port of `flowable_atlas.py` `_build_graph`
@@ -839,8 +840,11 @@ object GraphBuilder {
                     val platform = kind == "bean" && r["value"] in Constants.FLOWABLE_PLATFORM_BEANS
                     linkedMapOf("platform" to platform, "kind" to kind)
                 }
-                // an event the platform palette ships is consumed, never defined, by a project
-                r["targetType"] == "model" && r["value"] in Constants.FLOWABLE_PLATFORM_MODEL_KEYS ->
+                // a model the platform ships — its events, default forms, permission decisions, templates —
+                // is consumed, never defined, by a project; matched by kind, so a call activity naming a
+                // platform form's key is still a missing process
+                r["targetType"] == "model" &&
+                    PlatformDefaultModels.provides(ReferenceResolver.modelKind(kind), r["value"] as String) ->
                     linkedMapOf("kind" to kind, "platform" to true)
                 r["targetType"] == "model" -> linkedMapOf("kind" to kind, "missingModel" to true)
                 else -> {

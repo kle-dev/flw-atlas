@@ -4,7 +4,7 @@ import com.flowable.atlas.completion.FlowableXmlKeyCatalog
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelType
-import com.flowable.atlas.parsing.Constants
+import com.flowable.atlas.parsing.PlatformDefaultModels
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 
@@ -32,13 +32,14 @@ internal object ModelKeyVerdict {
 
     /**
      * Null when [value] is fine or no verdict can be given: an expression or a `{{binding}}` (a key named at
-     * run time), a key the platform ships itself (`_flowableMailEvent` — the report shows those as platform
+     * run time), a model the platform ships itself under that key and of one of those [types] (the
+     * `_flowableMailEvent` event, the `F07-deactivateUser` form — the report shows those as platform
      * externals, not missing models), no index yet, or no indexed model of the expected [types] at all — an
      * unindexed or empty project is never guessed at.
      */
     fun unknownKey(project: Project, value: String, types: Collection<ModelType>): Verdict? {
         if (!FlowableXmlKeyCatalog.isResolvableKey(value) || value.contains("{{")) return null
-        if (value in Constants.FLOWABLE_PLATFORM_MODEL_KEYS) return null
+        if (types.any { PlatformDefaultModels.provides(it.id, value) }) return null
         // The cached index only — a highlighting pass must not build it.
         val index = project.service<FlowableModelIndexService>().cachedOrRequest() ?: return null
         val known = LinkedHashSet<String>()

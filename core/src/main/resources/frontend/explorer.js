@@ -1679,6 +1679,7 @@ const CHECK_META={
   unusedDecisions:{cat:'unused-decision', show:()=>INSIGHTS.totalDecisionTables>0, examined:()=>[INSIGHTS.totalDecisionTables,'decision table']},
   leftoverMarkers:{examined:()=>[INSIGHTS.totalModels,'model']},
   gatewayNoDefault:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
+  shadowedFlow:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
   implicitSplit:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
 };
 const metaOf=id=>CHECK_META[id]||{};

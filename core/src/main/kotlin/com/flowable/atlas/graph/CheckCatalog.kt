@@ -175,14 +175,26 @@ object CheckCatalog {
         ),
         Check(
             id = "gatewayNoDefault", kind = DEFECT, tier = "runtime", severity = "warning",
-            label = "gateways with no way out", title = "Gateway without default",
-            what = "an exclusive or inclusive gateway whose every outgoing flow is conditional, with no default",
-            clean = "every choosing gateway has a way out",
+            label = "choices with no way out", title = "Gateway without default",
+            what = "an exclusive or inclusive gateway, or an activity, whose every outgoing flow is conditional, with no default",
+            clean = "every choice has a way out",
             why = "When none of the conditions holds the engine has nowhere to go and throws \"no outgoing " +
                 "sequence flow\" — the instance fails right there, on the data that reached it.",
-            fix = "Mark one flow as the gateway's default, or add an unconditional flow. Accept it when the " +
-                "conditions are provably exhaustive.",
+            fix = "Mark one flow as the default (the gateway's `default`, or the activity's default flow), or " +
+                "add an unconditional flow. Two flows that are exact opposites are recognised on their own; " +
+                "accept any other set of conditions that is provably exhaustive.",
             docs = "gatewaynodefault-a-choice-with-no-way-out",
+        ),
+        Check(
+            id = "shadowedFlow", kind = DEFECT, tier = "runtime", severity = "warning",
+            label = "flows a gateway never takes", title = "Flow never taken",
+            what = "a gateway flow that can never be taken, because an unconditional flow is chosen first",
+            clean = "every flow out of a gateway can be taken",
+            why = "An exclusive gateway leaves through the first flow, in file order, whose condition holds, " +
+                "and a flow with no condition always holds. Every flow after it, and the default, is never " +
+                "taken: the routing silently ignores them.",
+            fix = "Give the unconditional flow its condition, or make it the gateway's default.",
+            docs = "shadowedflow-a-flow-the-gateway-never-takes",
         ),
         Check(
             id = "implicitSplit", kind = DEFECT, tier = "runtime", severity = "warning",

@@ -64,7 +64,7 @@ explorer you can click through:
 | [The Atlas explorer](https://kle-dev.github.io/flw-atlas/explorer/) | Every view, the search grammar, the keyboard map |
 | [Generated artifacts](https://kle-dev.github.io/flw-atlas/artifacts/) | What each file is for, and `jq` recipes for the graph |
 | [CLI reference](https://kle-dev.github.io/flw-atlas/cli/) | Every flag, the launcher, exit codes |
-| [Health checks](https://kle-dev.github.io/flw-atlas/checks/) | All twenty-five, and what each one detects |
+| [Health checks](https://kle-dev.github.io/flw-atlas/checks/) | All twenty-six, and what each one detects |
 | [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, which to use when, the guide for driving Flowable Work, and what a change did to the models for reviewing it |
 | [Development](https://kle-dev.github.io/flw-atlas/develop/) | Build, tests, goldens, the compatibility gate, CI |
 

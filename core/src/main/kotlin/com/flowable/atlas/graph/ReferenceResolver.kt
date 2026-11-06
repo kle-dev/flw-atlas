@@ -98,6 +98,16 @@ object ReferenceResolver {
     /** App child-model types the app definition spells differently from the model kind. */
     private val KIND_ALIASES = mapOf("security" to "securityPolicy", "decisionService" to "decision")
 
+    /**
+     * A model ref's kind as the model index keys it: `model:form` → `form`, an app's `security` →
+     * `securityPolicy`, a model type's `dmn` → `decision`. The one normalisation every lookup by kind
+     * goes through — resolution here, the platform's own models in the graph builder.
+     */
+    internal fun modelKind(kind: String): String {
+        val norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
+        return KIND_ALIASES[norm] ?: ModelKinds.NORMALIZE_TYPE[norm] ?: norm
+    }
+
     /** A value that is exactly one `${ident}` / `#{ident}` — the only shape we best-effort resolve. */
 
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
@@ -407,8 +417,7 @@ object ReferenceResolver {
             val ref2 = LinkedHashMap(ref)
             when {
                 kind.startsWith("model:") || kind in MODEL_KIND_NAMES -> {
-                    var norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
-                    norm = KIND_ALIASES[norm] ?: ModelKinds.NORMALIZE_TYPE[norm] ?: norm
+                    val norm = modelKind(kind)
                     target = modelIndex[norm to value]
                     ref2["target"] = target
                     ref2["targetType"] = "model"

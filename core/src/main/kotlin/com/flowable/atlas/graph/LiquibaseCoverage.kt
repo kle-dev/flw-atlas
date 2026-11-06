@@ -454,11 +454,16 @@ object LiquibaseCoverage {
      *   adds a column to a table another file created is part of the same table, not a rival of it.
      * - **orphan** — nothing references it. An application changelog that names no service and whose
      *   tables no service maps is the application's own table (a JPA entity, a lock table) and gets no
-     *   status: nothing in the models is meant to explain it.
+     *   status: nothing in the models is meant to explain it. Nor does one that names a service, in a
+     *   repository that defines no service and no data object at all: its models are deployed from
+     *   elsewhere, and a service it lacks says nothing about the changelog.
      */
     private fun markLiquibaseAuthority(result: MutableMap<String, Any?>, book: Book, bindings: List<Binding>) {
         val services = mapList(result["services"])
         val svcKeys = services.mapNotNull { it["key"] as? String }.toHashSet()
+        // Two real repositories with changelogs and no service models (Design deploys those) reported
+        // every changelog — 18 of 24 on one — as an orphan to retire, whose tables the deployed services map.
+        val modelsHere = svcKeys.isNotEmpty() || mapList(result["dataObjects"]).isNotEmpty()
         val svcByTable = LinkedHashMap<String, MutableList<String>>()
         val namedBy = LinkedHashMap<String, MutableList<String>>()
         for (s in services) {
@@ -488,7 +493,8 @@ object LiquibaseCoverage {
                     fwd.isNotEmpty() || tblRefs.isNotEmpty() -> { status = "live"; by = (fwd + tblRefs).distinct().sorted() }
                     back.isNotEmpty() -> { status = "live"; by = back }
                     named.isNotEmpty() -> { status = "live"; by = named }
-                    e.serviceRefs.isNotEmpty() -> status = "orphan"   // it names services the project does not have
+                    // it names services the project does not have — when the project has any to judge by
+                    e.serviceRefs.isNotEmpty() && modelsHere -> status = "orphan"
                     else -> continue
                 }
             } else {
