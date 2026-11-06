@@ -155,5 +155,22 @@ class FormSvgRendererTest {
         assertTrue(pic.svg.contains("↳ subform DEMO-F002"))
     }
 
+    /**
+     * A vertical tab pasted from Word into a label reached the component's `<title>` as is, and XML 1.0
+     * forbids it even escaped: the IDE preview's SVG library rejected the whole drawing, and a browser showed
+     * a parse error instead of the form.
+     */
+    @Test
+    fun aControlCharacterInALabelLeavesAReadableDrawing() {
+        val form = """{"metadata": {"key": "DEMO-vt", "name": "Intake\u0001form"},
+            "rows": [{"cols": [{"id": "customerName", "type": "text", "label": "Customer\u000Bname", "value": "{{customerName}}"}]}]}"""
+        // the premise: the parser the test reads the drawing back with does refuse the raw character
+        assertTrue(runCatching { com.flowable.atlas.parsing.AtlasXml.parse("<t>\u000B</t>".toByteArray()) }.isFailure)
+        val svg = FormSvgRenderer.renderSvg(form.toByteArray())!!
+        com.flowable.atlas.parsing.AtlasXml.parse(svg.toByteArray())   // throws on a character XML forbids
+        assertTrue(svg, svg.contains("<title>Customer name (text)</title>"))
+        assertTrue(svg, svg.contains(">Intake form<"))
+    }
+
     private fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }

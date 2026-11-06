@@ -1,5 +1,7 @@
 package com.flowable.atlas.diagram
 
+import com.flowable.atlas.diagram.SvgText.esc
+import com.flowable.atlas.diagram.SvgText.fmt
 import com.flowable.atlas.parsing.ModelJsonReader
 import kotlin.math.max
 
@@ -338,21 +340,5 @@ object FormSvgRenderer {
         val one = s.replace(Regex("\\s+"), " ").trim()
         val max = (width / charW).toInt().coerceAtLeast(1)
         return if (one.length <= max) one else one.take(max - 1) + "…"
-    }
-
-    private fun fmt(v: Double): String {
-        val r = Math.round(v * 100.0) / 100.0
-        return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString()
-    }
-
-    private fun esc(s: String): String = buildString {
-        for (c in s) when (c) {
-            '&' -> append("&amp;")
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '"' -> append("&quot;")
-            '\'' -> append("&#39;")
-            else -> append(c)
-        }
     }
 }

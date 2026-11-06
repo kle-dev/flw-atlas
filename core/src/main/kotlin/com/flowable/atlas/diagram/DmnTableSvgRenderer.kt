@@ -1,5 +1,7 @@
 package com.flowable.atlas.diagram
 
+import com.flowable.atlas.diagram.SvgText.esc
+import com.flowable.atlas.diagram.SvgText.fmt
 import com.flowable.atlas.parsing.AtlasXml
 import kotlin.math.max
 import kotlin.math.min
@@ -298,21 +300,5 @@ object DmnTableSvgRenderer {
         if (weight != "400") append(""" font-weight="$weight"""")
         if (fill != TEXT) append(""" fill="$fill"""")
         append(">").append(esc(s)).append("</text>")
-    }
-
-    private fun fmt(v: Double): String {
-        val r = Math.round(v * 100.0) / 100.0
-        return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString()
-    }
-
-    private fun esc(s: String): String = buildString {
-        for (c in s) when (c) {
-            '&' -> append("&amp;")
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '"' -> append("&quot;")
-            '\'' -> append("&#39;")
-            else -> append(c)
-        }
     }
 }

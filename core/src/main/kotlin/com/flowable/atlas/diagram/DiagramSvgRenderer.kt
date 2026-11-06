@@ -1,5 +1,7 @@
 package com.flowable.atlas.diagram
 
+import com.flowable.atlas.diagram.SvgText.esc
+import com.flowable.atlas.diagram.SvgText.fmt
 import kotlin.math.max
 import kotlin.math.min
 
@@ -405,21 +407,4 @@ object DiagramSvgRenderer {
 
     private fun truncate(s: String, maxChars: Int): String =
         if (s.length <= maxChars) s else s.take(max(1, maxChars - 1)).trimEnd() + "…"
-
-    /** Locale-free number formatting: round to 2 decimals, drop a trailing `.0`. */
-    private fun fmt(v: Double): String {
-        val r = Math.round(v * 100.0) / 100.0
-        return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString()
-    }
-
-    private fun esc(s: String): String = buildString {
-        for (c in s) when (c) {
-            '&' -> append("&amp;")
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '"' -> append("&quot;")
-            '\'' -> append("&#39;")
-            else -> append(c)
-        }
-    }
 }
