@@ -111,6 +111,9 @@ object DiagramIcons {
         put("caseplanmodel", r(null, "Case plan model"))
         put("stage", r(null, "Stage"))
         put("milestone", r(null, "Milestone"))
+        // `<eventListener flowable:eventType="variable|signal">` in XML (see XmlDiExtractor), a stencil in Design
+        put("variableeventlistener", r(null, "Variable listener"))
+        put("signaleventlistener", r(DiaIcon.SIGNAL, "Signal listener"))
     }
 
     /** `flowable:type` on a `<serviceTask>` → glyph + Design name (deployment XML without Design ext). */
@@ -160,6 +163,13 @@ object DiagramIcons {
         "caseplanmodel" to r(null, "Case plan model"),
         "entrycriterion" to r(null, "Entry criterion"),
         "exitcriterion" to r(null, "Exit criterion"),
+        // CMMN event listeners — the toolbar buttons and timers of a case in Work; the words are the ones
+        // DesignTerms (and so the rest of Atlas) uses. A workspace model's stencil ids are the same names;
+        // the variable and signal listeners, which XML spells as a typed <eventListener>, are in STENCILS.
+        "usereventlistener" to r(DiaIcon.USER, "User event listener"),
+        "timereventlistener" to r(DiaIcon.TIMER, "Timer"),
+        "eventlistener" to r(null, "Event listener"),
+        "genericeventlistener" to r(null, "Event listener"),
         "startevent" to r(null, "Start event"),
         "endevent" to r(null, "End event"),
         "boundaryevent" to r(null, "Boundary event"),

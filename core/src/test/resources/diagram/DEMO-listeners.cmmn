@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+             xmlns:cmmndi="http://www.omg.org/spec/CMMN/20151109/CMMNDI"
+             xmlns:dc="http://www.omg.org/spec/CMMN/20151109/DC"
+             xmlns:di="http://www.omg.org/spec/CMMN/20151109/DI"
+             xmlns:flowable="http://flowable.org/cmmn"
+             targetNamespace="http://flowable.org/demo">
+  <case id="DEMO-listeners" name="Listeners">
+    <casePlanModel id="cpm" name="Request">
+      <planItem id="pi_review" definitionRef="ht_review"/>
+      <planItem id="pi_cancel" definitionRef="uel_cancel"/>
+      <planItem id="pi_timeout" definitionRef="tel_timeout"/>
+      <planItem id="pi_flag" definitionRef="vel_flag"/>
+      <planItem id="pi_any" definitionRef="el_any"/>
+      <humanTask id="ht_review" name="Review request"/>
+      <userEventListener id="uel_cancel" name="Cancel request"/>
+      <timerEventListener id="tel_timeout" name="After three days">
+        <timerExpression><![CDATA[P3D]]></timerExpression>
+      </timerEventListener>
+      <eventListener id="vel_flag" name="Flag set" flowable:eventType="variable" flowable:variableName="flagged"/>
+      <eventListener id="el_any" name="Reactivate"/>
+    </casePlanModel>
+  </case>
+  <cmmndi:CMMNDI>
+    <cmmndi:CMMNDiagram>
+      <cmmndi:CMMNShape cmmnElementRef="cpm">
+        <dc:Bounds x="40" y="40" width="560" height="260"/>
+        <cmmndi:CMMNLabel/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_review">
+        <dc:Bounds x="80" y="100" width="100" height="80"/>
+        <cmmndi:CMMNLabel/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_cancel">
+        <dc:Bounds x="240" y="125" width="30" height="30"/>
+        <cmmndi:CMMNLabel/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_timeout">
+        <dc:Bounds x="340" y="125" width="30" height="30"/>
+        <cmmndi:CMMNLabel/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_flag">
+        <dc:Bounds x="440" y="125" width="30" height="30"/>
+        <cmmndi:CMMNLabel/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_any">
+        <dc:Bounds x="520" y="125" width="30" height="30"/>
+        <cmmndi:CMMNLabel/>
+      </cmmndi:CMMNShape>
+    </cmmndi:CMMNDiagram>
+  </cmmndi:CMMNDI>
+</definitions>

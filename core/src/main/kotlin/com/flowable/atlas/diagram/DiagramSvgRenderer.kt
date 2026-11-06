@@ -51,8 +51,8 @@ object DiagramSvgRenderer {
         sb.append(defs())
         sb.append("""<rect x="${fmt(viewX)}" y="${fmt(viewY)}" width="${fmt(viewW)}" height="${fmt(viewH)}" fill="#ffffff"/>""")
 
-        // Containers (pool/lane/stage/subprocess) first, then edges, then the remaining shapes on top,
-        // so connectors do not hide task/event silhouettes and labels stay readable.
+        // Containers (pool/lane/stage/subprocess/decision service) first, then edges, then the remaining
+        // shapes on top, so connectors do not hide task/event silhouettes and labels stay readable.
         for (s in geometry.shapes) if (isContainer(s.kind)) drawShape(sb, s)
         for (e in geometry.edges) drawEdge(sb, e)
         for (s in geometry.shapes) if (!isContainer(s.kind)) drawShape(sb, s)
@@ -65,7 +65,7 @@ object DiagramSvgRenderer {
 
     private fun isContainer(k: ShapeKind): Boolean =
         k == ShapeKind.POOL || k == ShapeKind.LANE || k == ShapeKind.SUBPROCESS ||
-            k == ShapeKind.EVENT_SUBPROCESS || k == ShapeKind.CMMN_STAGE
+            k == ShapeKind.EVENT_SUBPROCESS || k == ShapeKind.CMMN_STAGE || k == ShapeKind.DMN_DECISION_SERVICE
 
     private fun defs(): String =
         """<defs>""" +
@@ -130,8 +130,10 @@ object DiagramSvgRenderer {
         sb.append(">")
         tooltip(sb, s)
         when {
-            s.kind.isEvent -> drawEvent(sb, s)
+            // a CMMN event listener is a ring with its type inside and its name below, like an event
+            s.kind.isEvent || s.kind == ShapeKind.CMMN_EVENT_LISTENER -> drawEvent(sb, s)
             s.kind.isGateway -> drawGateway(sb, s)
+            s.kind == ShapeKind.DMN_DECISION_SERVICE -> drawDecisionService(sb, s)
             s.kind == ShapeKind.DATA_OBJECT -> drawDataObject(sb, s)
             s.kind == ShapeKind.TEXT_ANNOTATION -> drawTextAnnotation(sb, s)
             s.kind == ShapeKind.POOL || s.kind == ShapeKind.LANE -> drawLane(sb, s)
@@ -139,6 +141,8 @@ object DiagramSvgRenderer {
                 drawCriterion(sb, s)
             s.kind == ShapeKind.CMMN_MILESTONE || s.kind == ShapeKind.DMN_INPUT_DATA -> drawStadium(sb, s)
             s.kind == ShapeKind.DMN_DECISION -> drawRect(sb, s, rx = 0.0)
+            s.kind == ShapeKind.DMN_BKM -> drawBkm(sb, s)
+            s.kind == ShapeKind.DMN_KNOWLEDGE_SOURCE -> drawKnowledgeSource(sb, s)
             else -> drawRect(sb, s, rx = 8.0)   // task / sub-process / call activity / stage / bkm / generic
         }
         sb.append("</g>")
@@ -213,6 +217,46 @@ object DiagramSvgRenderer {
         }
     }
 
+    /**
+     * A DRD decision service: a rounded container with its name top-left, as DMN draws it, and the line
+     * between the decisions it exposes (above) and the ones it encapsulates (below). Drawn before the
+     * edges ([isContainer]): the information requirements between its decisions cross it, and an opaque
+     * box painted after them hid every one.
+     */
+    private fun drawDecisionService(sb: StringBuilder, s: DiaShape) {
+        sb.append(
+            """<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${fmt(s.width)}" height="${fmt(s.height)}" """ +
+                """rx="12" ry="12" fill="$LANE_FILL" stroke="$STROKE" stroke-width="1.5"/>""",
+        )
+        if (s.divider.size >= 2) {
+            val pts = s.divider.joinToString(" ") { "${fmt(it.x)},${fmt(it.y)}" }
+            sb.append("""<polyline points="$pts" fill="none" stroke="$STROKE" stroke-width="1.3"/>""")
+        }
+        topLabel(sb, s)
+    }
+
+    /** A business knowledge model: a box with its top-left and bottom-right corners cut off, as DMN draws it. */
+    private fun drawBkm(sb: StringBuilder, s: DiaShape) {
+        val c = min(14.0, min(s.width, s.height) / 4)
+        val r = s.x + s.width
+        val b = s.y + s.height
+        val d = "M${fmt(s.x + c)},${fmt(s.y)} L${fmt(r)},${fmt(s.y)} L${fmt(r)},${fmt(b - c)} L${fmt(r - c)},${fmt(b)} " +
+            "L${fmt(s.x)},${fmt(b)} L${fmt(s.x)},${fmt(s.y + c)} Z"
+        sb.append("""<path d="$d" fill="$FILL" stroke="$STROKE" stroke-width="1.5"/>""")
+        centeredLabel(sb, s)
+    }
+
+    /** A knowledge source: a page whose bottom edge is a wave, as DMN draws it. */
+    private fun drawKnowledgeSource(sb: StringBuilder, s: DiaShape) {
+        val wave = min(10.0, s.height / 5)
+        val r = s.x + s.width
+        val base = s.y + s.height - wave
+        val d = "M${fmt(s.x)},${fmt(s.y)} L${fmt(r)},${fmt(s.y)} L${fmt(r)},${fmt(base)} " +
+            "C${fmt(r - s.width / 4)},${fmt(base - wave)} ${fmt(s.x + s.width / 4)},${fmt(base + 2 * wave)} ${fmt(s.x)},${fmt(base)} Z"
+        sb.append("""<path d="$d" fill="$FILL" stroke="$STROKE" stroke-width="1.5"/>""")
+        centeredLabel(sb, s)
+    }
+
     private fun drawStadium(sb: StringBuilder, s: DiaShape) {
         val r = min(s.width, s.height) / 2
         sb.append(
@@ -250,7 +294,7 @@ object DiagramSvgRenderer {
             """<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}" fill="$FILL" stroke="$STROKE" """ +
                 """stroke-width="${fmt(strokeW)}"$dash/>""",
         )
-        if (s.kind == ShapeKind.EVENT_INTERMEDIATE && r > 4) {
+        if ((s.kind == ShapeKind.EVENT_INTERMEDIATE || s.kind == ShapeKind.CMMN_EVENT_LISTENER) && r > 4) {
             sb.append(
                 """<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r - 3)}" fill="none" stroke="$STROKE" """ +
                     """stroke-width="1.3"$dash/>""",
@@ -330,7 +374,8 @@ object DiagramSvgRenderer {
      * A stage's name belongs in its top-left corner, where CMMN and Design both put it — not in its
      * middle. A case plan model is drawn *before* the plan items (see [isContainer]), so a centred label
      * is either hidden behind the items painted over it or, in a stage tall enough to clear them, left
-     * floating in empty space that reads as a stray caption rather than the container's name.
+     * floating in empty space that reads as a stray caption rather than the container's name. The same
+     * holds for a DMN decision service around its decisions.
      */
     private fun topLabel(sb: StringBuilder, s: DiaShape) {
         val label = s.label?.takeIf { it.isNotBlank() } ?: return

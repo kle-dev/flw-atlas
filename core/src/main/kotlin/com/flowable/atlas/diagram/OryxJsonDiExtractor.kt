@@ -64,6 +64,13 @@ object OryxJsonDiExtractor {
             val ay = offsetY + b.uly
             val w = b.lrx - b.ulx
             val h = b.lry - b.uly
+            // A Design decision service holds its decisions in two section shapes (output above,
+            // encapsulated below). They are no model element, only where the divider goes: not drawn —
+            // a white box each, painted over the requirements — but their decisions are.
+            if (isServiceSection(stencil)) {
+                recurse(child, ax, ay, notation, shapes, centers, edgeSource, rawEdges)
+                continue
+            }
             val name = ((child["properties"] as? Map<*, *>)?.get("name") as? String)?.takeIf { it.isNotBlank() }
             // A workspace shape names its Design stencil outright — the most precise type source there is.
             val resolved = DiagramIcons.resolve(stencil, null, stencil, null)
@@ -73,7 +80,8 @@ object OryxJsonDiExtractor {
             val markers = if (kind == ShapeKind.SUBPROCESS && stencil.contains("collapsed", ignoreCase = true)) {
                 setOf(DiaMarker.COLLAPSED)
             } else emptySet()
-            shapes.add(DiaShape(id, kind, ax, ay, w, h, name, resolved.icon, resolved.typeLabel, markers))
+            val divider = if (kind == ShapeKind.DMN_DECISION_SERVICE) serviceDivider(child, ax, ay, w) else emptyList()
+            shapes.add(DiaShape(id, kind, ax, ay, w, h, name, resolved.icon, resolved.typeLabel, markers, divider))
             centers[id] = Point(ax + w / 2, ay + h / 2)
 
             (child["outgoing"] as? List<*>)?.forEach { o ->
@@ -81,6 +89,19 @@ object OryxJsonDiExtractor {
             }
             recurse(child, ax, ay, notation, shapes, centers, edgeSource, rawEdges)
         }
+    }
+
+    private fun isServiceSection(stencil: String): Boolean =
+        stencil.endsWith("DecisionServiceSection", ignoreCase = true)
+
+    /** Across the service at the top of its encapsulated-decisions section, when it has one. */
+    private fun serviceDivider(service: Map<*, *>, ax: Double, ay: Double, w: Double): List<Point> {
+        val section = (service["childShapes"] as? List<*>)?.firstOrNull {
+            val s = ((it as? Map<*, *>)?.get("stencil") as? Map<*, *>)?.get("id") as? String ?: ""
+            s.startsWith("Encapsulated", ignoreCase = true) && isServiceSection(s)
+        } as? Map<*, *> ?: return emptyList()
+        val y = ay + (bounds(section)?.uly ?: return emptyList())
+        return listOf(Point(ax, y), Point(ax + w, y))
     }
 
     private fun firstOutgoing(shape: Map<*, *>): String? =

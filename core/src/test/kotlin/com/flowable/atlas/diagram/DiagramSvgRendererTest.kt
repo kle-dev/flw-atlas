@@ -155,6 +155,140 @@ class DiagramSvgRendererTest {
         assertTrue(taskTypesSvg().contains("""stroke-dasharray="4 3""""))
     }
 
+    // ---- notation: decision services, event listeners, event sub-processes ---------------------------
+
+    /** The markup of one element's group: from its `<g data-el>` to the next element's. */
+    private fun group(svg: String, id: String): String {
+        val start = svg.indexOf("""<g data-el="$id"""")
+        assertTrue("no group for $id", start >= 0)
+        val end = svg.indexOf("<g data-el=", start + 1).takeIf { it > 0 } ?: svg.length
+        return svg.substring(start, end)
+    }
+
+    /**
+     * A decision service was classed as a decision: an opaque box drawn after the edges, so every
+     * information requirement between its decisions vanished under it, and its name floated mid-box.
+     */
+    @Test
+    fun aDecisionServiceIsAContainerDrawnUnderTheRequirementsThatCrossIt() {
+        val g = XmlDiExtractor.extract(bytes("DEMO-scoring.dmn"), DiagramGeometry.Notation.DMN)
+        val service = g.shapes.single { it.elementId == "DEMO-scoring" }
+        assertEquals(ShapeKind.DMN_DECISION_SERVICE, service.kind)
+        assertEquals("Decision service", service.typeLabel)
+        assertEquals("the DI's divider line", listOf(Point(100.0, 170.0), Point(500.0, 170.0)), service.divider)
+
+        val svg = DiagramSvgRenderer.render(g)!!
+        val at = svg.indexOf("""<g data-el="DEMO-scoring"""")
+        for (edge in listOf("ir_country", "ir_amount")) {
+            val e = svg.indexOf("""<g data-el="$edge"""")
+            assertTrue("$edge is drawn after the service, so it stays visible", e > at)
+            assertTrue(group(svg, edge).contains("marker-end"))
+        }
+        val box = group(svg, "DEMO-scoring")
+        assertTrue("a rounded container: $box", box.contains("""rx="12" ry="12" fill="#f7f9fa""""))
+        assertTrue("the divider between output and encapsulated decisions", box.contains("""<polyline points="100,170 500,170""""))
+        assertTrue("the name sits top-left: $box", box.contains("""<text x="110" y="58" text-anchor="start""""))
+        assertTrue(box.contains(">Scoring Service</text>"))
+    }
+
+    @Test
+    fun aBusinessKnowledgeModelAndAKnowledgeSourceHaveTheirOwnSilhouettes() {
+        val svg = DiagramSvgRenderer.render(XmlDiExtractor.extract(bytes("DEMO-scoring.dmn"), DiagramGeometry.Notation.DMN))!!
+        assertTrue("cut corners", group(svg, "bkm_rules").contains("""<path d="M574,80 L680,80 L680,126 L666,140"""))
+        assertTrue("a wavy bottom", group(svg, "ks_policy").contains("""<path d="M560,200 L680,200 L680,250 C"""))
+        assertFalse(group(svg, "bkm_rules").contains("<rect"))
+    }
+
+    /** A Design workspace DRD holds the service's decisions in two section shapes, which are not drawn. */
+    @Test
+    fun aDesignDecisionServiceDrawsItsDividerWhereTheEncapsulatedSectionStarts() {
+        val json = """
+            {"resourceId":"canvas","stencil":{"id":"DMNDiagram"},"childShapes":[
+              {"resourceId":"svc","stencil":{"id":"ExpandedDecisionService"},"properties":{"name":"Scoring Service"},
+               "bounds":{"upperLeft":{"x":100,"y":40},"lowerRight":{"x":500,"y":340}},"childShapes":[
+                 {"resourceId":"out","stencil":{"id":"OutputDecisionsDecisionServiceSection"},
+                  "bounds":{"upperLeft":{"x":0,"y":0},"lowerRight":{"x":400,"y":130}},"childShapes":[
+                    {"resourceId":"dec_score","stencil":{"id":"Decision"},"properties":{"name":"Risk score"},
+                     "bounds":{"upperLeft":{"x":140,"y":40},"lowerRight":{"x":260,"y":100}},"childShapes":[]}]},
+                 {"resourceId":"enc","stencil":{"id":"EncapsulatedDecisionsDecisionServiceSection"},
+                  "bounds":{"upperLeft":{"x":0,"y":130},"lowerRight":{"x":400,"y":300}},"childShapes":[
+                    {"resourceId":"dec_a","stencil":{"id":"Decision"},"properties":{"name":"Country risk"},
+                     "bounds":{"upperLeft":{"x":40,"y":70},"lowerRight":{"x":160,"y":130}},"childShapes":[]}]}
+               ]}
+            ]}
+        """.trimIndent()
+        val g = OryxJsonDiExtractor.extract(json.toByteArray(), DiagramGeometry.Notation.DMN)
+        assertEquals(listOf("svc", "dec_score", "dec_a"), g.shapes.map { it.elementId })
+        val svc = g.shapes.first()
+        assertEquals(ShapeKind.DMN_DECISION_SERVICE, svc.kind)
+        assertEquals(listOf(Point(100.0, 170.0), Point(500.0, 170.0)), svc.divider)
+        assertEquals("a decision inside a section keeps its absolute place", 240.0, g.shapes.last().y, 0.0)
+    }
+
+    /**
+     * Event listeners fell through to the generic box: a 30-px rounded square with the name crammed into
+     * it, and a title that told a user listener from a timer from a task by nothing.
+     */
+    @Test
+    fun aCmmnEventListenerIsARingWithItsTypeAndItsNameBelow() {
+        val g = XmlDiExtractor.extract(bytes("DEMO-listeners.cmmn"), DiagramGeometry.Notation.CMMN)
+        val expected = mapOf(
+            "uel_cancel" to (DiaIcon.USER to "User event listener"),
+            "tel_timeout" to (DiaIcon.TIMER to "Timer"),
+            "vel_flag" to (null to "Variable listener"),
+            "el_any" to (null to "Event listener"),
+        )
+        for ((id, type) in expected) {
+            val s = g.shapes.single { it.elementId == id }
+            assertEquals(id, ShapeKind.CMMN_EVENT_LISTENER, s.kind)
+            assertEquals(id, type.first, s.icon)
+            assertEquals(id, type.second, s.typeLabel)
+        }
+        val svg = DiagramSvgRenderer.render(g)!!
+        val cancel = group(svg, "uel_cancel")
+        assertTrue(cancel, cancel.contains("""aria-label="Cancel request — User event listener""""))
+        assertEquals("a double ring: $cancel", 2, Regex("<circle cx=\"255\" cy=\"140\"").findAll(cancel).count())
+        assertFalse("no box", cancel.contains("<rect"))
+        assertTrue("its glyph", cancel.contains("""data-icon="user""""))
+        // the name goes under the ring (bottom 155), not into it
+        val ys = Regex("""<text x="[\d.]+" y="([\d.]+)"""").findAll(cancel).map { it.groupValues[1].toDouble() }.toList()
+        assertTrue("the name is drawn: $cancel", ys.isNotEmpty())
+        assertTrue("…below the ring: $ys", ys.all { it > 155 })
+        assertTrue(group(svg, "tel_timeout").contains("""data-icon="timer""""))
+    }
+
+    /** `triggeredByEvent` and `isInterrupting` are BPMN's own words for it; only a stencil was read. */
+    @Test
+    fun anEventSubProcessFromPlainBpmnIsDashedAndItsNonInterruptingStartToo() {
+        val xml = """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                       xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                       xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC">
+              <message id="m" name="DEMO-cancel"/>
+              <process id="p">
+                <subProcess id="esp" name="On cancel" triggeredByEvent="true">
+                  <startEvent id="esp_start" isInterrupting="false"><messageEventDefinition messageRef="m"/></startEvent>
+                </subProcess>
+                <subProcess id="plain" name="Plain"/>
+              </process>
+              <bpmndi:BPMNDiagram><bpmndi:BPMNPlane bpmnElement="p">
+                <bpmndi:BPMNShape bpmnElement="esp" isExpanded="true"><omgdc:Bounds x="0" y="0" width="300" height="160"/></bpmndi:BPMNShape>
+                <bpmndi:BPMNShape bpmnElement="esp_start"><omgdc:Bounds x="40" y="60" width="30" height="30"/></bpmndi:BPMNShape>
+                <bpmndi:BPMNShape bpmnElement="plain" isExpanded="true"><omgdc:Bounds x="400" y="0" width="200" height="160"/></bpmndi:BPMNShape>
+              </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+            </definitions>""".toByteArray()
+        val g = XmlDiExtractor.extract(xml, DiagramGeometry.Notation.BPMN)
+        val esp = g.shapes.single { it.elementId == "esp" }
+        assertEquals(ShapeKind.EVENT_SUBPROCESS, esp.kind)
+        assertEquals("Event sub-process", esp.typeLabel)
+        assertEquals(ShapeKind.SUBPROCESS, g.shapes.single { it.elementId == "plain" }.kind)
+        assertTrue(DiaMarker.NON_INTERRUPTING in g.shapes.single { it.elementId == "esp_start" }.markers)
+
+        val svg = DiagramSvgRenderer.render(g)!!
+        assertTrue("a dashed border", group(svg, "esp").contains("""stroke-dasharray="6 4""""))
+        assertTrue("a dashed start", group(svg, "esp_start").contains("""stroke-dasharray="4 3""""))
+        assertFalse(group(svg, "plain").contains("stroke-dasharray"))
+    }
+
     @Test
     fun aDesignWorkspaceModelResolvesItsStencilToTheSameGlyph() {
         // the ORYX path carries the stencil id directly, so it must reach the same icon as the XML path

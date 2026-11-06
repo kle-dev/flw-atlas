@@ -368,6 +368,14 @@ id — the same picture the IDE's model preview and the generated diagrams folde
 downloaded and no Design instance is contacted. A page keeps its drawings within a budget, so a project
 with hundreds of forms does not double in size; a form left out says so, and the IDE still draws it.
 
+Each element is drawn in its notation, with its type's glyph and its Design name on hover. A DMN
+decision service is a container with its name in the corner and a line between the decisions it exposes
+and the ones it encapsulates, drawn under the requirements that cross it; a business knowledge model has
+its cut corners and a knowledge source its wavy edge. A CMMN event listener is a double ring with its
+name below and, for a user, timer or signal listener, that glyph inside. An event sub-process is
+dashed, and so is a start event that does not interrupt, whether a Design stencil or BPMN's own
+`triggeredByEvent` and `isInterrupting` say so.
+
 Drag to pan, ⌘/Ctrl-scroll or a trackpad pinch to zoom, `−` `fit` `+` to step, `⤢` for full screen.
 The zoom follows how far the wheel turns, so a trackpad's many small steps zoom smoothly, a mouse notch is
 one step, and a step with no vertical movement does nothing — inside IntelliJ, whose browser rounds a

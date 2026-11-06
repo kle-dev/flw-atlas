@@ -29,6 +29,10 @@ data class DiagramGeometry(
  * [kind] is the silhouette; [icon] is the *type* glyph painted inside it and [typeLabel] the name
  * Flowable Design gives that type — together they are what turns a wall of identical rectangles into a
  * diagram you can read. Both are optional: an unrecognised element still renders as a plain box.
+ *
+ * [divider] is the line a DMN decision service draws between its output decisions (above) and its
+ * encapsulated ones (below) — from the DI's `DMNDecisionServiceDividerLine`, or from where a Design
+ * workspace model puts its encapsulated-decisions section. Empty for every other shape.
  */
 data class DiaShape(
     val elementId: String,
@@ -41,6 +45,7 @@ data class DiaShape(
     val icon: DiaIcon? = null,
     val typeLabel: String? = null,
     val markers: Set<DiaMarker> = emptySet(),
+    val divider: List<Point> = emptyList(),
 ) {
     val centerX: Double get() = x + width / 2
     val centerY: Double get() = y + height / 2
@@ -78,8 +83,8 @@ enum class DiaMarker {
      *  workspace model — which is the one case that earns the `[+]` box at the bottom edge. */
     COLLAPSED,
 
-    /** A boundary event with `cancelActivity="false"`, or an event sub-process start that does not
-     *  interrupt — drawn with a dashed circle rather than a solid one. */
+    /** A boundary event with `cancelActivity="false"`, or an event sub-process start with
+     *  `isInterrupting="false"` — drawn with a dashed circle rather than a solid one. */
     NON_INTERRUPTING,
 }
 
@@ -103,11 +108,17 @@ enum class ShapeKind {
     EVENT_START, EVENT_END, EVENT_INTERMEDIATE,
     GATEWAY_EXCLUSIVE, GATEWAY_PARALLEL, GATEWAY_INCLUSIVE, GATEWAY_EVENT,
     POOL, LANE, DATA_OBJECT, TEXT_ANNOTATION,
-    CMMN_STAGE, CMMN_TASK, CMMN_MILESTONE, CMMN_EVENT_LISTENER,
+    CMMN_STAGE, CMMN_TASK, CMMN_MILESTONE,
+
+    /** A user, timer, signal, variable or generic event listener: a double ring, as CMMN draws it. */
+    CMMN_EVENT_LISTENER,
 
     /** Sentry diamonds on a plan item's border — entry hollow, exit filled, as CMMN draws them. */
     CMMN_CRITERION_ENTRY, CMMN_CRITERION_EXIT,
     DMN_DECISION, DMN_INPUT_DATA, DMN_BKM, DMN_KNOWLEDGE_SOURCE,
+
+    /** A DRD decision service: a container around the decisions it exposes and the ones it encapsulates. */
+    DMN_DECISION_SERVICE,
     GENERIC_BOX;
 
     val isEvent: Boolean get() = this == EVENT_START || this == EVENT_END || this == EVENT_INTERMEDIATE

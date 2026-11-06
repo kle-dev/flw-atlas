@@ -87,6 +87,9 @@ object DiagramKinds {
             n.contains("businessknowledge") || n == "bkm" -> ShapeKind.DMN_BKM
             n.contains("knowledgesource") -> ShapeKind.DMN_KNOWLEDGE_SOURCE
             n.contains("inputdata") -> ShapeKind.DMN_INPUT_DATA
+            // before the generic rule: a decision service is a container, drawn under the requirements
+            // that cross it — classed as a decision, it was a white box painted over them
+            n.contains("decisionservice") -> ShapeKind.DMN_DECISION_SERVICE
             n.contains("decision") -> ShapeKind.DMN_DECISION
             else -> ShapeKind.GENERIC_BOX
         }
