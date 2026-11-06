@@ -377,12 +377,23 @@ object ModelParsers {
         // Credentials in the base URL are the finding below (read from the raw document); the record, every
         // operation URL built on it and the REST calls carry the URL with them masked.
         val base = ((cfg["baseUrl"] ?: cfg["url"]) as? String)?.let(SecretScan::redactUrl)
-        val columns = listOfObjs(doc["columnMappings"]).map { cm ->
+        val mappings = listOfObjs(doc["columnMappings"])
+        val columns = mappings.map { cm ->
             linkedMapOf<String, Any?>("name" to (cm["name"] ?: cm["columnName"]), "columnName" to cm["columnName"], "type" to cm["type"]).also { col ->
-                // A column relation: this column holds a key of another service's table — the relation, over
-                // exactly these columns, that the ER designer proposes. Only where there is one.
+                // A relation (`object-relation`, `list-relation`) is no column of this table: Design keeps it in
+                // a join table of two columns — `owningColumnName` holds this row's lookup id,
+                // `referenceColumnName` the referenced row's — and the runtime joins through it, whatever else
+                // the mapping says (it has no other way). The ER designer proposes the relations over exactly
+                // those columns. The referenced service is named only now and then; otherwise the runtime takes
+                // it from the data object field of the same name, and so does the designer.
                 val rel = objOf(cm["relation"])
-                rel?.get("referenceServiceDefinitionKey")?.let { col["relation"] = linkedMapOf("service" to it, "column" to rel["referenceColumnName"]) }
+                val join = (rel?.get("joinTableName") as? String)?.takeIf { it.isNotBlank() }
+                if (rel != null && join != null) {
+                    col["relation"] = linkedMapOf<String, Any?>("joinTable" to join,
+                        "owningColumn" to rel["owningColumnName"], "referenceColumn" to rel["referenceColumnName"]).also { r ->
+                        (rel["referenceServiceDefinitionKey"] as? String)?.takeIf { it.isNotBlank() }?.let { r["service"] = it }
+                    }
+                }
             }
         }
         val operations = ArrayList<Any?>()
@@ -392,13 +403,18 @@ object ModelParsers {
             "tableName" to doc["tableName"], "referencedLiquibaseModelKey" to doc["referencedLiquibaseModelKey"],
             "referenceKey" to doc["referenceKey"], "columns" to columns, "operations" to operations,
         )
+        // The column a relation's join table refers to this table by. `lookupId` names a mapping, whose column
+        // it is — or, naming none, the column itself — which is how the runtime reads it. Only where it is set.
+        (doc["lookupId"] as? String)?.takeIf { it.isNotBlank() }?.let { id ->
+            info["lookupColumn"] = mappings.firstOrNull { it["name"] == id }?.get("columnName") as? String ?: id
+        }
         withDesc(info, doc)
         // Where a password or a key is written down rather than resolved — paths, never values.
         SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
         // Cross-model references (the same ones Design itself extracts from a service model):
         // referenceKey → data object; typeReference.modelKey → data dictionary (output and
         // per-operation input/output parameters); operation body templates → template model;
-        // a column relation joins to the table of another service model.
+        // a relation that names the service it refers to joins to that service's table.
         ctx.addRef(doc["key"], "service", ffile, "service-dataObject", "dataObject", doc["referenceKey"])
         for (cm in listOfObjs(doc["columnMappings"])) {
             ctx.addRef(doc["key"], "service", ffile, "relates-to-service", "service",

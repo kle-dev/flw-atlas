@@ -102,6 +102,40 @@ class ModelParsersTest {
         assertEquals("GET", ctx.restCalls[0]["method"])
     }
 
+    /**
+     * A relation as Design writes it: no column of the table, but a join table of two columns — the owning
+     * row's lookup id and the referenced row's. The referenced service is named only now and then (the
+     * runtime then takes it from the data object field of the same name), and `lookupId` names a mapping
+     * whose column the join table refers to.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun parseServiceKeepsADesignRelationsJoinTable() {
+        val doc = """{"key": "DEMO-S1", "name": "Orders", "type": "database", "tableName": "DEMO_ORDER_", "lookupId": "id",
+            "columnMappings": [
+              {"name": "id", "columnName": "ID_", "type": "string"},
+              {"name": "customer", "type": "object-relation",
+               "relation": {"joinTableName": "DEMO_ORDER_CUSTOMER_", "owningColumnName": "DEMO_ORDER_ID_", "referenceColumnName": "DEMO_CUSTOMER_ID_", "eager": true}},
+              {"name": "payer", "type": "object-relation",
+               "relation": {"joinTableName": "DEMO_ORDER_PAYER_", "owningColumnName": "DEMO_ORDER_ID_", "referenceColumnName": "DEMO_CUSTOMER_ID_",
+                            "referenceServiceDefinitionKey": "DEMO-S2"}},
+              {"name": "notes", "type": "list-relation", "relation": {"joinTableName": ""}}]}""".toByteArray()
+        val ctx = Ctx()
+        val info = ModelParsers.parseService(doc, ctx, "s.service")
+        val cols = (info["columns"] as List<Map<String, Any?>>).associateBy { it["name"] }
+        assertEquals(mapOf("joinTable" to "DEMO_ORDER_CUSTOMER_", "owningColumn" to "DEMO_ORDER_ID_", "referenceColumn" to "DEMO_CUSTOMER_ID_"),
+            cols.getValue("customer")["relation"])
+        assertNull("a relation is no column of the table", cols.getValue("customer")["columnName"])
+        assertEquals("the referenced service, where the relation names it", "DEMO-S2", (cols.getValue("payer")["relation"] as Map<*, *>)["service"])
+        assertNull("no join table, nothing to join through", cols.getValue("notes")["relation"])
+        assertNull("a plain column has no relation", cols.getValue("id")["relation"])
+        assertEquals("lookupId names a mapping: its column", "ID_", info["lookupColumn"])
+        assertTrue(Triple("relates-to-service", "service", "DEMO-S2") in refs(ctx))
+        assertEquals("naming no mapping, lookupId is the column itself", "ORDER_ID_",
+            ModelParsers.parseService("""{"key": "DEMO-S3", "lookupId": "ORDER_ID_"}""".toByteArray(), Ctx(), "s.service")["lookupColumn"])
+        assertFalse("no lookupId, no key", ModelParsers.parseService("""{"key": "DEMO-S4"}""".toByteArray(), Ctx(), "s.service").containsKey("lookupColumn"))
+    }
+
     @Test
     fun parseAppChildModels() {
         val doc = """{"key": "app1", "name": "A", "groupsAccess": "g1",

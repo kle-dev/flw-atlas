@@ -232,7 +232,8 @@ What each page asks:
   coverage do it, the service's column mappings against the data object's fields;
 - **a data object and a Liquibase changelog** — the schema coverage table: every changelog column
   through the service mapping to the data-object field, and where the chain breaks — a mapped column the
-  table no longer has names the change set that dropped or renamed it;
+  table no longer has names the change set that dropped or renamed it. A relation mapping is no column of
+  the table (Design keeps a relation in a join table of its own), so it is not one the table lacks;
 - **a decision** — every model that runs it: an input the caller never writes, a result it never reads;
 - **a form or page** — every call it makes (buttons, data sources, REST calls with the verb checked
   against the handler — a link, a link button and a data table's row link are where the form goes, not

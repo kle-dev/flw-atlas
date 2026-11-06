@@ -9,10 +9,16 @@
  * coordinates measured after the route has landed, and every key is Input.dispatchKeyEvent.
  *
  * What it proves, on the demo project's page (`--erd`):
- *  - the page opens on the diagram the project keeps (docs/orders.atlas-erd.json), drawn with its relation;
- *  - a table dragged from the list lands on the canvas, the + button adds one, a proposal from the models
- *    can be taken, a relation drawn from a card's dot gets a name and a count at each end, drawn as crow's feet,
- *    and turns round keeping them;
+ *  - the page opens on the diagram the project keeps (docs/orders.atlas-erd.json), drawn with its relation; a
+ *    copy kept in the browser follows the file again once it is undone back to it or the file holds what was
+ *    exported of it, and one edited from an older file says that the file has changed since;
+ *  - a table dragged from the list lands on the canvas, the + button adds one — beside what is drawn, never on
+ *    it, and the list keeps its focus and the zoom — a relation drawn from a card's dot gets a name and a count
+ *    at each end (many to one, dropped onto the other table's key), drawn as crow's feet, and turns round
+ *    keeping them;
+ *  - a table's panel names the tables the models relate it to, through a join table too, and adds them with
+ *    the proposals between them, which can be taken; a dismissed proposal comes back from the Diagram menu;
+ *  - a panel opened low on a short page fits on it, its last button within reach;
  *  - a frame drawn over two tables holds them: it is named, moves with them, resizes by a corner, keeps them
  *    together when the diagram is arranged, and goes without them;
  *  - a card expands and folds, a column can be dragged to the top, a colour set and undone; every card expands
@@ -157,12 +163,12 @@ await withChrome(async page => {
   await page.open(erdUrl);
   ok('the page is the designer', await page.eval(`!!document.querySelector('.erd') && document.getElementById('erd-proj').textContent==='flowable-demo'`));
   ok('…and says which Atlas made it, when', /Atlas .* generated/.test(await page.eval(`document.getElementById('erd-prov').textContent`)));
-  ok('the list holds the project’s tables', await page.eval(`document.querySelectorAll('.erd-item').length`) === 3);
+  ok('the list holds the project’s tables, the join table among them', await page.eval(`document.querySelectorAll('.erd-item').length`) === 4);
   ok('it opens on the diagram the project keeps', await page.eval(`${T}.active().name`) === 'Orders and customers',
     await page.eval(`${T}.active().name`));
   ok('…with its tables drawn', await page.eval(`document.querySelectorAll('.erd-card').length`) === 2);
   ok('…and its relation, named', await page.eval(`[...document.querySelectorAll('.erd-rel text')].some(t=>/placed by/.test(t.textContent))`));
-  ok('a drawn relation hides the proposal for the same pair', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
+  ok('…and no proposal: the models relate the two through a join table, which is not on it', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
   ok('the status says where the diagram comes from', /docs\/orders\.atlas-erd\.json/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
   // the project's diagram is a copy of its file: exporting it works, and an edit says it changed it (both failed when
   // the two were one object, and the base held the diagram that held it)
@@ -171,6 +177,70 @@ await withChrome(async page => {
   ok('…and an edit of it says so', /changed here/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
   await page.key('z', 'KeyZ', 2);
   ok('…until it is undone', !/changed here/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
+  ok('…when it follows the file again', await page.eval(`${T}.active().stored===false`));
+  await sleep(400);                    // the save is debounced
+  // the drafts are kept under the project's path hash, not its name (two projects can share one), so read it off the
+  // page's data island — the page's own DATA is inside its closure
+  const SK = JSON.stringify(await page.eval(`(function(){ const d=JSON.parse(document.getElementById('atlas-data').textContent);
+    return 'atlas-erd:'+(d.projectKey||d.project); })()`));
+  const kept = () => page.eval(`JSON.parse(localStorage.getItem(${SK})||'{"diagrams":[]}').diagrams.map(x=>x.id)`);
+  ok('…and is kept in this browser no more', !(await kept()).includes('p:docs/orders.atlas-erd.json'), await kept());
+  // a copy edited here from an older version of the file: the reader's work stays, and the page says the file moved on
+  const seed = withEdit => page.eval(`(function(){ const p=${T}.state().diagrams.find(d=>d.origin && d.origin.file==='docs/orders.atlas-erd.json');
+    const old=erdNormalize(erdToDoc(p.origin.base)); old.relations[0].label='old name';
+    const mine=erdNormalize(erdToDoc(${withEdit ? 'old' : 'p.origin.base'})); ${withEdit ? 'mine.tables[0].x+=40;' : ''}
+    localStorage.setItem(${SK}, JSON.stringify({v:1, active:p.id,
+      diagrams:[{id:p.id, doc:erdToDoc(mine), base:JSON.stringify(erdToDoc(old))}]})); })()`);
+  await seed(true);
+  await page.open(erdUrl);
+  ok('a copy edited from an older file is kept, and says the file has changed in the project since',
+    /has changed in the project/.test(await page.eval(`document.querySelector('.erd-status').textContent`)) &&
+    await page.eval(`${T}.active().relations[0].label`) === 'old name', await page.eval(`document.querySelector('.erd-status').textContent`));
+  // …on every load until it is reverted: edited and saved again, the copy still holds the older file
+  await page.drag(await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-head', 0.5, 0.5), await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-head', 0.6, 1.5), 6);
+  await sleep(400);
+  await page.open(erdUrl);
+  ok('…and still says so once edited and saved again', /has changed in the project/.test(await page.eval(`document.querySelector('.erd-status').textContent`)),
+    await page.eval(`document.querySelector('.erd-status').textContent`));
+  await page.click(await page.at('[data-act=menu]'));
+  ok('…the Diagram menu offers the file', /changed in the project/.test(await page.eval(`(document.querySelector('[data-mi=revert]')||{}).textContent`)));
+  await page.click(await page.at('[data-mi=revert]'));
+  await page.click(await page.at('.erd-pop [data-pa=ok]'));
+  ok('…and Revert shows it', await page.eval(`${T}.active().relations[0].label`) === 'placed by' && await page.eval(`${T}.active().stored===false`) &&
+    /^from docs/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
+  await seed(false);
+  await page.open(erdUrl);
+  ok('a kept copy that says what the file says gives way to the file', await page.eval(`${T}.active().stored===false`) &&
+    /^from docs/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
+  ok('…and goes from the browser, or the file’s next change brings it back as a copy the file moved away from',
+    !(await kept()).includes('p:docs/orders.atlas-erd.json'), await kept());
+  // exported, committed, the page generated again: the file holds the copy as exported — each table's columns as the
+  // schema has them, which the copy kept here was not saved with, so the two never read as the same
+  const seedExported = editedSince => page.eval(`(function(){ const p=${T}.state().diagrams.find(d=>d.origin && d.origin.file==='docs/orders.atlas-erd.json');
+    const old=erdNormalize(erdToDoc(p.origin.base)); old.relations[0].label='old name';
+    const mine=erdNormalize(erdToDoc(p.origin.base)); mine.tables[0].columns=[{name:'id_', type:'VARCHAR(64)', pk:true}];
+    const self=JSON.stringify(erdToDoc(mine)); ${editedSince ? 'mine.tables[0].x+=40;' : ''}
+    localStorage.setItem(${SK}, JSON.stringify({v:1, active:p.id, diagrams:[{id:p.id, doc:erdToDoc(mine),
+      base:JSON.stringify(erdToDoc(old)), exported:{file:JSON.stringify(erdToDoc(p.origin.base)), self}}]})); })()`);
+  const statusText = () => page.eval(`document.querySelector('.erd-status').textContent`);
+  await seedExported(false);
+  await page.open(erdUrl);
+  ok('a copy whose export the file now holds gives way to the file', await page.eval(`${T}.active().stored===false`) &&
+    /^from docs/.test(await statusText()), await statusText());
+  await seedExported(true);
+  await page.open(erdUrl);
+  ok('…edited since the export, it stays, and the file has not changed under it', await page.eval(`${T}.active().stored===true`) &&
+    /changed here · export to update/.test(await statusText()), await statusText());
+  // the export is what remembers it; a download in headless Chrome would land in the Downloads folder, so the link's click is caught
+  await page.eval(`HTMLAnchorElement.prototype.click=function(){ window.__downloaded=this.download; }`);
+  await page.click(await page.at('[data-act=export]'));
+  await page.click(await page.at('[data-mi=json]'));
+  ok('an export of a project’s diagram is remembered with the copy kept here', await page.eval(`(function(){
+    const e=JSON.parse(localStorage.getItem(${SK})).diagrams.find(x=>x.id==='p:docs/orders.atlas-erd.json');
+    return /\\.atlas-erd\\.json$/.test(window.__downloaded||'') && !!e && !!e.exported
+      && e.exported.file===JSON.stringify(erdToDoc(erdNormalize(${T}.docOf()))) && e.exported.self===JSON.stringify(erdToDoc(${T}.active())); })()`));
+  await page.eval(`localStorage.removeItem(${SK})`);
+  await page.open(erdUrl);
 
   // ---- the list's width: dragged wider for a long table name, remembered, reset ----
   const sideW = () => page.eval(`Math.round(document.querySelector('.erd-side').getBoundingClientRect().width)`);
@@ -227,13 +297,14 @@ await withChrome(async page => {
   // move it clear of the first card so the relation has room
   await page.drag(await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-head', 0.35, 0.5), await page.at('.erd-canvas', 0.75, 0.3), 10);
   ok('a card can be moved', await page.eval(`${T}.active().tables.find(t=>t.key==='CUST_CUSTOMER').x`) > 0);
-  ok('the models propose the order → customer relation', await page.waitFor(`document.querySelector('.erd-sug')`));
-  await page.click(await page.at('.erd-sug .erd-sug-add'));
+  ok('nothing is proposed between two tables the models join through a third', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
+  // a relation dropped onto the other table's key: a lookup, many to one
+  await page.drag(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-link-dot'), await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-row[data-col="id_"]'), 12);
+  ok('a relation drawn onto the other table’s key opens its panel', await page.waitFor(`document.querySelector('.erd-pop[data-kind=rel]')`));
+  await page.key('Escape', 'Escape');
   const rel1 = await page.eval(`${T}.active().relations[0]`);
-  ok('a proposal becomes a relation, with the model’s name, the service’s cardinality and the columns it joins', rel1 && rel1.label === 'Customer'
-    && rel1.cardinality === '0..n:1' && rel1.from === 'ORD_ORDER' && rel1.to === 'CUST_CUSTOMER'
-    && JSON.stringify(rel1.pairs) === JSON.stringify([{ from: 'customer_id_', to: 'id_' }]), rel1);
-  ok('…and is proposed no more', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
+  ok('…joins that column, and starts as many to one', rel1 && rel1.from === 'ORD_ORDER' && rel1.to === 'CUST_CUSTOMER' && rel1.cardinality === '0..n:1'
+    && JSON.stringify(rel1.pairs) === JSON.stringify([{ from: '', to: 'id_' }]), rel1);
 
   // ---- expand and fold ----
   await page.click(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-foot'));
@@ -251,12 +322,12 @@ await withChrome(async page => {
 
   // ---- draw a relation from the card's dot, name it, pick n:1 ----
   const dot = await page.at('.erd-card[data-key="ORD_ORDER"] .erd-link-dot');
-  const target = await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-box', 0.5, 0.7);
+  const target = await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-row[data-col="name_"]');
   await page.drag(dot, target, 12);
   ok('a relation drawn from the dot opens its panel', await page.waitFor(`document.querySelector('.erd-pop[data-kind=rel]')`));
   ok('…with the name field focused', await page.eval(`document.activeElement && document.activeElement.dataset.f==='label'`));
   await page.type('places');
-  ok('a new relation starts as exactly one to zero or more', (await page.eval(`${T}.active().relations[1]`)).cardinality === '1:0..n');
+  ok('a new relation onto any other column starts as exactly one to zero or more', (await page.eval(`${T}.active().relations[1]`)).cardinality === '1:0..n');
   await page.click(await page.at('.erd-pop [data-end="0"][data-v="0..n"]'));
   await page.click(await page.at('.erd-pop [data-end="1"][data-v="0..1"]'));
   const rel2 = await page.eval(`${T}.active().relations[1]`);
@@ -480,7 +551,7 @@ await withChrome(async page => {
       return g ? box(k).y+Number(g.getAttribute('transform').match(/,([\\d.]+)/)[1])+11 : null; };
     return {start:[d[0],d[1]], end:[d[6],d[7]], dots:[...document.querySelectorAll('.erd-rel .erd-fork circle')].map(c=>[+c.getAttribute('cx'), +c.getAttribute('cy')]),
       o:box('ORD_ORDER'), c:box('CUST_CUSTOMER'), rows:document.querySelectorAll('.erd-card[data-key="ORD_ORDER"] .erd-row').length,
-      y:{id:row('ORD_ORDER','id_'), total:row('ORD_ORDER','total_'), cust:row('ORD_ORDER','customer_id_'), zip:row('ORD_ORDER','delivery_zip_'), cid:row('CUST_CUSTOMER','id_')}}; })()`);
+      y:{id:row('ORD_ORDER','id_'), total:row('ORD_ORDER','total_'), no:row('ORD_ORDER','order_no_'), zip:row('ORD_ORDER','delivery_zip_'), cid:row('CUST_CUSTOMER','id_')}}; })()`);
   const joinedBy = (name, tables, fromColumn, toColumn) => page.eval(`${T}.importText(${JSON.stringify(JSON.stringify({format: 'atlas-erd', version: 3, name, tables,
     relations: [{ id: 'r1', from: 'ord_order', to: 'cust_customer', cardinality: '0..n:1', label: 'placed by', fromColumn, toColumn }]}))})`);
   const near = (a, b) => a != null && b != null && Math.abs(a - b) < 1;
@@ -489,9 +560,9 @@ await withChrome(async page => {
   ok('a relation over two columns apart forks to each of their rows', gm.dots.filter(p => p[0] === gm.o.x + gm.o.w).length === 2 &&
     [gm.y.id, gm.y.total].every(y => gm.dots.some(p => near(p[1], y))), gm);
   ok('…and its line leaves from outside the card, not from a row it does not join', gm.start[0] > gm.o.x + gm.o.w, gm);
-  await joinedBy('Stacked', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 60, y: 420 }], 'customer_id_', 'id_');
+  await joinedBy('Stacked', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 60, y: 420 }], 'order_no_', 'id_');
   gm = await relGeom();
-  ok('cards one above the other: the relation still meets its rows, from the side', near(gm.start[1], gm.y.cust) && gm.start[0] === gm.o.x + gm.o.w &&
+  ok('cards one above the other: the relation still meets its rows, from the side', near(gm.start[1], gm.y.no) && gm.start[0] === gm.o.x + gm.o.w &&
     near(gm.end[1], gm.y.cid) && gm.end[0] === gm.c.x + gm.c.w, gm);
   await joinedBy('Folded', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 600, y: 40 }], 'delivery_zip_', 'id_');
   gm = await relGeom();
@@ -523,6 +594,7 @@ await withChrome(async page => {
   const crel = await page.eval(`JSON.stringify(${T}.docOf().relations[0])`);
   ok('a relation joins a project table to one of the other database, and the file says which',
     /"from":"ord_order","to":"CUSTOMER","toDb":"crm"/.test(crel) && /"toColumn":"ID"/.test(crel), crel);
+  ok('…dropped onto its key, it starts as many to one', JSON.parse(crel).cardinality === '0..n:1', crel);
   ok('…and the file carries the database', await page.eval(`JSON.stringify(${T}.docOf().databases.map(d=>[d.id, d.name, d.tables.length]))`) === '[["crm","CRM",1]]');
   await sleep(400);
   await page.open(erdUrl);
@@ -543,6 +615,112 @@ await withChrome(async page => {
   await page.click(await page.at('.erd-canvas', 0.95, 0.95));
   await page.key('z', 'KeyZ', 2);
   ok('…and one undo brings all back', await page.eval(`!!document.querySelector('.erd-grp[data-db="crm"]') && ${T}.active().tables.length===2 && ${T}.active().relations.length===1`));
+
+  // ---- a panel opened low on a short page: placed once it is filled, so its last button is within reach ----
+  await page.viewport(1440, 757);
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:4, name:'Low', tables:[{table:'ord_order', x:40, y:40}, {table:'cust_customer', x:600, y:760}],
+    relations:[{id:'r1', from:'ord_order', to:'cust_customer', cardinality:'0..n:1', label:'placed by'}]}))`);
+  await page.waitFor(`${T}.active().view && ${T}.active().view.fitted`);
+  // scrolled to its end inside itself — the page around it does not scroll — the panel's last button is on the page
+  const fits = () => page.eval(`(function(){ const pop=document.querySelector('.erd-pop'), root=document.querySelector('.erd').getBoundingClientRect();
+    pop.scrollTop=pop.scrollHeight; const p=pop.getBoundingClientRect(), b=[...pop.querySelectorAll('.erd-danger')].pop(), d=b.getBoundingClientRect();
+    return {pop:[Math.round(p.top), Math.round(p.bottom)], last:Math.round(d.bottom), page:Math.round(root.bottom),
+      ok:p.bottom<=root.bottom+0.5 && d.bottom<=p.bottom+0.5 && d.top>=p.top-0.5}; })()`);
+  await page.eval(`document.querySelector('.erd-card[data-key="CUST_CUSTOMER"] .erd-tools').style.opacity='1'`);
+  await page.click(await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-tools'));
+  await page.waitFor(`document.querySelector('.erd-pop[data-kind=table]')`);
+  let fit = await fits();
+  ok('a card’s panel opened low on a short page fits on it, Remove within reach', fit.ok, fit);
+  await page.click(await page.at('.erd-pop .erd-pop-h .erd-ibtn'));
+  fit = await fits();
+  ok('…also with its (i) unfolded', fit.ok && await page.eval(`!document.querySelector('.erd-pop .erd-infowrap').hidden`), fit);
+  await page.key('Escape', 'Escape');
+  await page.click(await page.at('.erd-rel .erd-pill'));
+  await page.waitFor(`document.querySelector('.erd-pop[data-kind=rel]')`);
+  fit = await fits();
+  ok('a relation’s panel too, Delete within reach', fit.ok, fit);
+  await page.key('Escape', 'Escape');
+  await page.viewport(1440, 900);
+
+  // ---- related in the models: a table's panel names what to add; adding it draws the proposals, which can be taken ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:4, name:'Related', tables:[{table:'ord_order', x:40, y:40}]}))`);
+  await page.waitFor(`${T}.active().view && ${T}.active().view.fitted`);
+  await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-tools').style.opacity='1'`);
+  await page.click(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-tools'));
+  await page.waitFor(`document.querySelector('.erd-pop[data-kind=table]')`);
+  const relText = () => page.eval(`(document.querySelector('.erd-pop .erd-related')||{}).textContent||''`);
+  ok('a table’s panel names the tables the models relate it to — through a join table, the one beyond it',
+    /Customer\s*through ORD_ORDER_CUST_CUSTOMER_/.test(await relText()), await relText());
+  const addLabel = () => page.eval(`document.querySelector('.erd-pop .erd-related [data-addrel]').getAttribute('aria-label')`);
+  ok('…and its add says what it puts on the canvas: the table it names and the join table on the way',
+    await addLabel() === 'Put Customer and ORD_ORDER_CUST_CUSTOMER_ on the canvas', await addLabel());
+  await page.click(await page.at('.erd-pop .erd-related [data-addrel]'));
+  ok('add puts the join table and the table beyond it on the canvas', await page.waitFor(`['ORD_ORDER_CUST_CUSTOMER_','CUST_CUSTOMER'].every(k=>${T}.active().tables.some(t=>t.key===k))`),
+    await page.eval(`${T}.active().tables.map(t=>t.key)`));
+  ok('…with the two proposals between them', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 2);
+  ok('…each card clear of the others', !overlap(await page.eval(boxes)), await page.eval(boxes));
+  ok('…and the panel says it is proposed now', /proposed/.test(await relText()) && await page.eval(`!document.querySelector('.erd-pop .erd-related [data-addrel]')`), await relText());
+  await page.key('Escape', 'Escape');
+  await page.click(await page.at('.erd-sug[data-sug="dataObject:orderDO#customer"] .erd-sug-add'));
+  const viaOwner = await page.eval(`${T}.active().relations.find(r=>r.to==='ORD_ORDER')`);
+  ok('a proposal through a join table becomes a relation from it over its column, named as the data object names it', viaOwner &&
+    viaOwner.from === 'ORD_ORDER_CUST_CUSTOMER_' && viaOwner.label === 'Customer' && viaOwner.cardinality === '0..1:1' &&
+    JSON.stringify(viaOwner.pairs) === JSON.stringify([{ from: 'ORD_ORDER_ID_', to: 'id_' }]), viaOwner);
+  await page.click(await page.at('.erd-sug .erd-sug-add'));
+  const viaRef = await page.eval(`${T}.active().relations.find(r=>r.to==='CUST_CUSTOMER')`);
+  ok('…its other side one to the table it refers to, many to one', viaRef && viaRef.from === 'ORD_ORDER_CUST_CUSTOMER_' && viaRef.cardinality === '0..n:1' &&
+    JSON.stringify(viaRef.pairs) === JSON.stringify([{ from: 'CUST_CUSTOMER_ID_', to: 'id_' }]), viaRef);
+  ok('…and nothing is proposed any more', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
+
+  // ---- a dismissed proposal comes back, after a reload too ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:4, name:'Dismiss', tables:[{table:'ord_order', x:40, y:40}, {table:'ORD_ORDER_CUST_CUSTOMER_', x:700, y:40}]}))`);
+  ok('a proposal between two tables on the canvas', await page.waitFor(`document.querySelectorAll('.erd-sug').length===1`));
+  await page.click(await page.at('.erd-sug .erd-sug-x'));
+  ok('× dismisses it', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0 && await page.eval(`${T}.active().dismissed.length`) === 1);
+  await sleep(400);
+  await page.open(erdUrl);
+  ok('…and after a reload, with nothing left to undo, it is still gone', await page.eval(`${T}.active().name`) === 'Dismiss' &&
+    await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0 && await page.eval(`${T}.state().undo.length`) === 0);
+  await page.click(await page.at('[data-act=menu]'));
+  ok('the Diagram menu offers it again', await page.eval(`(document.querySelector('[data-mi=undismiss]')||{}).textContent`) === 'Show 1 dismissed proposal again',
+    await page.eval(`(document.querySelector('[data-mi=undismiss]')||{}).textContent`));
+  await page.click(await page.at('[data-mi=undismiss]'));
+  ok('…and shows it', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 1 && await page.eval(`${T}.active().dismissed.length`) === 0);
+  await page.click(await page.at('.erd-canvas', 0.95, 0.95));
+  await page.key('z', 'KeyZ', 2);
+  ok('…in one step ⌘Z takes back', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
+  await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-tools').style.opacity='1'`);
+  await page.click(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-tools'));
+  ok('a table’s panel lists a dismissed one, to show again', await page.waitFor(`document.querySelector('.erd-pop .erd-related [data-undismiss]')`));
+  await page.click(await page.at('.erd-pop .erd-related [data-undismiss]'));
+  ok('…one at a time', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 1);
+  await page.key('Escape', 'Escape');
+
+  // ---- the list's keys, and where tables added without a drop land ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:4, name:'Keys', tables:[]}))`);
+  await page.waitFor(`${T}.active().view && ${T}.active().view.fitted`);
+  const zoom0 = await page.eval(`${T}.active().view.s`), focused = () => page.eval(`(document.activeElement && document.activeElement.dataset.key)||null`);
+  await page.eval(`document.querySelector('.erd-item[data-key="LEGACY_AUDIT"]').focus()`);
+  await page.key('+', 'Equal');
+  ok('+ on a list item adds its table', await page.eval(`${T}.active().tables.some(t=>t.key==='LEGACY_AUDIT')`));
+  ok('…and zooms nothing', await page.eval(`${T}.active().view.s`) === zoom0, await page.eval(`${T}.active().view.s`));
+  ok('…and the item keeps the focus', await focused() === 'LEGACY_AUDIT', await focused());
+  await page.key('ArrowUp', 'ArrowUp');
+  ok('↑ still walks the list', await focused() === 'CUST_CUSTOMER', await focused());
+  await page.key('Enter', 'Enter');
+  ok('Enter adds the table, and the focus stays on its item', await page.eval(`${T}.active().tables.some(t=>t.key==='CUST_CUSTOMER')`) &&
+    await focused() === 'CUST_CUSTOMER', await focused());
+  // a group's fold keeps the focus too: moved to an item, the next Enter would add a table instead of unfolding the group
+  const n0 = await page.eval(`${T}.active().tables.length`), onFold = () => page.eval(`(document.activeElement && document.activeElement.dataset.grp)||null`);
+  await page.eval(`document.querySelector('.erd-grp-t[data-grp="project"]').focus()`);
+  await page.key('Enter', 'Enter');
+  ok('Enter on a group’s fold folds it, and the fold keeps the focus', await page.eval(`${T}.state().collapsed.has('project')`) && await onFold() === 'project', await onFold());
+  await page.key('Enter', 'Enter');
+  ok('…so the next Enter unfolds it, adding nothing', !(await page.eval(`${T}.state().collapsed.has('project')`)) && await onFold() === 'project' &&
+    await page.eval(`${T}.active().tables.length`) === n0);
+  for (const k of ['ORD_ORDER', 'ORD_ORDER_CUST_CUSTOMER_']) await page.click(await page.at(`.erd-item[data-key="${k}"] .erd-add`));
+  const landed = await page.eval(boxes);
+  ok('tables added where the reader is looking land beside each other, none on another', landed.length === 4 && !overlap(landed), landed);
 
   // ---- narrow ----
   await page.viewport(700, 800);

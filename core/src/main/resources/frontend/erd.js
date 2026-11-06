@@ -143,73 +143,94 @@ function erdCardinality(s){
 const erdEndOne=e=>e==='1'||e==='0..1';
 
 /**
- * Relations the models already state, as proposals, each over the columns it joins when the models say:
+ * Relations the models already state, as proposals, each over the columns it joins when the models say.
  *
- * - a database service's column relation — its column refers to a column of another service's table
- *   (`customer_id_` → `customerService.id`): a lookup, many rows to one, over exactly those columns;
- * - a data object field that references another data object. Its relationship type is the field's own
- *   count — one-to-one 1:1, one-to-many 1:0..n, as the model says — and its columns are those of the field's
- *   mapping in the object's service, when that mapping is a column relation.
+ * A database service's relation (`object-relation`, `list-relation`) is no column of its table: Design keeps
+ * it in a join table of two columns — one holds the owning row's lookup id, the other the referenced row's —
+ * and the runtime joins through it, whatever else the mapping says. The referenced service is the one the
+ * relation names, else the one behind the data object its field of the same name refers to, as the runtime
+ * reads it. When the join table is one of the project's tables, that is two proposals, each from the join
+ * table — the side its foreign key is on — over exactly its column: to the owning table (`0..1:1` for an
+ * object relation, a row of the join table per owning row at most; `0..n:1` for a list) and to the
+ * referenced one (`0..n:1`). When it is not, one proposal between the two tables, without columns:
+ * `0..n:0..1` for an object relation, `0..n:0..n` for a list.
  *
- * Two proposals over the same columns are one relation told twice: they become one, named as the data
- * object names it, counted as the service's schema counts it. So is a data object field without columns
- * that is the only one between two tables with a single proposal over columns. Anything else stays apart —
- * two fields of one object that both refer to addresses are two relations. Both ends must be tables; the
- * id is stable, so a dismissed proposal stays dismissed across reloads and in the diagram file.
+ * A data object field that refers to another data object is the same relation told again when its service
+ * maps the field as a relation: it gives that proposal its name and its id (the one a dismissal was stored
+ * under). Otherwise it is a proposal of its own between the two tables, without columns: one-to-one is
+ * `0..n:0..1` — Design's one-to-one is a field that holds one object, which the schema does not make unique
+ * — and one-to-many `1:0..n`. Two fields of one object that both refer to addresses are two relations. Both
+ * ends must be tables; the id is stable, so a dismissed proposal stays dismissed across reloads and in the
+ * diagram file. A proposal through a join table names it in `join` — `{table, owner, ref}` — so a table's
+ * panel can bring the table at its far end along.
  */
 function erdSuggestions(nodes){
   const svc=new Map(), doOf=new Map();
+  const tables=new Map(erdCatalog(nodes).map(t=>[t.key, t]));
+  // the column a join table refers to a row by: the service's lookup id, else the table's one-column key
+  const lookupOf=(table, col)=>{
+    if(col) return col;
+    const pk=((tables.get(table)||{}).columns||[]).filter(c=>c.pk);
+    return pk.length===1?pk[0].name:'';
+  };
   (nodes||[]).forEach(n=>{
     if(!n) return;
     const d=n.data||{};
-    if(n.type==='service' && d.tableName) svc.set(n.key, {key:n.key, label:n.label||n.key, table:erdKey(d.tableName), columns:d.columns||[]});
-    if(n.type==='dataObject' && d.serviceTableName) doOf.set(n.key, {table:erdKey(d.serviceTableName), service:d.service||null});
+    if(n.type==='service' && d.tableName) svc.set(n.key, {key:n.key, label:n.label||n.key, table:erdKey(d.tableName),
+      lookup:lookupOf(erdKey(d.tableName), d.lookupColumn), columns:d.columns||[]});
+    if(n.type==='dataObject' && d.serviceTableName) doOf.set(n.key, {key:n.key, label:n.label||n.key, table:erdKey(d.serviceTableName),
+      service:d.service||null, columns:d.columns||[]});
   });
-  // the column a relation refers to: the referenced service's mapping of that name, else the name as written
-  const target=rel=>{
-    const t=rel && svc.get(rel.service);
-    if(!t) return null;
-    const m=t.columns.find(c=>c && c.name===rel.column);
-    return {table:t.table, label:t.label, column:(m && m.columnName) || rel.column || ''};
+  // the table at the far end of service [s]'s relation [c]: the service it names, else the data object behind
+  // the field of the same name of a data object that reads [s]
+  const farEnd=(s, c)=>{
+    const named=c.relation.service && svc.get(c.relation.service);
+    if(named) return {table:named.table, label:named.label, lookup:named.lookup};
+    for(const o of doOf.values()){
+      if(o.service!==s.key) continue;
+      const f=o.columns.find(x=>x && x.name===c.name && x.refDataObject), ref=f && doOf.get(f.refDataObject);
+      if(!ref) continue;
+      const rs=ref.service && svc.get(ref.service);
+      return rs ? {table:rs.table, label:rs.label, lookup:rs.lookup} : {table:ref.table, label:ref.label, lookup:lookupOf(ref.table, '')};
+    }
+    return null;
   };
-  const fromSvc=[], fromDo=[], seen=new Set();
+  const out=[], seen=new Set(), byField=new Map();
+  const push=sg=>{ if(seen.has(sg.id)) return; seen.add(sg.id); out.push(sg); };
   svc.forEach(s=>s.columns.forEach(c=>{
-    const t=c && c.columnName && target(c.relation);
-    if(!t) return;
-    const id='service:'+s.key+'#'+c.columnName;
-    if(seen.has(id)) return;
-    seen.add(id);
-    fromSvc.push({id, from:s.table, to:t.table, pairs:[{from:c.columnName, to:t.column}], cardinality:'0..n:1', label:'',
-      why:'Service '+s.label+' — column '+c.columnName+' refers to '+t.label+(c.relation.column?'.'+c.relation.column:'')});
+    const rel=c && c.relation;
+    if(!rel || !rel.joinTable) return;
+    const list=c.type==='list-relation', far=farEnd(s, c), J=erdKey(rel.joinTable), base='service:'+s.key+'#'+c.name;
+    const via='Service '+s.label+' — relation '+c.name+' is kept in '+rel.joinTable;
+    if(tables.has(J)){
+      const join={table:J, owner:s.table, ref:far?far.table:null};
+      const owner={id:base+'@owner', from:J, to:s.table, pairs:[{from:rel.owningColumn||'', to:s.lookup}], cardinality:list?'0..n:1':'0..1:1',
+        label:c.name||'', join, why:via+', whose '+(rel.owningColumn||'owning column')+' refers to '+s.label+(s.lookup?'.'+s.lookup:'')};
+      push(owner);
+      byField.set(s.key+'#'+c.name, owner);
+      if(far) push({id:base+'@ref', from:J, to:far.table, pairs:[{from:rel.referenceColumn||'', to:far.lookup}], cardinality:'0..n:1',
+        label:'', join, why:via+', whose '+(rel.referenceColumn||'reference column')+' refers to '+far.label+(far.lookup?'.'+far.lookup:'')});
+    } else if(far){
+      const direct={id:base, from:s.table, to:far.table, pairs:[], cardinality:list?'0..n:0..n':'0..n:0..1', label:c.name||'',
+        why:via+' — a table the project does not create — and refers to '+far.label};
+      push(direct);
+      byField.set(s.key+'#'+c.name, direct);
+    }
   }));
   (nodes||[]).forEach(n=>{
     if(!n || n.type!=='dataObject' || !doOf.has(n.key)) return;
-    const own=doOf.get(n.key), s=own.service && svc.get(own.service);
-    ((n.data||{}).columns||[]).forEach(c=>{
+    const own=doOf.get(n.key);
+    own.columns.forEach(c=>{
       if(!c || !c.refDataObject || !doOf.has(c.refDataObject)) return;
-      const id='dataObject:'+n.key+'#'+c.name;
-      if(seen.has(id)) return;
-      seen.add(id);
-      const m=s && s.columns.find(x=>x && x.name===c.name && x.columnName), t=m && target(m.relation);
-      fromDo.push({id, from:own.table, to:doOf.get(c.refDataObject).table, pairs:t?[{from:m.columnName, to:t.column}]:[],
-        cardinality:c.relationship==='one-to-many'?'1:0..n':'1:1', label:c.label||c.name||'',
-        why:'Data object '+(n.label||n.key)+' — field '+(c.label||c.name)+' refers to '+c.refDataObject+' ('+(c.relationship||'relation')+')'});
+      const id='dataObject:'+n.key+'#'+c.name, label=c.label||c.name||'';
+      const why='Data object '+(n.label||n.key)+' — field '+(c.label||c.name)+' refers to '+c.refDataObject+' ('+(c.relationship||'relation')+')';
+      // the service maps the field as a relation: the same relation, named and kept as the data object has it
+      const sv=own.service && byField.get(own.service+'#'+c.name);
+      if(sv && sv.id.indexOf('dataObject:')<0){ seen.delete(sv.id); seen.add(id); Object.assign(sv, {id, label, why:why+' · '+sv.why}); return; }
+      if(sv) return;
+      push({id, from:own.table, to:doOf.get(c.refDataObject).table, pairs:[], cardinality:c.relationship==='one-to-many'?'1:0..n':'0..n:0..1',
+        label, why});
     });
-  });
-  const colsOf=sg=>sg.pairs.map(p=>erdKey(p.from)).sort().join(',');
-  const sig=sg=>sg.from+'>'+sg.to+'#'+colsOf(sg);
-  const pair=sg=>[sg.from, sg.to].sort().join('\u0000');
-  // the service's count and the data object's name and id: the id a dismissal was stored under stays
-  const merge=(sv, dob)=>Object.assign({}, sv, {id:dob.id, label:dob.label||sv.label, why:dob.why+' · '+sv.why});
-  const out=fromSvc.slice();
-  fromDo.forEach(dob=>{
-    const same=dob.pairs.length ? out.findIndex(x=>x.id.indexOf('service:')===0 && sig(x)===sig(dob))
-      : (()=>{
-        const onPair=out.filter(x=>pair(x)===pair(dob) && x.pairs.length && x.id.indexOf('service:')===0);
-        const alone=fromDo.filter(x=>pair(x)===pair(dob) && !x.pairs.length).length===1;
-        return onPair.length===1 && alone ? out.indexOf(onPair[0]) : -1;
-      })();
-    if(same>=0) out[same]=merge(out[same], dob); else out.push(dob);
   });
   // the data objects' own first, as the models name them; then what only a service says
   return out.filter(x=>x.id.indexOf('dataObject:')===0).concat(out.filter(x=>x.id.indexOf('dataObject:')!==0));
@@ -240,6 +261,58 @@ function erdOpenSuggestions(suggestions, relations, onCanvas, dismissed){
     if(hit) take(hit);
   });
   return left;
+}
+
+/**
+ * The tables the models relate table [key] to, for its panel — a proposal is drawn only once both its tables
+ * are on the canvas, and nothing else would name the other one. One entry per proposal touching [key]:
+ * `other` the table at its other end ([key] itself for a relation to itself), `far` — for a proposal through a
+ * join table, seen from one of the two tables it joins — the table at the join table's other end, the one a
+ * reader is after. `state` is `off` while one of those tables is not on the canvas, `dismissed`, `proposed`
+ * while the dashed line is drawn, else `drawn`: a relation on the canvas accounts for it ([erdOpenSuggestions]).
+ */
+function erdRelatedOf(suggestions, key, relations, onCanvas, dismissed){
+  const open=new Set(erdOpenSuggestions(suggestions, relations, onCanvas, dismissed).map(s=>s.id));
+  return (suggestions||[]).filter(sg=>sg.from===key || sg.to===key).map(sg=>{
+    const other=sg.from===key?sg.to:sg.from, j=sg.join;
+    let far=j && j.table!==key ? (j.owner===key ? j.ref : j.owner) : null;
+    if(far===key) far=null;
+    const state=(dismissed||[]).indexOf(sg.id)>=0 ? 'dismissed' : !(onCanvas.has(key) && onCanvas.has(other) && (!far || onCanvas.has(far))) ? 'off'
+      : open.has(sg.id) ? 'proposed' : 'drawn';
+    return {id:sg.id, other, far, label:sg.label||'', cardinality:sg.cardinality, why:sg.why, state};
+  });
+}
+
+/**
+ * Where a new card of [w]×[h] goes: at ([cx], [cy]) — its top-left, where the reader is looking — when that is
+ * clear of every box in [boxes] (`{x, y, w, h}`: the cards and frames already drawn) by [gap], else the
+ * nearest place on a 40-unit grid around it that is. A card dropped onto others hid them, and the fifth one
+ * added landed exactly on the first; a card dropped into a frame would silently join it, so frames count
+ * too. Gives up after a radius of about a thousand units and returns the centre: a full canvas is no reason
+ * to fail. Deterministic, snapped to the canvas's 4px grid.
+ */
+function erdFreeSpot(boxes, w, h, cx, cy, gap){
+  const g=gap==null?24:gap, snap=v=>Math.round(v/4)*4, x0=snap(cx), y0=snap(cy), STEP=40, R=24;
+  const clear=(x,y)=>!(boxes||[]).some(b=>x<b.x+b.w+g && b.x<x+w+g && y<b.y+b.h+g && b.y<y+h+g);
+  if(clear(x0, y0)) return {x:x0, y:y0};
+  const cand=[];
+  for(let i=-R; i<=R; i++) for(let j=-R; j<=R; j++) if(i || j) cand.push([i, j]);
+  // nearest first; of two as near, the one lower down, then the one further right — reading order
+  cand.sort((a,b)=>(a[0]*a[0]+a[1]*a[1])-(b[0]*b[0]+b[1]*b[1]) || (b[1]-a[1]) || (b[0]-a[0]));
+  for(const [i,j] of cand){ const x=x0+i*STEP, y=y0+j*STEP; if(clear(x, y)) return {x, y}; }
+  return {x:x0, y:y0};
+}
+
+/**
+ * The cardinality a relation drawn onto column [col] of a table with [columns] starts with. Drawn from the
+ * one side to the many side, as a reader draws "a customer has orders", it is `1:0..n`. Dropped onto the
+ * other table's key — its only key column — the table drawn from refers to it: many of these per one of it,
+ * `0..n:1`. One column of a key over several is not the table's identity — a child table whose key includes
+ * its parent's id is the many side — so it starts as `1:0..n`, as a header or any other column does.
+ */
+function erdDropCardinality(columns, col){
+  const pks=(columns||[]).filter(c=>c && c.pk);
+  return col && pks.length===1 && erdKey(pks[0].name)===erdKey(col) ? '0..n:1' : '1:0..n';
 }
 
 /**
@@ -889,10 +962,12 @@ function load(){
   try{ st=JSON.parse(localStorage.getItem(storeKey())||'null'); }catch(e){ st=null; }
   const stored=new Map();
   ((st&&Array.isArray(st.diagrams))?st.diagrams:[]).forEach(x=>{
-    try{ const d=erdNormalize(x.doc); stored.set(String(x.id), Object.assign(d, {id:String(x.id), stored:true, origin:null})); }
+    try{ const d=erdNormalize(x.doc); stored.set(String(x.id), {d:Object.assign(d, {id:String(x.id), stored:true, origin:null}), base:x.base,
+      exported:x.exported && typeof x.exported==='object' ? x.exported : null}); }
     catch(e){ /* an entry this page cannot read is dropped from the list, not allowed to break it */ }
   });
   // Diagrams that live in the project (embedded at generation) come first: they are the shared ones.
+  let dropped=false;
   (DATA.diagrams||[]).forEach(p=>{
     if(!p || !p.file) return;
     if(p.error || !p.doc){ S.projectErrors.push(p.file+': '+(p.error||'unreadable')); return; }
@@ -900,21 +975,49 @@ function load(){
     try{ base=erdNormalize(p.doc); }catch(e){ S.projectErrors.push(p.file+': '+e.message); return; }
     const id='p:'+p.file, local=stored.get(id);
     stored.delete(id);
+    // A copy kept in this browser shadows the file only while it says something the file does not: one that
+    // came back to the file (moved and moved back) is dropped, or a teammate's later change to the file would
+    // hide behind it. One edited from an older file than this is kept — it holds the reader's work — and says
+    // that the file has moved on since ([baseMoved]): exporting it as it is would undo the teammate's change.
+    // A file that holds what this browser exported of the copy ([noteExport]) has not moved away from it but
+    // caught up with it: the reader's own export, committed. The copy never reads as the same as that file — an
+    // export writes each table's columns as the schema has them, the copy the ones it was saved with — so it
+    // gives way when it is still the copy that was exported, and is kept, not "changed since", when edited after.
+    const cur=JSON.stringify(erdToDoc(base));
+    const caught=local && local.exported && local.exported.file===cur ? local.exported : null;
+    const mine=local && !erdSame(local.d, base) && !(caught && JSON.stringify(erdToDoc(local.d))===caught.self) ? local.d : null;
+    if(local && !mine) dropped=true;
     // the diagram shown is a copy of the file's: were it the same object, editing it would edit the base it is
     // compared with — never "changed here" — and the base would hold the diagram that holds it, which no
     // export can write out
-    S.diagrams.push(Object.assign(local||erdNormalize(p.doc), {id, stored:!!local, origin:{file:p.file, base}}));
+    // [from] is the file the copy was edited from, saved with it as it is; the file it is shown against now
+    // would make the next save forget that the file moved — and the load after it invite the export again
+    S.diagrams.push(Object.assign(mine||erdNormalize(p.doc), {id, stored:!!mine, origin:{file:p.file, base},
+      from:mine && !caught ? local.base : cur, baseMoved:!!mine && !caught && local.base!==cur, exported:mine?local.exported:null}));
   });
-  stored.forEach(d=>S.diagrams.push(d));
+  stored.forEach(x=>S.diagrams.push(x.d));
   if(!S.diagrams.length) S.diagrams.push(blank('Diagram 1'));
   S.activeId=(st && S.diagrams.some(d=>d.id===st.active)) ? st.active : S.diagrams[0].id;
+  // …and gone from the browser too: left there, it came back on the next generation as a copy the file had
+  // moved away from — "changed here" on a diagram nobody had touched since.
+  if(dropped) persist();
 }
 function blank(name){ return {id:'l:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, databases:[], tables:[],
   relations:[], frames:[], dismissed:[], stored:false, origin:null}; }
 const active=()=>S.diagrams.find(d=>d.id===S.activeId)||S.diagrams[0];
+/** A diagram from the project's file, as this page read the file: what a copy started here is edited from. */
+const baseSig=d=>JSON.stringify(erdToDoc(d.origin.base));
+/** Whether diagram [d] has to be kept here: one of this browser's own always, a project file's only while it
+ *  differs from the file — undone back to it, it follows the file again, and an edit after that starts from
+ *  the file as it is. */
+function markStored(d){
+  d.stored=!d.origin || !erdSame(d, d.origin.base);
+  if(!d.stored && d.origin){ d.baseMoved=false; d.from=baseSig(d); }
+}
 function persist(){
   clearTimeout(S.dirtyTimer);
-  const list=S.diagrams.filter(d=>d.stored).map(d=>({id:d.id, doc:erdToDoc(d)}));
+  const list=S.diagrams.filter(d=>d.stored).map(d=>Object.assign({id:d.id, doc:erdToDoc(d)}, d.origin?{base:d.from}:{},
+    d.origin && d.exported?{exported:d.exported}:{}));
   try{ localStorage.setItem(storeKey(), JSON.stringify({v:1, active:S.activeId, diagrams:list})); S.storageOk=true; }
   catch(e){
     if(S.storageOk) toast('This browser did not keep the diagram — export it to keep it');
@@ -923,6 +1026,14 @@ function persist(){
   renderStatus();
 }
 function schedulePersist(){ clearTimeout(S.dirtyTimer); S.dirtyTimer=setTimeout(persist, 250); }
+/** Diagram [d], just exported as file [doc]. A project's diagram remembers what the export wrote and itself as it
+ *  was then, so that once the file holds that export — committed, the page generated again — the copy kept here
+ *  is known for the reader's own work, not a copy the file has moved away from (see [load]). */
+function noteExport(d, doc){
+  if(!d.origin) return;
+  d.exported={file:JSON.stringify(erdToDoc(erdNormalize(doc))), self:JSON.stringify(erdToDoc(d))};
+  if(d.stored) persist();
+}
 const snap=d=>JSON.stringify({name:d.name, databases:d.databases||[], tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed});
 function restore(d, json){ const o=JSON.parse(json); d.name=o.name; d.databases=o.databases; d.tables=o.tables; d.relations=o.relations; d.frames=o.frames; d.dismissed=o.dismissed; }
 /** Every change goes through here: one undo step, a save, a redraw. [coalesce] folds a run of the same edit
@@ -939,7 +1050,7 @@ function mutate(fn, coalesce){
   }
   S.lastCoalesce=coalesce?{key:coalesce, id:d.id, at:now}:null;
   S.redo=[];
-  d.stored=true;
+  markStored(d);
   schedulePersist();
   draw(); renderList(); renderStatus();
   return true;
@@ -952,7 +1063,7 @@ function step(from, to){
   to.push(snap(d));
   restore(d, from.pop());
   refreshCatalog();
-  d.stored=true; S.lastCoalesce=null;
+  markStored(d); S.lastCoalesce=null;
   if(S.sel && !selected()) S.sel=null;
   closePop();
   schedulePersist(); draw(); renderList(); renderStatus();
@@ -1434,8 +1545,10 @@ function renderStatus(){
   let s;
   if(d.origin){
     const changed=d.stored && !erdSame(d, d.origin.base);
-    s=changed?'<span class="erd-changed">changed here</span> · export to update '+esc(d.origin.file)
-             :'from '+esc(d.origin.file);
+    // edited from an older file: exporting as told would write the older file back over a teammate's change
+    s=!changed?'from '+esc(d.origin.file)
+      :d.baseMoved?'<span class="erd-changed">changed here</span> · '+esc(d.origin.file)+' has changed in the project since — <i>Diagram → Revert</i> shows it'
+      :'<span class="erd-changed">changed here</span> · export to update '+esc(d.origin.file);
   } else s=S.storageOk?(d.stored?'saved in this browser':'not saved yet'):'<span class="erd-changed">not saved — export it</span>';
   els.status.innerHTML=s;
   const b=els.bar;
@@ -1492,9 +1605,21 @@ function renderList(){
       (open?'<div class="erd-grp-b">'+(rows.join('')||'<div class="erd-list-none">'+none+'</div>')+'</div>':'')+
     '</div>';
   }).join('');
+  // The list is written anew on every change, adding a table with the keyboard among them: the item the
+  // reader was on keeps the focus — and the list its one tab stop — or the next ↓ walks nothing and Tab
+  // starts again at the top. A group's own button — its fold, + Table, ⋯ — keeps it as that button: moved to
+  // an item, the next Enter on what had just folded the group added a table instead.
+  const was=document.activeElement, hadFocus=!!(was && els.list.contains(was));
+  const onItem=hadFocus && was.closest('.erd-item');
+  const ctl=hadFocus && !onItem && ['grp', 'newtable', 'dbmenu'].find(k=>was.dataset[k]!=null);
+  const ctlSel=ctl && '[data-'+ctl+'="'+cssEsc(was.dataset[ctl])+'"]';
+  const at=onItem || els.list.querySelector('.erd-item[tabindex="0"]');
+  const focusKey=at && at.dataset.key;
   els.list.innerHTML=html||'<div class="erd-list-none">No table or column matches.</div>';
-  const first=els.list.querySelector('.erd-item');
-  if(first) first.tabIndex=0;
+  const cur=(focusKey && els.list.querySelector('.erd-item[data-key="'+cssEsc(focusKey)+'"]')) || els.list.querySelector('.erd-item');
+  if(cur) cur.tabIndex=0;
+  const back=onItem ? cur : ctlSel ? els.list.querySelector(ctlSel) : null;
+  if(back) try{ back.focus({preventScroll:true}); }catch(e){ back.focus(); }
 }
 function draw(){
   if(!els) return;
@@ -1556,18 +1681,76 @@ function selected(){
   return d.relations.find(r=>r.id===s.id)||null;
 }
 function select(sel){ S.sel=sel; draw(); }
-function freeSpot(){
-  const v=view(), r=els.svg.getBoundingClientRect(), n=active().tables.length;
-  return {x:(r.width/2-v.tx)/v.s-110+(n%5)*28, y:(r.height/2-v.ty)/v.s-60+(n%5)*28};
+/** Every card and frame of [d] as a box, but card [except] — what a new card must keep clear of (erdFreeSpot). */
+function obstacles(d, except){
+  return boxesOf(d).filter(b=>b.key!==except.key).concat((d.frames||[]).map(fr=>({x:fr.x, y:fr.y, w:fr.w, h:fr.h})));
+}
+/** Card [t], just pushed onto [d], where the reader is looking — the middle of the view — or the nearest
+ *  place there that covers nothing. Inside the mutation that adds it, so its own size is known. */
+function placeFree(d, t){
+  const L=layout(t, S.q, d), v=view(), r=els.svg.getBoundingClientRect();
+  const p=erdFreeSpot(obstacles(d, t), L.w, L.h, (r.width/2-v.tx)/v.s-L.w/2, (r.height/2-v.ty)/v.s-L.h/2);
+  t.x=p.x; t.y=p.y;
+  return t;
+}
+/** Card [t], just pushed onto [d], beside card [anchor] — to its right, with room for a relation's name between
+ *  them, or the nearest free place there. */
+function placeBeside(d, anchor, t){
+  const A=d.tables.find(x=>x.key===anchor);
+  if(!A) return placeFree(d, t);
+  const LA=layout(A, S.q, d), L=layout(t, S.q, d);
+  const p=erdFreeSpot(obstacles(d, t), L.w, L.h, A.x+LA.w+160, A.y);
+  t.x=p.x; t.y=p.y;
+  return t;
+}
+/** Table [key] of the catalog onto diagram [d], as its card — at 0,0 until it is placed. */
+function pushTable(d, key){
+  const c=S.byKey.get(key);
+  const t={key, name:c.name, db:c.db||'', alias:c.alias||'', x:0, y:0, color:'', expanded:false,
+    order:erdDefaultOrder(c.columns), columns:c.columns.map(x=>({name:x.name, type:x.type, pk:!!x.pk}))};
+  d.tables.push(t);
+  return t;
 }
 function addTable(key, at){
   const c=S.byKey.get(key), d=active();
   if(!c) return;
   if(d.tables.some(t=>t.key===key)){ select({kind:'table', key}); center(key); return; }
-  const p=at||freeSpot();
-  mutate(d=>{ d.tables.push({key, name:c.name, db:c.db||'', alias:c.alias||'', x:Math.round(p.x), y:Math.round(p.y), color:'', expanded:false,
-    order:erdDefaultOrder(c.columns), columns:c.columns.map(x=>({name:x.name, type:x.type, pk:!!x.pk}))}); });
+  mutate(d=>{ const t=pushTable(d, key); if(at){ t.x=Math.round(at.x); t.y=Math.round(at.y); } else placeFree(d, t); });
   select({kind:'table', key});
+}
+/**
+ * Table [key] and the tables it relates to onto the canvas, from a table's *Related in the models*: [chains]
+ * are `[other, far]` — the table at a proposal's other end, and through a join table the one beyond it. What
+ * is missing goes on: [key] where the reader is looking, each other table beside it, each far one beside its
+ * join table — so the drawing reads along the relation and the dashed proposals show between them. One undo
+ * step for all of them. Returns the keys added.
+ */
+function addRelated(key, chains){
+  const on=new Set(active().tables.map(t=>t.key)), added=[];
+  mutate(d=>{
+    const put=(k, beside)=>{
+      if(!k || !S.byKey.has(k) || on.has(k) || added.indexOf(k)>=0) return;
+      added.push(k);
+      const t=pushTable(d, k);
+      if(beside) placeBeside(d, beside, t); else placeFree(d, t);
+    };
+    put(key, null);
+    (chains||[]).forEach(([other, far])=>{ put(other, key); put(far, other); });
+  });
+  if(added.length) reveal([key].concat(added));
+  return added;
+}
+/** The view moved so the cards [keys] are on screen, when any of them is not — zoomed out only as far as they
+ *  need, never in: the reader chose how near to look. */
+function reveal(keys){
+  const lays=els.lays||new Map(), b=bounds(new Map(keys.filter(k=>lays.has(k)).map(k=>[k, lays.get(k)])), 24);
+  if(!b) return;
+  const v=view(), r=els.svg.getBoundingClientRect();
+  const x0=b.x*v.s+v.tx, y0=b.y*v.s+v.ty, x1=(b.x+b.w)*v.s+v.tx, y1=(b.y+b.h)*v.s+v.ty;
+  if(x0>=0 && y0>=0 && x1<=r.width && y1<=r.height) return;
+  v.s=Math.max(0.2, Math.min(v.s, r.width/b.w, r.height/b.h));
+  v.tx=r.width/2-(b.x+b.w/2)*v.s; v.ty=r.height/2-(b.y+b.h/2)*v.s;
+  applyView();
 }
 function removeSelected(){
   const s=S.sel;
@@ -1849,9 +2032,11 @@ function wire(){
   els.list.addEventListener('dblclick', e=>{ const it=e.target.closest('.erd-item'); if(it && !e.target.closest('[data-add],[data-copy],[data-info]')) addTable(it.dataset.key); });
   els.list.addEventListener('keydown', e=>{
     const it=e.target.closest('.erd-item'); if(!it) return;
-    if(e.key==='Enter'||e.key==='+'){ e.preventDefault(); addTable(it.dataset.key); }
+    // the list's own keys stop here: `+` is also the page's zoom, and adding a table zoomed the canvas too.
+    // F, −, 0 and / are the page's and go on.
+    if(e.key==='Enter'||e.key==='+'){ e.preventDefault(); e.stopPropagation(); addTable(it.dataset.key); }
     else if(e.key==='ArrowDown'||e.key==='ArrowUp'){
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       const all=[...els.list.querySelectorAll('.erd-item')], i=all.indexOf(it)+(e.key==='ArrowDown'?1:-1);
       if(all[i]){ all.forEach(x=>x.tabIndex=-1); all[i].tabIndex=0; all[i].focus(); }
     }
@@ -1970,8 +2155,9 @@ function onDown(e){
     if(g.kind==='link'){
       const hit=document.elementFromPoint(ev.clientX, ev.clientY), card=hit&&hit.closest&&hit.closest('.erd-card');
       if(card && g.moved && !(card.dataset.key===g.from && hit.closest('.erd-link'))){
-        const row=hit.closest('.erd-row');
-        const id=addRelation(g.from, card.dataset.key, row?row.dataset.col:'');
+        const row=hit.closest('.erd-row'), col=row?row.dataset.col:'', tb=active().tables.find(t=>t.key===card.dataset.key);
+        // dropped onto the other table's key, it is a lookup — the count starts the right way round
+        const id=addRelation(g.from, card.dataset.key, col, {cardinality:erdDropCardinality(tb?effective(tb).columns:[], col)});
         if(id){ S.sel={kind:'rel', id}; draw(); openRelPop(id, ev, true); }
       }
       return;
@@ -2006,7 +2192,7 @@ function commitGesture(before){
   const d=active();
   if(snap(d)===before) return;
   S.undo.push(before); if(S.undo.length>100) S.undo.shift();
-  S.redo=[]; S.lastCoalesce=null; d.stored=true;
+  S.redo=[]; S.lastCoalesce=null; markStored(d);
   schedulePersist(); draw(); renderList(); renderStatus();
 }
 function linkPreview(g, p, ev){
@@ -2085,13 +2271,26 @@ function openPop(kind, html, near){
   // A new element each time: the handlers of the last panel go with it instead of piling up on one node.
   const pop=els.pop.cloneNode(false);
   els.pop.replaceWith(pop); els.pop=pop;
+  pop.innerHTML=html; pop.hidden=false; pop.dataset.kind=kind; S.pop=kind; S.popNear=near;
+  placePop();
+  const first=pop.querySelector('[autofocus]'); if(first){ first.focus(); if(first.select) first.select(); }
+}
+/**
+ * The open panel placed again, now that it has what it shows. A panel's lists — a table's columns, a
+ * relation's column pairs — are filled after it opens, and placed while still empty its bottom (Remove,
+ * Delete) ran off the page, which does not scroll. Kept above the page's bottom, it scrolls inside itself
+ * when it grows later — a column added, the (i) unfolded — rather than out of reach.
+ */
+function placePop(){
+  const pop=els.pop, near=S.popNear;
+  if(!pop || pop.hidden) return;
   const box=els.box.getBoundingClientRect();
-  pop.innerHTML=html; pop.hidden=false; pop.dataset.kind=kind; S.pop=kind;
+  pop.style.maxHeight='';                // measured at its own height, up to the page's (erd.css)
   const pw=pop.offsetWidth, ph=pop.offsetHeight;
   let x=(near?near.x:box.left+box.width/2)-box.left, y=(near?near.y:box.top+80)-box.top;
   x=Math.max(8, Math.min(box.width-pw-8, x)); y=Math.max(8, Math.min(box.height-ph-8, y));
   pop.style.left=x+'px'; pop.style.top=y+'px';
-  const first=pop.querySelector('[autofocus]'); if(first){ first.focus(); if(first.select) first.select(); }
+  pop.style.maxHeight=Math.max(120, box.height-y-8)+'px';
 }
 function nearOfCard(key){
   const L=els.lays.get(key), r=els.svg.getBoundingClientRect(), v=view();
@@ -2103,6 +2302,8 @@ function openTablePop(key){
   const e=effective(t);
   const html='<div class="erd-pop-h">'+popTitle(t.name)+'<span class="erd-grow"></span>'+infoBtn(key)+closeBtn()+'</div>'+
     '<div class="erd-infowrap" hidden>'+infoHtml(key)+'</div>'+
+    // what it relates to, out in the open: it builds the diagram, which the (i)'s reference does not
+    relatedHtml(key)+
     (e.ghost?'<p class="erd-warn">This project’s schema has no table of this name — the card shows the columns the diagram was saved with.</p>':'')+
     '<label class="erd-fld"><span>Business name</span><input data-f="alias" value="'+esc(t.alias)+'" placeholder="'+esc(t.name)+'" autofocus></label>'+
     swatchesHtml(t.color)+
@@ -2116,6 +2317,7 @@ function openTablePop(key){
       '<button type="button" class="tbtn erd-danger" data-pa="remove">Remove from the diagram</button></div>';
   openPop('table', html, nearOfCard(key));
   renderPopCols(key);
+  placePop();
   const pop=els.pop;
   pop.querySelector('[data-f=alias]').addEventListener('input', ev=>{ const val=ev.target.value; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.alias=val.slice(0,120); }, 'alias:'+key); });
   const tableOf=d=>d.tables.find(x=>x.key===key);
@@ -2127,7 +2329,8 @@ function openTablePop(key){
     const et=ev.target.closest('[data-edit-table]');
     if(et){ openTableEditor(et.dataset.editTable); return; }
     const ib=ev.target.closest('[data-info]');
-    if(ib){ const w=pop.querySelector('.erd-infowrap'); w.hidden=!w.hidden; ib.classList.toggle('on', !w.hidden); return; }
+    if(ib){ const w=pop.querySelector('.erd-infowrap'); w.hidden=!w.hidden; ib.classList.toggle('on', !w.hidden); placePop(); return; }
+    if(relatedClick(ev, key, ()=>openTablePop(key))) return;
     const cp=ev.target.closest('[data-copy]');
     if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
     const op=ev.target.closest('[data-open]');
@@ -2163,6 +2366,48 @@ function infoHtml(key){
   return '<dl class="erd-info">'+group('Changelog', 'Changelogs', changelog)+group('Service', 'Services', services)+
     group('Data object', 'Data objects', dataObjects)+'</dl>';
 }
+/**
+ * *Related in the models*: the tables the models relate table [key] to (erdRelatedOf) — a proposal shows only
+ * once both of its tables are on the canvas, and on a project of thirty tables nothing else said which one to
+ * add. Each row names the other table — through a join table, the one at its far end, which is what the
+ * reader is after — and says where the relation stands: *add* puts the missing tables beside this one, with
+ * the dashed proposal between them; a dismissed one can be shown again. Empty when the models relate it to
+ * nothing.
+ */
+function relatedHtml(key){
+  const d=active(), on=new Set(d.tables.map(t=>t.key)), list=erdRelatedOf(S.suggestions, key, d.relations, on, d.dismissed);
+  if(!list.length) return '';
+  const nameOf=k=>{ const t=d.tables.find(x=>x.key===k), c=S.byKey.get(k); return (t && t.alias)||(c && c.alias)||(c && c.name)||(t && t.name)||k; };
+  const adds=list.filter(x=>x.state==='off');
+  const rows=list.map(x=>{
+    const main=x.far||x.other, sub=x.far?'through '+nameOf(x.other):(x.label?x.label+' · ':'')+x.cardinality;
+    // says what add puts on the canvas: what is missing of the table it names, the join table on the way
+    // and, from the list's (i), this one — "beside it" was wrong for a table already drawn
+    const put='Put '+[...new Set([key, main, x.other])].filter(k=>k && !on.has(k)).map(nameOf).join(' and ')+' on the canvas';
+    const act=x.state==='off'?'<button type="button" class="tbtn erd-reladd" data-addrel="'+esc(x.id)+'" data-tip="'+esc(put)+'" aria-label="'+esc(put)+'">add</button>'
+      :x.state==='dismissed'?'<button type="button" class="tbtn erd-reladd" data-undismiss="'+esc(x.id)+'" data-tip="Propose it again" aria-label="Propose the relation to '+
+        esc(nameOf(main))+' again">show again</button>'
+      :'<span class="erd-relst">'+x.state+'</span>';
+    return '<li class="erd-reli" data-tip="'+esc(x.why)+'"><span class="erd-reln"><span class="erd-relt">'+esc(nameOf(main))+'</span>'+
+      '<span class="erd-rels">'+esc(sub)+'</span></span>'+act+'</li>';
+  }).join('');
+  return '<div class="erd-related"><div class="erd-relh"><span>Related in the models</span>'+
+    (adds.length>1?'<button type="button" class="tbtn erd-reladd" data-addrel-all data-tip="Put every table listed here on the canvas" aria-label="Put every table listed here on the canvas">add all</button>':'')+
+    '</div><ul class="erd-rell">'+rows+'</ul></div>';
+}
+/** A click in a *Related in the models* list of table [key]: add a related table, all of them, or show a
+ *  dismissed proposal again. [again] opens the panel afresh, its rows in their new state. True when handled. */
+function relatedClick(ev, key, again){
+  const add=ev.target.closest('[data-addrel]'), all=ev.target.closest('[data-addrel-all]'), un=ev.target.closest('[data-undismiss]');
+  if(!add && !all && !un) return false;
+  const d=active(), list=erdRelatedOf(S.suggestions, key, d.relations, new Set(d.tables.map(t=>t.key)), d.dismissed);
+  if(un){ const id=un.dataset.undismiss; mutate(x=>{ x.dismissed=(x.dismissed||[]).filter(i=>i!==id); }); again(); return true; }
+  const pick=all?list.filter(x=>x.state==='off'):list.filter(x=>x.id===add.dataset.addrel);
+  const added=addRelated(key, pick.map(x=>[x.other, x.far]));
+  if(added.length) toast('Added '+added.map(k=>(S.byKey.get(k)||{}).name||k).join(', ')+' — '+MODK+'Z takes '+(added.length===1?'it':'them')+' back');
+  again();
+  return true;
+}
 /** The panel's title — the table's name — with the button that copies it. */
 function popTitle(name){
   return '<span class="erd-pop-t">'+esc(name)+'</span>'+copyBtn(name, 'Copy the table name');
@@ -2174,10 +2419,13 @@ function infoBtn(key){
 /** The same table, opened from the list — for a table that is not on the canvas yet. */
 function openInfoPop(key, el){
   const c=S.byKey.get(key), r=el.getBoundingClientRect();
-  openPop('info', '<div class="erd-pop-h">'+popTitle((c && c.name) || key)+'<span class="erd-grow"></span>'+closeBtn()+'</div>'+infoHtml(key), {x:r.right+8, y:r.top-10});
+  openPop('info', '<div class="erd-pop-h">'+popTitle((c && c.name) || key)+'<span class="erd-grow"></span>'+closeBtn()+'</div>'+infoHtml(key)+relatedHtml(key),
+    {x:r.right+8, y:r.top-10});
   els.pop.addEventListener('click', ev=>{
     const et=ev.target.closest('[data-edit-table]');
     if(et){ openTableEditor(et.dataset.editTable, null, el); return; }
+    // the list is written anew by the change: the panel opens again beside the table's new (i)
+    if(relatedClick(ev, key, ()=>{ const b=els.list.querySelector('[data-info="'+cssEsc(key)+'"]'); if(b) openInfoPop(key, b); else closePop(); })) return;
     const cp=ev.target.closest('[data-copy]');
     if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
     const op=ev.target.closest('[data-open]');
@@ -2293,6 +2541,7 @@ function openRelPop(id, ev, fresh){
         '<button type="button" class="erd-x" data-pa="delpair" data-i="'+i+'" data-tip="Remove this column pair" aria-label="Remove this column pair">×</button></div>').join('');
   };
   renderPairs();
+  placePop();
   pop.addEventListener('change', e2=>{
     const sel=e2.target.closest('select[data-side]');
     if(!sel) return;
@@ -2360,6 +2609,7 @@ function openTableEditor(key, db, anchor){
     if(focus!=null){ const el=box.querySelector('input[data-c=name][data-i="'+focus+'"]'); if(el) el.focus(); }
   };
   renderCols();
+  placePop();
   pop.addEventListener('input', e=>{ const el=e.target.closest('[data-c]'); if(!el) return; const c=el.dataset.c; rows[+el.dataset.i][c]=c==='pk'?el.checked:el.value; warn.hidden=true; });
   pop.addEventListener('change', e=>{ const el=e.target.closest('input[data-c=pk]'); if(el) rows[+el.dataset.i].pk=el.checked; });
   // Enter walks on: from the name to the first column, from a column to the next — a new one after the last
@@ -2377,13 +2627,13 @@ function openTableEditor(key, db, anchor){
   const save=()=>{
     const name=pop.querySelector('[data-f=tname]').value;
     let res=null;
-    const at=key?null:freeSpot();
     mutate(x=>{
       res=erdSaveTable(x, key, dbId, name, rows, S.projectKeys);
       if(!res.key || key) return;
-      const def=erdDefinition(x, res.key).table;
-      x.tables.push({key:res.key, name:def.name, db:dbId===ERD_PROJECT_DB?'':dbId, alias:'', x:Math.round(at.x), y:Math.round(at.y), color:'',
-        expanded:false, order:erdDefaultOrder(def.columns), columns:def.columns.map(c=>Object.assign({}, c))});
+      const def=erdDefinition(x, res.key).table, t={key:res.key, name:def.name, db:dbId===ERD_PROJECT_DB?'':dbId, alias:'', x:0, y:0, color:'',
+        expanded:false, order:erdDefaultOrder(def.columns), columns:def.columns.map(c=>Object.assign({}, c))};
+      x.tables.push(t);
+      placeFree(x, t);
     });
     if(!res || res.error){ warn.textContent=(res && res.error)||'Nothing to save'; warn.hidden=false; return; }
     closePop();
@@ -2489,9 +2739,12 @@ function doAct(act, b){
     case 'menu': {
       if(S.pop==='menu'){ closePop(); break; }
       const changed=d.origin && d.stored && !erdSame(d, d.origin.base);
+      // only what can come back: an id whose proposal the models no longer make is no proposal to show
+      const nd=(d.dismissed||[]).filter(id=>S.suggestions.some(s=>s.id===id)).length, pl=nd===1?'':'s';
       openPop('menu', '<div class="erd-menu" role="menu">'+
         mi('new','New diagram')+mi('rename','Rename…')+mi('duplicate','Duplicate')+
-        (d.origin?(changed?mi('revert','Revert to '+d.origin.file):''):mi('delete','Delete…'))+
+        (d.origin?(changed?mi('revert','Revert to '+d.origin.file+(d.baseMoved?' (changed in the project)':'')):''):mi('delete','Delete…'))+
+        (nd?mi('undismiss','Show '+nd+' dismissed proposal'+pl+' again'):'')+
         '<div class="erd-msep"></div>'+mi('import','Import a diagram file…')+
         '<div class="erd-mnote">or drop a <code>.atlas-erd.json</code> onto the canvas'+(isIde()?', or paste one':'')+'</div>'+
         (S.projectErrors.length?'<div class="erd-msep"></div><div class="erd-mnote erd-warn">'+S.projectErrors.map(esc).join('<br>')+'</div>':'')+
@@ -2505,7 +2758,9 @@ function doAct(act, b){
           S.diagrams=S.diagrams.filter(x=>x.id!==d.id); if(!S.diagrams.length) S.diagrams.push(blank('Diagram 1'));
           switchTo(S.diagrams[0].id); persist(); }),
         revert:()=>confirmPop('Drop the changes made here and show '+d.origin.file+' as it is in the project?', 'Revert', ()=>{
-          const base=JSON.parse(JSON.stringify(d.origin.base)); Object.assign(d, base, {stored:false}); S.undo=[]; S.redo=[]; refreshCatalog(); persist(); draw(); renderList(); renderStatus(); }),
+          const base=JSON.parse(JSON.stringify(d.origin.base)); Object.assign(d, base, {stored:false, baseMoved:false, exported:null, from:baseSig(d)}); S.undo=[]; S.redo=[]; refreshCatalog(); persist(); draw(); renderList(); renderStatus(); }),
+        // one step, so ⌘Z dismisses them again; on the canvas at once where both tables are there
+        undismiss:()=>{ mutate(x=>{ x.dismissed=[]; }); toast(nd+' proposal'+pl+' shown again — drawn where both tables are on the canvas'); },
         import:()=>els.file.click(),
       });
       break;
@@ -2520,7 +2775,7 @@ function doAct(act, b){
           :'The diagram file opens again here or in any Atlas explorer; commit it to the project and every generated explorer carries it.')+'</div>'+
       '</div>', near);
       menuWire({json:exportJson, svg:exportSvg, png:exportPng,
-        'copy-json':()=>atlasCopy(JSON.stringify(docOf(), null, 2), ()=>toast('Diagram file copied')),
+        'copy-json':()=>{ const doc=docOf(); atlasCopy(JSON.stringify(doc, null, 2), ()=>toast('Diagram file copied')); noteExport(active(), doc); },
         'copy-svg':()=>atlasCopy(pictureSvg().svg, ()=>toast('SVG copied'))});
       break;
     }
@@ -2558,7 +2813,7 @@ function download(name, data, mime){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
-function exportJson(){ download(erdSlug(active().name)+'.atlas-erd.json', JSON.stringify(docOf(), null, 2)+'\n', 'application/json'); }
+function exportJson(){ const doc=docOf(); download(erdSlug(active().name)+'.atlas-erd.json', JSON.stringify(doc, null, 2)+'\n', 'application/json'); noteExport(active(), doc); }
 let _fontCss=null;
 /** The page's Geist faces, so an exported SVG renders in the same letters wherever it is opened. They are
  *  already embedded in the page as data: URIs (explorer.css), so the picture needs no network either. */

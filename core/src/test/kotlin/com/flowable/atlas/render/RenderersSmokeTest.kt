@@ -69,6 +69,27 @@ class RenderersSmokeTest {
         assertTrue("a sliver of the explorer (${erd.length} vs ${explorer.length})", erd.length * 2 < explorer.length)
     }
 
+    /**
+     * What the designer proposes a relation from reaches it: a service's lookup column, and a relation's join
+     * table with its two columns — the shape Design writes, which carries no column of the service's table.
+     */
+    @Test
+    fun theErPageCarriesARelationsJoinTable() {
+        val dir = java.nio.file.Files.createTempDirectory("erd-relation").toFile()
+        try {
+            java.io.File(dir, "order.service").writeText("""{"key": "DEMO-S1", "name": "Orders", "type": "database",
+                "tableName": "DEMO_ORDER_", "lookupId": "id", "columnMappings": [{"name": "id", "columnName": "ID_", "type": "string"},
+                  {"name": "customer", "type": "object-relation",
+                   "relation": {"joinTableName": "DEMO_ORDER_CUSTOMER_", "owningColumnName": "DEMO_ORDER_ID_", "referenceColumnName": "DEMO_CUSTOMER_ID_"}}]}""")
+            val erd = ErdHtmlRenderer.render(Atlas.extract(dir), dir)
+            assertTrue("the lookup column", erd.contains("\"lookupColumn\":\"ID_\""))
+            assertTrue("the join table and its columns", erd.contains(
+                "\"relation\":{\"joinTable\":\"DEMO_ORDER_CUSTOMER_\",\"owningColumn\":\"DEMO_ORDER_ID_\",\"referenceColumn\":\"DEMO_CUSTOMER_ID_\"}"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test
     fun onlyAProjectWithTablesHasAnErPage() {
         assertTrue(ErdHtmlRenderer.hasTables(result))

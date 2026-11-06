@@ -3,6 +3,7 @@
   "name": "Customer Service",
   "type": "db",
   "tableName": "cust_customer",
+  "lookupId": "id",
   "config": {
     "authentication": {
       "type": "basic",

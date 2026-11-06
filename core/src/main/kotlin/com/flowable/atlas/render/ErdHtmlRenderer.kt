@@ -64,9 +64,10 @@ object ErdHtmlRenderer {
 
     /**
      * The nodes the designer's catalog and proposals read, each cut down to the fields they use: a
-     * changelog's columns (name, type, table, key) and authority, a database service's table and column
-     * mappings — with each column's relation to another service, the columns a proposed relation joins — and
-     * a table-backed data object's name, service and fields. Everything else in the graph stays in the explorer.
+     * changelog's columns (name, type, table, key) and authority, a database service's table, the column its
+     * lookup id is kept in and its column mappings — with each relation's join table and the two columns of
+     * it, the columns a proposed relation joins — and a table-backed data object's name, service and fields.
+     * Everything else in the graph stays in the explorer.
      */
     private fun nodes(all: Any?): List<Map<String, Any?>> =
         (all as? List<*>).orEmpty().mapNotNull { n ->
@@ -86,11 +87,14 @@ object ErdHtmlRenderer {
                 "service" -> {
                     val table = d["tableName"] as? String
                     if (table.isNullOrBlank()) return@mapNotNull null
-                    linkedMapOf("tableName" to table, "columns" to (d["columns"] as? List<*>).orEmpty().mapNotNull { c ->
+                    val svc = linkedMapOf<String, Any?>("tableName" to table)
+                    (d["lookupColumn"] as? String)?.let { svc["lookupColumn"] = it }
+                    svc["columns"] = (d["columns"] as? List<*>).orEmpty().mapNotNull { c ->
                         val cm = c as? Map<*, *> ?: return@mapNotNull null
                         linkedMapOf<String, Any?>("name" to cm["name"], "columnName" to cm["columnName"], "type" to cm["type"])
                             .also { cm["relation"]?.let { r -> it["relation"] = r } }
-                    })
+                    }
+                    svc
                 }
                 "dataObject" -> {
                     val table = d["serviceTableName"] as? String

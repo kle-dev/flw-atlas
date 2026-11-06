@@ -331,8 +331,14 @@ object LiquibaseCoverage {
             val lbCols = tables.flatMap { it.columns.values }
             val removed = tables.flatMap { it.removed }
 
+            // A relation mapping is no column of this table: Design keeps a relation in a join table of its own
+            // (ModelParsers.parseService), and the mapping has no column. Read as one, its name became a column
+            // "in the service but not in Liquibase" on every service that relates to another.
+            val columns = mapListRO(s["columns"]).filter { c ->
+                !((c["columnName"] as? String).isNullOrBlank() && (c["relation"] != null || (c["type"] as? String)?.endsWith("-relation") == true))
+            }
             val svcByLoose = LinkedHashMap<String, Map<String, Any?>>()
-            for (c in mapListRO(s["columns"])) {
+            for (c in columns) {
                 val sql = (c["columnName"] as? String) ?: (c["name"] as? String)
                 if (sql != null) svcByLoose.putIfAbsent(loose(sql), c)
             }
@@ -384,7 +390,7 @@ object LiquibaseCoverage {
             }
 
             if (lb != null) {
-                for (c in mapListRO(s["columns"])) {
+                for (c in columns) {
                     val sql = (c["columnName"] as? String) ?: (c["name"] as? String) ?: ""
                     if (sql.isEmpty() || loose(sql) in seenSvc) continue
                     val row = linkedMapOf<String, Any?>(

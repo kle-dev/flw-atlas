@@ -560,7 +560,7 @@ const DESIGN_TERMS = {
   'rel:static-decision': ['Static decision table', 'A case-view element evaluates that decision table.'],
   'rel:inbound-channel': ['Received on channel', 'The event arrives over that channel.'],
   'rel:outbound-channel': ['Sent on channel', 'The event is published over that channel.'],
-  'rel:relates-to-service': ['Relates to service', 'A column relation joins to that service’s table.'],
+  'rel:relates-to-service': ['Relates to service', 'A relation names that service: its rows join that service’s table through a join table.'],
   'rel:watch': ['May watch', 'Who is added as a watcher.'],
   'rel:participate': ['May participate', 'Who participates in the instance.'],
   'rel:trigger': ['May trigger', 'Who may trigger the event listener.'],

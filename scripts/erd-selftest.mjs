@@ -26,7 +26,7 @@ if (a < 0 || b < 0 || b < a) {
 }
 const E = new Function(`"use strict";${source.slice(a + START.length, b)};
   return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange, erdSearch, erdColumnHits, erdTableMatches,
-    erdEnd, erdCardinality, erdEndOne, erdFrameParents, erdArrangeFramed, erdOpenSuggestions, erdPairs,
+    erdEnd, erdCardinality, erdEndOne, erdFrameParents, erdArrangeFramed, erdOpenSuggestions, erdPairs, erdRelatedOf, erdFreeSpot, erdDropCardinality,
     erdTableKey, erdDiagramCatalog, erdDefinition, erdAddDatabase, erdSaveTable, erdDeleteTable, erdDeleteDatabase, ERD_PROJECT_DB,
     ERD_FORMAT, ERD_FORMAT_VERSION, ERD_ENDS, ERD_FRAME_PAD, ERD_FRAME_TOP};`)();
 
@@ -42,6 +42,8 @@ function throws(label, fn, re) {
 }
 
 // ---- a project: two changelogs define ORD_ORDER (one superseded), one table only a service knows ----
+// Relations as Design writes them: no column of the service's table, but a join table of two columns — the
+// owning row's lookup id and the referenced row's — named or not by the referenced service.
 const nodes = [
   {id:'liquibase:old', type:'liquibase', key:'old', label:'000-old.xml', data:{authority:{status:'superseded'},
     columns:[{name:'id_', type:'varchar(32)', table:'ord_order'}]}},
@@ -50,26 +52,32 @@ const nodes = [
              {name:'ID_', type:'VARCHAR(64)', table:'ORD_ORDER'},     // the same column again, other case: once
              {name:'customer_id_', type:'VARCHAR(64)', table:'ord_order'},
              {name:'id_', type:'VARCHAR(64)', table:'cust_customer', pk:true}, {name:'name_', type:'VARCHAR(255)', table:'cust_customer'}]}},
-  {id:'service:orderService', type:'service', key:'orderService', label:'Order Service', data:{tableName:'ORD_ORDER', columns:[
+  {id:'liquibase:003-joins', type:'liquibase', key:'003-joins', label:'003-joins.xml', data:{authority:{status:'live'},
+    columns:[{name:'ORD_ORDER_ID_', type:'VARCHAR(64)', table:'ord_order_customer_'}, {name:'CUST_CUSTOMER_ID_', type:'VARCHAR(64)', table:'ord_order_customer_'},
+             {name:'AUD_ENTRY_ID_', type:'VARCHAR(64)', table:'aud_entry_order_'}, {name:'ORD_ORDER_ID_', type:'VARCHAR(64)', table:'aud_entry_order_'}]}},
+  {id:'service:orderService', type:'service', key:'orderService', label:'Order Service', data:{tableName:'ORD_ORDER', lookupColumn:'ID_', columns:[
     {name:'id', columnName:'id_', type:'string'},
-    {name:'customer', columnName:'customer_id_', type:'object-relation', relation:{service:'customerService', column:'id'}},
-    {name:'payer', columnName:'payer_id_', type:'object-relation', relation:{service:'customerService', column:'id'}},
-    {name:'lost', columnName:'lost_id_', type:'object-relation', relation:{service:'noSuchService', column:'id'}}]}},
+    // no service named: the runtime — and the designer — take it from the data object field of the same name
+    {name:'customer', type:'object-relation', relation:{joinTable:'ord_order_customer_', owningColumn:'ORD_ORDER_ID_', referenceColumn:'CUST_CUSTOMER_ID_'}},
+    // a join table no changelog creates
+    {name:'payer', type:'object-relation', relation:{joinTable:'ord_order_payer_', owningColumn:'ORD_ORDER_ID_', referenceColumn:'PAYER_ID_', service:'customerService'}},
+    {name:'lost', type:'object-relation', relation:{joinTable:'ord_order_lost_', owningColumn:'ORD_ORDER_ID_', referenceColumn:'LOST_ID_', service:'noSuchService'}}]}},
   {id:'service:customerService', type:'service', key:'customerService', label:'Customer Service', data:{tableName:'cust_customer',
     columns:[{name:'id', columnName:'id_', type:'string'}]}},
   {id:'service:auditService', type:'service', key:'auditService', label:'Audit Service', data:{tableName:'aud_entry',
     columns:[{name:'id', columnName:'id_', type:'string'}, {name:'when', columnName:'when_', type:'date'}, {name:'x', columnName:'id_', type:'string'},
-             {name:'order', columnName:'order_id_', type:'object-relation', relation:{service:'orderService', column:'id'}}]}},
+             {name:'order', type:'list-relation', relation:{joinTable:'aud_entry_order_', owningColumn:'AUD_ENTRY_ID_', referenceColumn:'ORD_ORDER_ID_', service:'orderService'}}]}},
   {id:'service:restService', type:'service', key:'restService', label:'REST', data:{}},
   {id:'dataObject:orderDO', type:'dataObject', key:'orderDO', label:'Order', data:{name:'Order', serviceTableName:'ord_order', service:'orderService',
     columns:[{name:'customer', label:'Customer', type:'DATA-OBJECT', refDataObject:'customerDO', relationship:'one-to-one'},
              {name:'payer', label:'Payer', type:'DATA-OBJECT', refDataObject:'customerDO', relationship:'one-to-one'},
              {name:'lines', label:'Lines', type:'DATA-OBJECT', refDataObject:'lineDO', relationship:'one-to-many'}]}},
-  {id:'dataObject:customerDO', type:'dataObject', key:'customerDO', label:'Customer', data:{name:'Customer', serviceTableName:'cust_customer'}},
-  {id:'dataObject:customerDO2', type:'dataObject', key:'customerDO2', label:'Customer (lite)', data:{name:'Customer (lite)', serviceTableName:'CUST_CUSTOMER'}},
+  {id:'dataObject:customerDO', type:'dataObject', key:'customerDO', label:'Customer', data:{name:'Customer', serviceTableName:'cust_customer', service:'customerService'}},
+  {id:'dataObject:customerDO2', type:'dataObject', key:'customerDO2', label:'Customer (lite)', data:{name:'Customer (lite)', serviceTableName:'CUST_CUSTOMER',
+    columns:[{name:'orders', label:'Orders', type:'DATA-OBJECT', refDataObject:'orderDO', relationship:'one-to-many'}]}},
 ];
 const cat = E.erdCatalog(nodes);
-eq('every table once, sorted by name', cat.map(t => t.key), ['AUD_ENTRY', 'CUST_CUSTOMER', 'ORD_ORDER']);
+eq('every table once, sorted by name', cat.map(t => t.key), ['AUD_ENTRY', 'AUD_ENTRY_ORDER_', 'CUST_CUSTOMER', 'ORD_ORDER', 'ORD_ORDER_CUSTOMER_']);
 const order = cat.find(t => t.key === 'ORD_ORDER');
 eq('the live changelog wins over a superseded one', order.changelog, 'liquibase:002-order');
 eq('columns as the changelog has them, each once', order.columns.map(c => c.name), ['order_no_', 'id_', 'customer_id_']);
@@ -79,7 +87,7 @@ eq('services and data objects behind a table', [order.services, order.dataObject
 eq('one data object → its name is the business name', order.alias, 'Order');
 eq('two data objects → no guess', cat.find(t => t.key === 'CUST_CUSTOMER').alias, '');
 const audit = cat.find(t => t.key === 'AUD_ENTRY');
-eq('a table only a service knows: its mapped columns, once', [audit.source, audit.columns.map(c => c.name)], ['service', ['id_', 'when_', 'order_id_']]);
+eq('a table only a service knows: its mapped columns, once — a relation is none of them', [audit.source, audit.columns.map(c => c.name)], ['service', ['id_', 'when_']]);
 ok('…with the service’s logical types, marked', audit.columns.every(c => c.logical) && audit.columns[1].type === 'date');
 eq('no tables, no crash', E.erdCatalog(null), []);
 
@@ -93,37 +101,86 @@ eq('an empty memory is the default order', E.erdOrder([], order.columns), E.erdD
 const sug = E.erdSuggestions(nodes);
 const cols = s => s.pairs.map(p => p.from + '→' + p.to).join(',');
 eq('what the models state, between tables only, each over its columns', sug.map(s => [s.id, s.from, s.to, cols(s), s.cardinality, s.label]), [
-  ['dataObject:orderDO#customer', 'ORD_ORDER', 'CUST_CUSTOMER', 'customer_id_→id_', '0..n:1', 'Customer'],
-  ['dataObject:orderDO#payer', 'ORD_ORDER', 'CUST_CUSTOMER', 'payer_id_→id_', '0..n:1', 'Payer'],
-  ['service:auditService#order_id_', 'AUD_ENTRY', 'ORD_ORDER', 'order_id_→id_', '0..n:1', ''],
+  // through a join table the project creates: from it, over its column, to the owning table and to the one referred to — the
+  // data object field of the same name is the same relation, and names it
+  ['dataObject:orderDO#customer', 'ORD_ORDER_CUSTOMER_', 'ORD_ORDER', 'ORD_ORDER_ID_→ID_', '0..1:1', 'Customer'],
+  // a join table no changelog creates: the two tables, without columns
+  ['dataObject:orderDO#payer', 'ORD_ORDER', 'CUST_CUSTOMER', '', '0..n:0..1', 'Payer'],
+  // a field no service maps as a relation: as the data object counts it
+  ['dataObject:customerDO2#orders', 'CUST_CUSTOMER', 'ORD_ORDER', '', '1:0..n', 'Orders'],
+  // the referenced service found through the data object; its lookup column is the table's one-column key
+  ['service:orderService#customer@ref', 'ORD_ORDER_CUSTOMER_', 'CUST_CUSTOMER', 'CUST_CUSTOMER_ID_→id_', '0..n:1', ''],
+  // a list: many rows of the join table per owning row; no lookup column and no key, the owning side's column stays open
+  ['service:auditService#order@owner', 'AUD_ENTRY_ORDER_', 'AUD_ENTRY', 'AUD_ENTRY_ID_→', '0..n:1', 'order'],
+  ['service:auditService#order@ref', 'AUD_ENTRY_ORDER_', 'ORD_ORDER', 'ORD_ORDER_ID_→ID_', '0..n:1', ''],
 ]);
-ok('a data object field and its service column are one relation, and says so twice', /field Customer/.test(sug[0].why) && /column customer_id_/.test(sug[0].why), sug[0].why);
+ok('a data object field and its service relation are one proposal, and it says so twice', /field Customer/.test(sug[0].why) && /kept in ord_order_customer_/.test(sug[0].why), sug[0].why);
 ok('each says where it comes from', sug.every(s => s.why && s.why.length > 10));
-{ // a field the service does not map to a column: one relation when it is the only one between its tables
+eq('a proposal through a join table names it, and the tables at its two ends', [sug[0].join, sug[3].join, sug[1].join],
+  [{table: 'ORD_ORDER_CUSTOMER_', owner: 'ORD_ORDER', ref: 'CUST_CUSTOMER'}, {table: 'ORD_ORDER_CUSTOMER_', owner: 'ORD_ORDER', ref: 'CUST_CUSTOMER'}, undefined]);
+{ // a list without a join table, and a data object's one-to-one the schema does not make unique
   const n = [
-    {type:'service', key:'aS', data:{tableName:'A', columns:[{name:'b', columnName:'b_id_', relation:{service:'bS', column:'id'}}]}},
-    {type:'service', key:'bS', data:{tableName:'B', columns:[]}},
-    {type:'dataObject', key:'aDO', label:'A', data:{serviceTableName:'A', service:'aS', columns:[{name:'theB', label:'The B', refDataObject:'bDO'}]}},
+    {type:'service', key:'aS', label:'A', data:{tableName:'A', columns:[{name:'bs', type:'list-relation', relation:{joinTable:'A_B_', owningColumn:'A_ID_', referenceColumn:'B_ID_', service:'bS'}}]}},
+    {type:'service', key:'bS', label:'B', data:{tableName:'B', columns:[]}},
+    {type:'dataObject', key:'aDO', label:'A', data:{serviceTableName:'A', service:'aS', columns:[{name:'theB', label:'The B', refDataObject:'bDO', relationship:'one-to-one'}]}},
     {type:'dataObject', key:'bDO', data:{serviceTableName:'B'}},
   ];
-  eq('…merged into the one over columns', E.erdSuggestions(n).map(s => [s.id, cols(s), s.label]), [['dataObject:aDO#theB', 'b_id_→id', 'The B']]);
-  n[2].data.columns.push({name:'otherB', label:'Other B', refDataObject:'bDO'});
-  eq('…but two of them are not guessed at', E.erdSuggestions(n).map(s => [s.id, cols(s)]),
-    [['dataObject:aDO#theB', ''], ['dataObject:aDO#otherB', ''], ['service:aS#b_id_', 'b_id_→id']]);
+  eq('…many to many, and many to at most one', E.erdSuggestions(n).map(s => [s.id, s.from, s.to, s.cardinality]),
+    [['dataObject:aDO#theB', 'A', 'B', '0..n:0..1'], ['service:aS#bs', 'A', 'B', '0..n:0..n']]);
 }
 { // what a diagram still lacks: a drawn relation accounts for one proposal between its tables
-  const on = new Set(['ORD_ORDER', 'CUST_CUSTOMER']);
+  const on = new Set(['ORD_ORDER', 'CUST_CUSTOMER', 'ORD_ORDER_CUSTOMER_']);
   const open = (rels, dismissed) => E.erdOpenSuggestions(sug, rels, on, dismissed || []).map(s => s.id);
-  eq('both tables on the canvas', open([]), ['dataObject:orderDO#customer', 'dataObject:orderDO#payer']);
-  eq('a dismissed one is gone', open([], ['dataObject:orderDO#payer']), ['dataObject:orderDO#customer']);
-  eq('a relation over its columns takes that one — the second relation between the tables is still proposed',
-    open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[{from:'CUSTOMER_ID_', to:'id_'}]}]), ['dataObject:orderDO#payer']);
-  eq('…drawn the other way round too', open([{from:'CUST_CUSTOMER', to:'ORD_ORDER', pairs:[{from:'id_', to:'payer_id_'}]}]), ['dataObject:orderDO#customer']);
-  eq('a relation without columns takes the first one left', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[]}]), ['dataObject:orderDO#payer']);
-  eq('…two take both', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[]}, {from:'CUST_CUSTOMER', to:'ORD_ORDER', pairs:[]}]), []);
-  eq('a relation over other columns is another relation', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[{from:'note_', to:''}]}]),
-    ['dataObject:orderDO#customer', 'dataObject:orderDO#payer']);
+  const all = ['dataObject:orderDO#customer', 'dataObject:orderDO#payer', 'dataObject:customerDO2#orders', 'service:orderService#customer@ref'];
+  eq('every one whose two tables are on the canvas', open([]), all);
+  eq('a dismissed one is gone', open([], ['dataObject:orderDO#payer']), all.filter(id => id !== 'dataObject:orderDO#payer'));
+  eq('a relation over the join table’s column takes that one — the other side of the join table is still proposed',
+    open([{from:'ORD_ORDER_CUSTOMER_', to:'ORD_ORDER', pairs:[{from:'ord_order_id_', to:'ID_'}]}]), all.slice(1));
+  eq('…drawn the other way round too', open([{from:'ORD_ORDER', to:'ORD_ORDER_CUSTOMER_', pairs:[{from:'id_', to:'ORD_ORDER_ID_'}]}]), all.slice(1));
+  eq('a relation without columns takes the first one left without columns', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[]}]),
+    all.filter(id => id !== 'dataObject:orderDO#payer'));
+  eq('…two take both', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[]}, {from:'CUST_CUSTOMER', to:'ORD_ORDER', pairs:[]}]),
+    ['dataObject:orderDO#customer', 'service:orderService#customer@ref']);
+  eq('a relation over other columns is another relation', open([{from:'ORD_ORDER_CUSTOMER_', to:'ORD_ORDER', pairs:[{from:'note_', to:''}]}]), all);
   eq('a table off the canvas, no proposal', E.erdOpenSuggestions(sug, [], new Set(['ORD_ORDER']), []).length, 0);
+}
+{ // the tables a table's panel names as related, and where each relation stands
+  const rel = (key, on, rels, dismissed) => E.erdRelatedOf(sug, key, rels || [], new Set(on), dismissed || []).map(x => [x.id, x.other, x.far, x.state]);
+  eq('alone on the canvas: every table the models relate it to — through a join table, the table at its far end too', rel('ORD_ORDER', ['ORD_ORDER']), [
+    ['dataObject:orderDO#customer', 'ORD_ORDER_CUSTOMER_', 'CUST_CUSTOMER', 'off'],
+    ['dataObject:orderDO#payer', 'CUST_CUSTOMER', null, 'off'],
+    ['dataObject:customerDO2#orders', 'CUST_CUSTOMER', null, 'off'],
+    ['service:auditService#order@ref', 'AUD_ENTRY_ORDER_', 'AUD_ENTRY', 'off'],
+  ]);
+  eq('through a join table, off until the table beyond it is on the canvas too; then proposed',
+    [rel('ORD_ORDER', ['ORD_ORDER', 'ORD_ORDER_CUSTOMER_'])[0][3], rel('ORD_ORDER', ['ORD_ORDER', 'ORD_ORDER_CUSTOMER_', 'CUST_CUSTOMER'])[0][3]], ['off', 'proposed']);
+  eq('a relation over its columns drawn: drawn', rel('ORD_ORDER', ['ORD_ORDER', 'ORD_ORDER_CUSTOMER_', 'CUST_CUSTOMER'],
+    [{from:'ORD_ORDER_CUSTOMER_', to:'ORD_ORDER', pairs:[{from:'ORD_ORDER_ID_', to:'ID_'}]}])[0][3], 'drawn');
+  eq('dismissed: dismissed, on the canvas or not', [rel('ORD_ORDER', ['ORD_ORDER'], [], ['dataObject:orderDO#payer'])[1][3],
+    rel('ORD_ORDER', ['ORD_ORDER', 'CUST_CUSTOMER'], [], ['dataObject:orderDO#payer'])[1][3]], ['dismissed', 'dismissed']);
+  eq('the join table itself: its two tables, nothing beyond them', rel('ORD_ORDER_CUSTOMER_', ['ORD_ORDER_CUSTOMER_', 'CUST_CUSTOMER']), [
+    ['dataObject:orderDO#customer', 'ORD_ORDER', null, 'off'], ['service:orderService#customer@ref', 'CUST_CUSTOMER', null, 'proposed']]);
+  eq('the table referred to: the owning table at the far end', rel('CUST_CUSTOMER', [])[2], ['service:orderService#customer@ref', 'ORD_ORDER_CUSTOMER_', 'ORD_ORDER', 'off']);
+  eq('related to nothing, nothing', rel('LEGACY', ['LEGACY']), []);
+}
+
+// ---- where a new card goes, and how a dropped relation starts ----
+{
+  const clears = (a, b, gap) => a.x >= b.x + b.w + gap || b.x >= a.x + a.w + gap || a.y >= b.y + b.h + gap || b.y >= a.y + a.h + gap;
+  eq('nothing drawn: where the reader looks, on the 4px grid', E.erdFreeSpot([], 200, 100, 101, 99), {x: 100, y: 100});
+  const blocker = {x: 80, y: 80, w: 260, h: 160}, p = E.erdFreeSpot([blocker], 200, 100, 100, 100);
+  ok('a card in the way: the nearest place clear of it by the gap', clears({x: p.x, y: p.y, w: 200, h: 100}, blocker, 24) &&
+    Math.hypot(p.x - 100, p.y - 100) < 400, p);
+  eq('…the same place every time', E.erdFreeSpot([blocker], 200, 100, 100, 100), p);
+  const boxes = [];
+  for (let i = 0; i < 10; i++) { const q = E.erdFreeSpot(boxes, 220, 140, 0, 0); boxes.push({x: q.x, y: q.y, w: 220, h: 140}); }
+  ok('ten cards added at one place: none on another', boxes.every((a, i) => boxes.every((b, j) => i === j || clears(a, b, 24))), boxes);
+  const full = [{x: -5000, y: -5000, w: 10000, h: 10000}];
+  eq('no room anywhere near: the centre, rather than nothing', E.erdFreeSpot(full, 200, 100, 0, 0), {x: 0, y: 0});
+  const key = [{name: 'ID_', pk: true}, {name: 'NAME_'}], composite = [{name: 'order_id_', pk: true}, {name: 'line_no_', pk: true}];
+  eq('dropped onto the other table’s key: a lookup, many to one; anywhere else: one to many',
+    [E.erdDropCardinality(key, 'id_'), E.erdDropCardinality(key, 'NAME_'), E.erdDropCardinality(key, ''), E.erdDropCardinality(composite, 'order_id_')],
+    ['0..n:1', '1:0..n', '1:0..n', '1:0..n']);
 }
 
 // ---- the file format ----

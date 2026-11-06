@@ -61,9 +61,10 @@ of the same name added by hand to the project's database.
 
 ## Building a diagram
 
-- **Add a table** by dragging it from the list onto the canvas, or with its **+**. A table is on a
-  diagram once; dragging it again, or clicking it in the list, finds its card. The list's filter matches
-  table names, business names and column names. A table read by one data object shows that data object's
+- **Add a table** by dragging it from the list onto the canvas, or with its **+** (`+` or `Enter` on the
+  focused item, which keeps the focus): it lands where you are looking, in the nearest place clear of the
+  cards and frames already drawn. A table is on a diagram once; dragging it again, or clicking it in the
+  list, finds its card. The list's filter matches table names, business names and column names. A table read by one data object shows that data object's
   name with a quiet copy icon for its key, and its **(i)** opens the same overview as the card's — both
   before the table is on the canvas. For a table name longer than the list, drag the list's right edge
   wider (`←` `→` on the focused edge move it by 16px; a double click or `Home` resets it); the width
@@ -102,7 +103,8 @@ of the same name added by hand to the project's database.
   cardinalities: `0..n:1` (each order has exactly one customer, a customer any number of orders),
   `1:0..1`, `0..n:0..n` and the rest. A sentence under them says what the choice means (*Many to one:
   each Order has exactly one Customer, each Customer zero or more Order*). A new relation starts as
-  `1:0..n`.
+  `1:0..n` — the table you drew from is the one side — or, dropped onto the other table's primary key (a key
+  of one column), as `0..n:1`: a lookup, the table you drew from refers to it.
 - **Frames** gather tables under a name — *Sales*, *Accounting* — to show which part of the model belongs
   to which area. Press **Frame** in the toolbar (or `F`) and drag over the tables; the tables whose centre
   is inside the rectangle are marked as you drag, and the frame's panel opens with its name field focused
@@ -125,14 +127,26 @@ of the same name added by hand to the project's database.
   gap — are moved apart, on the canvas and in an exported picture alike.
 - **Proposals.** When both ends of a relation the models already state are on the canvas, it shows as a
   dashed line: click it to take it — with its name, cardinality and columns — or `×` to dismiss it for this
-  diagram. The models state two kinds: a database service's column relation (its column refers to a column
-  of another service's table, `customer_id_` → `customerService.id`: `0..n:1` over exactly those columns),
-  and a data object field that refers to another data object (named as the field, its one-to-one `1:1`,
-  its one-to-many `1:0..n`, over the columns its service maps the field to). The two telling one relation —
-  over the same columns, or the only two between their tables — are one proposal, named as the data object
-  names it and counted as the service counts it. Each relation is proposed on its own, so two tables can
+  diagram; *Diagram → Show N dismissed proposals again* brings them back, as one step `⌘Z` takes back. The
+  models state two kinds. A database service's relation (`object-relation`, `list-relation`) is no column of
+  its table: Design keeps it in a join table of two columns, one holding the owning row's lookup id and the
+  other the referenced row's, and the runtime joins through it. When a changelog creates the join table,
+  that is two proposals from it, over exactly those columns — to the owning table (`0..1:1`, or `0..n:1` for
+  a list) and to the table it refers to (`0..n:1`) — and when none does, one between the two tables,
+  without columns (`0..n:0..1`, or `0..n:0..n` for a list). The table referred to is the one behind the
+  service the relation names, else — as the runtime reads it — behind the data object that the field of
+  the same name refers to; the column joined is the service's lookup id, else the table's one-column
+  primary key. A data object field that refers to another data object is that relation when its service
+  maps the field as one, and names it as the data object does; otherwise it is a proposal of its own
+  between the two tables, its one-to-one `0..n:0..1` (a field that holds one object, which the schema does
+  not make unique) and its one-to-many `1:0..n`. Each relation is proposed on its own, so two tables can
   have several; a relation you draw accounts for one of them — the one over its columns, else the first left
   — and the others stay proposed.
+- **Related in the models.** A table's panel, and its **(i)** in the list, name the tables the models
+  relate it to — through a join table, the table beyond it — whether or not they are on the canvas, and say
+  whether each relation is proposed, drawn or dismissed. **add** puts what is missing beside the table, the
+  dashed proposals between them (**add all** takes every one, and one `⌘Z` takes them back); **show again**
+  brings a dismissed proposal back.
 
 **Present** hides the header, the list and the toolbar, goes full screen where the browser allows it and
 fits the diagram to the room; `Esc` comes back.
@@ -179,7 +193,11 @@ one machine, though, so two more ways out:
 - **Diagrams in the project.** Commit that file anywhere in the project (outside `build/`, `target/`,
   `node_modules/` and the like) and every ER page generated for the project carries it: the page opens on
   it, listed with *— project* after its name, without an import. Changes you make stay in your browser
-  (*changed here*) until you export the file again and commit it; *Revert* drops them.
+  (*changed here*) until you export the file again and commit it; *Revert* drops them. Undone back to the
+  file, the diagram follows the file again, and so it does once the file holds what you exported — committed
+  and the page generated again. One you changed here before the file itself changed — a
+  teammate's commit — stays as you left it and says so (*… has changed in the project since*): exported as
+  it is, it would write over their change, and *Revert* shows it.
 
 A diagram refers to tables by name and keeps a snapshot of their columns only as a fallback, so it follows
 the schema: a column the changelogs dropped disappears from its card, a new one joins at the end, and a
@@ -199,12 +217,12 @@ The file is plain JSON:
   ],
   "tables": [
     {"table": "ord_order", "alias": "Order", "x": 40, "y": 40, "color": "#e8590c", "expanded": false,
-     "order": ["id_", "order_no_", "customer_id_"],
+     "order": ["id_", "order_no_", "total_"],
      "columns": [{"name": "id_", "type": "VARCHAR(64)", "pk": true}, {"name": "order_no_", "type": "VARCHAR(64)"}]},
     {"table": "CUSTOMER", "db": "crm", "alias": "", "x": 760, "y": 40, "color": "", "expanded": false, "order": [], "columns": []}
   ],
   "relations": [
-    {"id": "r1", "from": "ord_order", "to": "cust_customer", "fromColumn": "customer_id_", "toColumn": "id_",
+    {"id": "r1", "from": "ord_order", "to": "cust_customer", "fromColumn": "", "toColumn": "",
      "cardinality": "0..n:1", "label": "placed by"},
     {"id": "r2", "from": "cust_customer", "to": "CUSTOMER", "toDb": "crm", "fromColumn": "", "toColumn": "ID",
      "cardinality": "0..1:1", "label": "kept in"}
