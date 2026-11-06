@@ -8,6 +8,9 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
 /**
@@ -72,6 +75,31 @@ class WaiverWriterParityTest {
             tmp.delete()
         }
         assertEquals("the two writers disagree — see the KDoc on Waivers.serialize", expected, out)
+    }
+
+    /**
+     * The day a waiver is stamped with and expires on is the *local* one on both sides: :core reads
+     * LocalDate.now() in the system zone, and the page used to read the UTC day — so for hours every day
+     * a rule had expired on the page while the gate still honoured it. Each instant here sits on a
+     * different calendar day in UTC than in the zone it is read in, which is exactly the window that broke.
+     */
+    @Test
+    fun theBrowserReadsTheSameCalendarDayAsCore() {
+        val node = nodeOrSkip()
+        val script = File(GoldenFiles.repoRoot, "scripts/waiver-selftest.mjs")
+        listOf(
+            "America/New_York" to "2026-11-07T01:30:00Z",   // still the 6th in the evening there
+            "Asia/Tokyo" to "2026-11-06T16:30:00Z",         // already the 7th after midnight there
+            "Europe/Zurich" to "2026-11-06T23:30:00Z",
+        ).forEach { (tz, instant) ->
+            val pb = ProcessBuilder(node, script.path, "--day", instant).redirectErrorStream(true)
+            pb.environment()["TZ"] = tz
+            val p = pb.start()
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+            assertEquals("waiver-selftest.mjs --day failed:\n$out", 0, p.waitFor())
+            assertEquals("the page's day for $instant in $tz",
+                LocalDate.ofInstant(Instant.parse(instant), ZoneId.of(tz)).toString(), out)
+        }
     }
 
     private fun nodeOrSkip(): String {

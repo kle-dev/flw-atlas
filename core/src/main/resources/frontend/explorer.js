@@ -833,7 +833,7 @@ function indexFindings(){
   FINDS.forEach(f=>{ const k=f.node||f.file; if(!k) return;
     if(!FIND_BY_NODE.has(k)) FIND_BY_NODE.set(k,[]); FIND_BY_NODE.get(k).push(f); });
 }
-const todayIso=()=>new Date().toISOString().slice(0,10);
+const todayIso=()=>waiverDay(new Date());
 /** Expired the day *after* `until`, as :core reads it: the day itself is still covered. */
 const waiverExpired=r=>!!(r&&r.until&&/^\d{4}-\d{2}-\d{2}$/.test(r.until)&&todayIso()>r.until);
 /** The rule covering a finding, or null. The one place that decides "accepted" — and it reads the
@@ -2103,10 +2103,13 @@ function waiverDrop(rule){
   waiverSetLocal(loc); waiverChanged();
 }
 /** Everything in the diff is in the file now. The decisions stay applied on the page until it is
- *  regenerated, which is when reconcile() finds them in DATA.waivers and lets the diff go. */
+ *  regenerated, which is when reconcile() finds them in DATA.waivers and lets the diff go. Each entry
+ *  remembers when it was saved, so a reload of this same page — which cannot carry the file yet — can
+ *  tell itself apart from a regenerated one. */
 function waiverMarkSaved(){
-  const loc=waiverLocal();
-  loc.add.forEach(r=>{ r.saved=true; }); loc.remove.forEach(x=>{ x.saved=true; });
+  const loc=waiverLocal(), now=new Date().toISOString();
+  const mark=x=>{ if(!x.saved){ x.saved=true; x.savedAt=now; } };
+  loc.add.forEach(mark); loc.remove.forEach(mark);
   waiverSetLocal(loc); _wvCache=null; findingsChanged();
 }
 /** Throw the unsaved decisions away — the second click of a two-step button. */
@@ -2116,14 +2119,19 @@ function waiverDiscard(){
   waiverSetLocal(loc); waiverChanged();
 }
 /** At boot: a local addition the file now carries, or a local removal of a rule the file no longer has,
- *  is a diff that has landed — after a regeneration the bar empties itself. A saved entry the file
- *  contradicts was reverted by hand, and the file wins. */
+ *  is a diff that has landed — after a regeneration the bar empties itself. A saved entry the file does
+ *  not reflect yet is kept while this page was generated before the save: a reload before regenerating,
+ *  which used to drop the decision from the page and from the next Export. Once a page generated after
+ *  the save still contradicts it, the file was reverted by hand, and the file wins. */
 function waiverReconcile(){
   const loc=waiverLocal(), file=new Map();
   (((DATA.waivers||{}).rules)||[]).forEach(r=>file.set(waiverId(r), r));
   const same=(a,b)=>!!b && (a.reason||'')===(b.reason||'') && (a.by||'')===(b.by||'') && (a.until||'')===(b.until||'');
-  const add=loc.add.filter(r=>{ const f=file.get(waiverId(r)); return r.saved ? false : !same(r,f); });
-  const remove=loc.remove.filter(x=>x.saved ? false : file.has(x.id));
+  // DATA.generatedAt carries microseconds; Date.parse reads it (to the millisecond), a string compare would not
+  const gen=Date.parse(DATA.generatedAt||'');
+  const predates=x=>!!x.savedAt && !isNaN(gen) && Date.parse(x.savedAt)>gen;
+  const add=loc.add.filter(r=>!same(r, file.get(waiverId(r))) && (!r.saved || predates(r)));
+  const remove=loc.remove.filter(x=>file.has(x.id) && (!x.saved || predates(x)));
   if(add.length!==loc.add.length||remove.length!==loc.remove.length){ loc.add=add; loc.remove=remove; waiverSetLocal(loc); _wvCache=null; }
 }
 /** A decision changed: the counts follow, the sidebar badge follows, the page re-renders, and the
@@ -2174,6 +2182,13 @@ function waiverSerialize(rules, notes, atlasVersion, createdWith){
   });
   return JSON.stringify({version:1, createdWith:createdWith||atlasVersion||'', updatedWith:atlasVersion||'',
     waivers, notes:ns}, null, 2)+'\n';
+}
+// The calendar day a waiver's `at` and `until` mean: the local one, as :core's LocalDate.now() reads it.
+// toISOString() gives the UTC day, which for hours every evening (in the Americas) or every morning (in
+// Europe and Asia) is not the reader's: a rule expired on the page while the gate still honoured it, the
+// form refused tomorrow as an `until`, and a decision taken after midnight was stamped with yesterday.
+function waiverDay(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 /*__WAIVER_CORE_END__*/
 function waiverFileText(){

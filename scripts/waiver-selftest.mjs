@@ -10,9 +10,14 @@
  * WaiverWriterParityTest can compare the bytes with the Kotlin writer's.
  *
  * Usage:  node scripts/waiver-selftest.mjs <input.json>
+ *         node scripts/waiver-selftest.mjs --day <ISO instant>
  *   input.json = {atlasVersion, createdWith?, rules: [{check, node, element?, subject?, reason, by?, at?, until?}],
  *                 notes: [{node, check?, element?, subject?, text, importance?, by?, at?}]}
  * Without an argument a small built-in set is written, for a look by eye.
+ *
+ * --day prints the calendar day the page gives that instant (waiverDay, from the same block) in the zone
+ * the process runs in — the day a waiver's `at` is stamped with and its `until` is held to — so the parity
+ * test can compare it with LocalDate.ofInstant under a TZ of its choosing.
  */
 import fs from 'fs';
 import path from 'path';
@@ -29,7 +34,14 @@ if (a < 0 || b < 0 || b < a) {
     'The writer must stay wrapped in the __WAIVER_CORE_START__ … __WAIVER_CORE_END__ sentinels so it can be tested outside the browser.');
   process.exit(2);
 }
-const { waiverSerialize } = new Function(`"use strict";${source.slice(a + START.length, b)};return { waiverSerialize };`)();
+const { waiverSerialize, waiverDay } = new Function(`"use strict";${source.slice(a + START.length, b)};return { waiverSerialize, waiverDay };`)();
+
+if (process.argv[2] === '--day') {
+  const at = new Date(process.argv[3]);
+  if (isNaN(at)) { console.error(`waiver-selftest: --day needs an ISO instant, got ${process.argv[3]}`); process.exit(2); }
+  process.stdout.write(waiverDay(at));
+  process.exit(0);
+}
 
 const FIXTURE = {
   atlasVersion: '0.0.0', createdWith: '0.0.0',

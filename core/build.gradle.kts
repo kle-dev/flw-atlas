@@ -54,8 +54,8 @@ tasks.test {
         rootProject.fileTree("site/flowable-demo"),
         // PluginIconsSyncTest: the generated icon set must match TYPE_ICONS / --c-* (scripts/plugin-icons.mjs).
         rootProject.fileTree("idea-plugin/src/main/resources/icons"),
-        // WaiverWriterParityTest runs this script straight off the repo; explorer.js, which it reads, is
-        // a main resource and already an input.
+        // WaiverWriterParityTest runs the explorer's waiver block through this script straight off the
+        // repo; explorer.js, which it reads, is a main resource and already an input.
         rootProject.file("scripts/waiver-selftest.mjs"),
     ).withPropertyName("syncedRepoFiles").optional()
 }

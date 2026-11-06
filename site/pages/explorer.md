@@ -584,11 +584,12 @@ where the ⌖ button puts the element on the diagram — carries **accept…**; 
 accepting does, and the form repeats it in one line beside its buttons. It opens a form on the row:
 the reason (required — it is the only part of a waiver a reviewer can review, and an empty one is
 refused with a sentence, not a red border), an optional **until** date after which the finding comes
-back, and **by**, prefilled with the project's git identity inside the IDE. A finding that names an
-element or a subject is accepted for **this finding only** by default; the alternative covers every
-finding of that check on the model. An accepted row stays where it was, muted, with the reason, author
-and expiry beside the message and **edit** / **restore** in place of the button; the block folds its
-accepted rows under *N accepted* and keeps counting only the open ones.
+back — a day on your local calendar, as the CLI and the gate read it — and **by**, prefilled with the
+project's git identity inside the IDE. A finding that names an element or a subject is accepted for
+**this finding only** by default; the alternative covers every finding of that check on the model. An
+accepted row stays where it was, muted, with the reason, author and expiry beside the message and
+**edit** / **restore** in place of the button; the block folds its accepted rows under *N accepted* and
+keeps counting only the open ones.
 
 Nothing is written to disk by itself. The page keeps your decisions in the browser as a diff over the
 [`waivers.json`](../checks/#accepting-a-finding) it was generated from, and a bar under the top bar
@@ -609,9 +610,10 @@ Inside the IDE, *Save to waivers.json* merges rather than overwrites: a rule or 
 this page was generated — from a colleague, the CLI, a text editor — is kept, while a rule the page saw and
 restored is gone. The file is written as UTF-8, and an open, edited `waivers.json` is saved first.
 
-Until the page is regenerated the decisions stay applied here — the counts, the health rows and the
-sidebar badge move with them — while `summary.md`, `graph.json` and the gate still show the last run.
-After a regeneration the diff finds itself in the file and empties.
+Until the page is regenerated the decisions stay applied here, across a reload too — the counts, the
+health rows and the sidebar badge move with them, and a second export still carries the first — while
+`summary.md`, `graph.json` and the gate still show the last run. After a regeneration the diff finds
+itself in the file and empties.
 
 ### Deliberately accepted
 

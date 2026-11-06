@@ -1559,6 +1559,23 @@ const probe = `<script>
     location.hash=enc(f.node);
   });
   steps.push(()=>{
+    // An exported decision survives a reload of the page it was exported from — that page predates the
+    // file, so it cannot carry the rule yet — and goes once a page generated after the save boots.
+    if(wvFi==null) return;
+    const f=DATA.findings[wvFi], gen=Date.parse(DATA.generatedAt);
+    const saved=dt=>JSON.stringify({add:[{check:f.check, node:f.node||f.file, reason:'kept across a reload', saved:true,
+      savedAt:new Date(gen+dt).toISOString()}], remove:[]});
+    localStorage.setItem(WAIVER_KEY, saved(60000)); _wvCache=null;
+    waiverReconcile(); _wvCache=null; findingsChanged(); renderWaiverBar();
+    ok('a decision saved after this page was generated survives a reload', waiverLocal().add.length===1 && !!waiverFor(FINDS[wvFi]));
+    ok('and the bar still asks for the regeneration', !document.getElementById('wvbar').hidden && /1 decision saved/.test(document.getElementById('wvbar').textContent||''));
+    ok('and the next export still carries it', /kept across a reload/.test(waiverFileText()));
+    localStorage.setItem(WAIVER_KEY, saved(-60000)); _wvCache=null;
+    waiverReconcile(); _wvCache=null; findingsChanged(); renderWaiverBar();
+    ok('a decision saved before this page was generated is the file’s to keep', waiverLocal().add.length===0 && !waiverFor(FINDS[wvFi]));
+    localStorage.removeItem(WAIVER_KEY); _wvCache=null; findingsChanged(); renderWaiverBar();
+  });
+  steps.push(()=>{
     // A model that carries findings says so wherever it is listed: the reference tree and the browse list.
     location.hash='/tree';
   });
