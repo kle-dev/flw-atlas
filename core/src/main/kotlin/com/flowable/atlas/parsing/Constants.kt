@@ -187,7 +187,9 @@ object Constants {
      *  model's expression — a Spring property the model reads. The quote may be JSON-escaped. */
     val PROPERTY_READ_RE = Regex("""\b(?:environment|propertyConfigurationService)\s*\.\s*getProperty\(\s*\\?["']([A-Za-z0-9_.\-\[\]]+)\\?["']""")
     val METHOD_CALL_FULL_RE = Regex("(?<![\\w.\$])([A-Za-z_][\\w]*)\\s*\\.\\s*([A-Za-z_][\\w]*)\\s*\\(")
-    val DELEGATE_CLASS_RE = Regex("(?:flowable|activiti):class=\"([^\"]+)\"")
+    // The literal first and the namespace as a lookbehind: the same matches, but searched with Boyer-Moore
+    // over every model's raw text instead of tried at every position (see VarHarvest).
+    val DELEGATE_CLASS_RE = Regex(":class(?<=(?:flowable|activiti):class)=\"([^\"]+)\"")
 
     private val NAMED_ENTITIES = mapOf(
         "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ",

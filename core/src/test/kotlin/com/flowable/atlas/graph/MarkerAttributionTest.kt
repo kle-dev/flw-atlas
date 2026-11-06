@@ -2,6 +2,7 @@ package com.flowable.atlas.graph
 
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -39,6 +40,10 @@ class MarkerAttributionTest {
             val dz = ByteArrayOutputStream()
             ZipOutputStream(dz).use { z -> z.putNextEntry(ZipEntry("form-models/DEMO-F001.json")); z.write(design.toByteArray()); z.closeEntry() }
             File(dir, "DEMO-design.zip").writeBytes(dz.toByteArray())
+            // the marker words inside other words, and a model with none at all
+            File(dir, "words.bpmn").writeText(
+                """<definitions><process id="words"><documentation>TODOS from the HACKATHON, xFIXME</documentation></process></definitions>""")
+            File(dir, "clean.bpmn").writeText("""<definitions><process id="clean"><userTask id="c"/></process></definitions>""")
             result = Atlas.extract(dir)
         }
 
@@ -66,6 +71,13 @@ class MarkerAttributionTest {
         val f = inForm.single()
         assertEquals("text3", f["element"])
         assertEquals("TODO in the label: \"Current Pod (TODO)\"", f["message"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aMarkerIsAWholeWordAndAModelWithoutOneHasNone() {
+        val files = (result["markers"] as List<Map<String, Any?>>).map { it["file"] }
+        assertTrue(files.toString(), "words.bpmn" !in files && "clean.bpmn" !in files)
     }
 
     @Test

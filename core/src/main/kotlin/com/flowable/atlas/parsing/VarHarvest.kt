@@ -9,10 +9,18 @@ import com.flowable.atlas.graph.Ctx
  */
 object VarHarvest {
 
+    // The attribute patterns below start with a literal and keep their word boundary as a lookbehind
+    // *after* it (`elementVariable(?<=\belementVariable)=`) rather than in front (`\belementVariable=`).
+    // Same matches, in the same order — but java.util.regex only searches with Boyer-Moore when a pattern
+    // starts with a literal; a leading `\b`, alternation or optional group makes it try every position of
+    // the text. Run over every part of every model, these scans were a third of extraction time. An
+    // alternation stays one pattern (over the literal its alternatives share), not one pattern each:
+    // split up, the names would come out grouped by attribute instead of in document order.
     private val DECL_VAR_RE = Regex(
-        "\\b(?:resultVariableName|elementVariable|counterVariable|collectionVariable|" +
-            "initiatorVariableName|variableName|additionalVariableName)=\"([A-Za-z_]\\w*)\"")
-    private val COLL_RE = Regex("(?:flowable:|activiti:)?collection=\"([A-Za-z_]\\w*)\"")
+        "ariable(?:Name)?(?<=\\b(?:resultVariableName|elementVariable|counterVariable|collectionVariable|" +
+            "initiatorVariableName|variableName|additionalVariableName))=\"([A-Za-z_]\\w*)\"")
+    // a `flowable:`/`activiti:` prefix was optional and never captured, so it never decided a match
+    private val COLL_RE = Regex("collection=\"([A-Za-z_]\\w*)\"")
     private val INOUT_RE = Regex("<(?:flowable:|activiti:)?(?:in|out)\\b([^>]*?)/?>")
     private val VARMAP_RE = Regex("<(?:flowable:|activiti:)?variableMapping\\b([^>]*?)/?>")
     private val OUTVAR_RE = Regex("<(?:flowable:|activiti:)?outputVariableName>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
@@ -21,20 +29,20 @@ object VarHarvest {
     // no structured parser reads, so the raw text is the one place they can be seen.
     private val DESIGN_OUT_RE = Regex("<design:(?:outputvariablename|importreportvariablename)>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
     private val DESIGN_VARMAP_RE = Regex("<design:variablemapping\\b[^>]*\\bvariableName=\"([A-Za-z_]\\w*)\"")
-    private val ADDITIONAL_VAR_RE = Regex("\\badditionalVariableName=\"([A-Za-z_]\\w*)\"")
+    private val ADDITIONAL_VAR_RE = Regex("additionalVariableName(?<=\\badditionalVariableName)=\"([A-Za-z_]\\w*)\"")
     private val NAME_TARGET_RE = Regex("\\b(?:name|target)=\"([A-Za-z_]\\w*)\"")
     private val SRC_TARGET_RE = Regex("\\b(?:source|target)=\"([A-Za-z_]\\w*)\"")
 
     // The directional split of DECL_VAR_RE / COLL_RE, used by `collectDirectedVars`.
     /** The current item of a multi-instance loop — normally consumed inside the loop. */
-    private val MI_ELEMENT_RE = Regex("\\belementVariable=\"([A-Za-z_]\\w*)\"")
+    private val MI_ELEMENT_RE = Regex("elementVariable(?<=\\belementVariable)=\"([A-Za-z_]\\w*)\"")
     /** The loop/repetition index. `elementIndexVariable` is CMMN's name for it and shares nothing but a
      *  suffix with `elementVariable`, so it needs its own alternative rather than a looser pattern. */
     private val MI_COUNTER_RE =
-        Regex("\\b(?:counterVariable|elementIndexVariable)=\"([A-Za-z_]\\w*)\"")
-    private val MI_COLLECTION_RE = Regex("\\bcollectionVariable=\"([A-Za-z_]\\w*)\"")
-    private val INITIATOR_RE = Regex("\\binitiatorVariableName=\"([A-Za-z_]\\w*)\"")
-    private val VARIABLE_NAME_RE = Regex("\\bvariableName=\"([A-Za-z_]\\w*)\"")
+        Regex("Variable(?<=\\b(?:counterVariable|elementIndexVariable))=\"([A-Za-z_]\\w*)\"")
+    private val MI_COLLECTION_RE = Regex("collectionVariable(?<=\\bcollectionVariable)=\"([A-Za-z_]\\w*)\"")
+    private val INITIATOR_RE = Regex("initiatorVariableName(?<=\\binitiatorVariableName)=\"([A-Za-z_]\\w*)\"")
+    private val VARIABLE_NAME_RE = Regex("variableName(?<=\\bvariableName)=\"([A-Za-z_]\\w*)\"")
     /** `<flowable:variableAggregation target="T"><variable source="S" target="field"/></…>` — the engine's
      *  own format (`MultiInstanceExport`), in a BPMN loop and a CMMN repetition rule alike. */
     private val AGGREGATION_RE = Regex(

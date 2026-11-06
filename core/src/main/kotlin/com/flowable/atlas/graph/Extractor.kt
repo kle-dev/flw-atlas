@@ -246,7 +246,11 @@ object Atlas {
             val spans = ModelSpans.ranges(raw, mtype, mkeys)
             val jsonDoc by lazy { if (mtype in XML_MODEL_TYPES) null else runCatching { MiniJson.parse(raw) }.getOrNull() }
             val minified = raw.indexOf('\n').let { it < 0 || it >= raw.trimEnd().length }
-            for (m in MARKER_RE.findAll(raw)) {
+            // The pattern starts with a lookbehind, so it is tried at every position of the file — costly
+            // across a whole project for a handful of matches; a plain search says first whether there is
+            // anything to find.
+            val markers = if (raw.contains("TODO") || raw.contains("FIXME") || raw.contains("HACK")) MARKER_RE.findAll(raw) else emptySequence()
+            for (m in markers) {
                 val before = raw.substring(0, m.range.first)
                 val owner = spans?.firstOrNull { m.range.first in it.second }?.first
                 val rec = linkedMapOf<String, Any?>(
@@ -272,7 +276,9 @@ object Atlas {
             for ((keys, text) in ModelSpans.split(harvest, mtype, mkeys)) {
                 val ks = keys.filterNotNull()
                 if (ks.isEmpty()) continue
-                for (e in Constants.EXPR_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {
+                // one scan of the part for both of its readers below
+                val exprMatches = Constants.EXPR_RE.findAll(text).toList()
+                for (e in exprMatches.map { Constants.htmlUnescape(it.value) }) {
                     for (k in ks) ctx.exprUse.getOrPut(e) { LinkedHashSet() }.add("$nodeType:$k")
                 }
                 for (m in Constants.MUSTACHE_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {
@@ -281,7 +287,7 @@ object Atlas {
                 if (parser != null) {
                     // Make ${bean.method()} references in this model visible (model → bean, labelled).
                     val calls = LinkedHashSet<Pair<String, String>>()
-                    for (em in Constants.EXPR_RE.findAll(text)) {
+                    for (em in exprMatches) {
                         // a call spelled inside a string literal of the expression is text, not a call
                         for (cm in Constants.METHOD_CALL_FULL_RE.findAll(STRING_LITERAL_RE.replace(Constants.htmlUnescape(em.value), " "))) {
                             val b = cm.groupValues[1]
@@ -296,8 +302,9 @@ object Atlas {
                 // `templateService….variableContainer(execution)…process()` renders a template against the
                 // whole scope: every variable the model holds may be read, as by `getVariables()`.
                 if (Constants.WHOLE_CONTAINER_RE.containsMatchIn(text)) for (k in ks) ctx.varScopeReadsAll.add("$nodeType:$k")
-                // A Spring property the model reads: correlated by its key, like a signal by its name.
-                for (pm in Constants.PROPERTY_READ_RE.findAll(Constants.htmlUnescape(text))) {
+                // A Spring property the model reads: correlated by its key, like a signal by its name. Only a
+                // part that calls `getProperty` at all is unescaped and scanned — nearly none does.
+                if (text.contains("getProperty")) for (pm in Constants.PROPERTY_READ_RE.findAll(Constants.htmlUnescape(text))) {
                     for (k in ks) ctx.addRef(k, nodeType, label, "reads-property", "property", pm.groupValues[1])
                 }
             }
