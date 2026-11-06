@@ -43,4 +43,30 @@ class SummaryRendererTest {
         assertTrue(health, health.contains("- · `gw` has 2 conditional outgoing flows and no default — `p · gw`"))
         assertFalse(health, health.contains("never used"))
     }
+
+    /**
+     * A bot the platform ships is referenced by every action that runs it, and it is nobody's code in the
+     * project — on real projects the start-case and start-process bots took hotspot slots ahead of the
+     * project's own models. The fixture's platform bot ranks too low to show that, so it gets the most
+     * references here, and a project model the same number as a control.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aPlatformBotIsNeverAHotspot() {
+        val fixtureDir = File(javaClass.classLoader.getResource("miniproject")!!.toURI())
+        val result = Atlas.extract(fixtureDir)
+        val g = result["graph"] as MutableMap<String, Any?>
+        val nodes = g["nodes"] as List<Map<String, Any?>>
+        val bot = nodes.first { it["type"] == "bot" && (it["data"] as? Map<*, *>)?.get("platform") == true }
+        val own = nodes.first { it["id"] == "form:orderForm" }
+        val edges = (g["edges"] as List<Map<String, Any?>>).toMutableList()
+        repeat(40) { i ->
+            edges.add(linkedMapOf("s" to "action:DEMO-A$i", "t" to bot["id"], "rel" to "bot"))
+            edges.add(linkedMapOf("s" to "action:DEMO-A$i", "t" to own["id"], "rel" to "form"))
+        }
+        g["edges"] = edges
+        val hot = SummaryRenderer.render(result, fixtureDir).substringAfter("## Hotspots").substringBefore("\n## ")
+        assertTrue("the control should rank:\n$hot", hot.contains("`${own["key"]}`"))
+        assertFalse("a platform bot is listed as a hotspot:\n$hot", hot.contains("`${bot["key"]}`"))
+    }
 }

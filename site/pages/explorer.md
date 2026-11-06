@@ -24,7 +24,7 @@ view you are looking at can be copied as a link.
 
 | Hash | View |
 |---|---|
-| *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps and entry points |
+| *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans and bots, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps and entry points |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
 | `#/elements` | [Elements](#elements): the palette entries the project's processes, cases, forms and pages use, grouped as Design's palette groups them — pick one to list every model holding it |
 | `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows under one line saying what it means (*why · what to do* opens beneath it), the accept controls, and what the project already accepted — with its reasons |
@@ -118,10 +118,14 @@ background tab. The categories are:
 - one per **Java role** found — controller, delegate, listener, service, repository, configuration,
   component, bot;
 - one per **variable scope**, plus the variables that travel through an in/out mapping;
-- **external** buckets — API, route, missing, library;
+- **external** buckets — Flowable API, Flowable platform, route, missing, dynamic, library;
 - and the **review lists**: unused forms, unused service operations, unused custom functions, invalid
   expressions, suspect expressions, changelog issues, guessed variables, unused variables, unread inputs,
   script syntax.
+
+However a node is reached — a link, the search, a chip on another page — its own category opens beside
+it with the node selected, an external one's bucket included: a reference to a model the project does
+not have opens in *Missing model refs* and is called a missing model reference, not a library.
 
 Every category carries a small icon for its type in the type's colour, and so does every node wherever it
 appears — the browse list, the chips, the detail tabs, the breadcrumb, the search results. A process, a

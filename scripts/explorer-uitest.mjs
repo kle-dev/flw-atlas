@@ -1220,7 +1220,33 @@ const probe = `<script>
     ok('a platform bean (flwTimeUtils) is a Flowable platform reference', nodeKind(bean)==='Flowable platform');
     ok('and is not listed under External / library', !!libCat && libCat.match(bean)===false && libCat.match(lib)===true);
     ok('a key given as an expression is a dynamic reference, not a library', nodeKind({type:'external', data:{kind:'process', dynamic:true}})==='Dynamic reference');
+    ok('a missing model reference is not a library', nodeKind({type:'external', data:{kind:'process', missingModel:true}})==='Missing model reference');
+    // A bot the platform ships is nobody's code in the project, however many actions run it. The
+    // fixture's ranks too low to show that, so it is given the most references for one computation.
+    const pb=nodes.find(n=>n.type==='bot' && (n.data||{}).platform);
+    ok('the fixture has a platform bot', !!pb);
+    if(pb){
+      const n0=edges.length;
+      for(let i=0;i<40;i++) edges.push({s:'process:orderProcess', t:pb.id, rel:'bot'});
+      try{ computeInsights(); ok('a platform bot is never a hotspot', !INSIGHTS.hotspots.some(h=>h.id===pb.id) && !isHotspotCandidate(pb)); }
+      finally{ edges.length=n0; computeInsights(); }
+    }
+    ok('a project model still is one', isHotspotCandidate(byId.get('form:orderForm')));
+    location.hash='/overview';
   });
+  // --- an external node opens in its own list: no category is called plain "external", so a missing
+  //     reference used to open with an empty list column — or under the list that was open before ---
+  const extOk=label=>{
+    ok(label+': the list is the missing-refs review', state.cat==='external::missing', 'cat='+state.cat);
+    ok(label+': the crumb names it', (document.getElementById('crumbs').textContent||'').indexOf(checkTitle('missingRefs'))>=0,
+       document.getElementById('crumbs').textContent);
+    ok(label+': and the node is selected in it', !!document.querySelector('#list .item.on[data-id="'+cssEsc('external:courierProcess')+'"]'));
+  };
+  steps.push(()=>{ location.hash='#'+encodeURIComponent('external:courierProcess'); });
+  steps.push(()=>{ extOk('opened directly'); location.hash='#'+encodeURIComponent(nodes.find(n=>n.type==='process').id); });
+  steps.push(()=>{ location.hash='#'+encodeURIComponent('external:courierProcess'); });
+  steps.push(()=>{ extOk('opened from a process'); location.hash='#'+encodeURIComponent('external:notifierBean'); });
+  steps.push(()=>{ ok('a library reference opens in the library list', state.cat==='external::lib', 'cat='+state.cat); });
 
   // --- sidebar groups fold and remember ---
   steps.push(()=>{

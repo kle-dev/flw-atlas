@@ -18,6 +18,9 @@ object SummaryRenderer {
     /** Node types that gather references without being anyone's artifact — see the hotspot list. */
     private val HOTSPOT_EXCLUDED = setOf("group", "external", "securityPolicy")
 
+    /** Shipped by the platform, not written by the project — a bot key no project class implements. */
+    private fun isPlatformNode(n: Map<String, Any?>) = (n["data"] as? Map<*, *>)?.get("platform") == true
+
     /**
      * @param siblings what is written beside this file: every pointer below names only those, and says
      *   how to produce the rest otherwise.
@@ -204,9 +207,10 @@ object SummaryRenderer {
             .map { it.removePrefix("java:") }.toSet()
         // Hotspots are the project's own central artifacts. A platform bean, a URL or a security policy
         // draws a reference from every model that uses it and would take the whole list — on one real
-        // project the top ten were `initVariablesService`, two IDM URLs and `flwTimeUtils`.
+        // project the top ten were `initVariablesService`, two IDM URLs and `flwTimeUtils`. A bot the
+        // platform ships (`data.platform`) is not the project's code either, so it goes too.
         val hot = indeg.entries
-            .filter { val n = byId[it.key]; n != null && n["type"] !in HOTSPOT_EXCLUDED }
+            .filter { val n = byId[it.key]; n != null && n["type"] !in HOTSPOT_EXCLUDED && !isPlatformNode(n) }
             .filterNot { e ->
                 e.key.startsWith("method:") &&
                     hotJavaClasses.any { e.key.removePrefix("method:").startsWith("$it#") }

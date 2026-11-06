@@ -662,10 +662,21 @@ const nodeColor = n => (n && n.type==='external')
 // expression names no one thing at all.
 const isPlatformRef = d => !!(d && d.platform && !d.flowableApi && !d.route && !d.missingModel);
 const isDynamicRef = d => !!(d && d.dynamic && !d.platform && !d.flowableApi && !d.route && !d.missingModel);
+/** The one external::* list an external node belongs to. No category is called plain "external", so the
+ *  type alone found none: a missing reference opened with an empty list column, or under whatever list was
+ *  open before ("Processes"). nodeKind names the node from the same answer, so its label and its list
+ *  cannot disagree. */
+const externalCatId = d => d.flowableApi?'external::api':d.route?'external::route':d.missingModel?'external::missing'
+  :isPlatformRef(d)?'external::platform':isDynamicRef(d)?'external::dynamic':'external::lib';
+// A reference to a model the project does not have is a finding, not a library: it was labelled
+// "External / library" above a fact that said "Missing model reference" and beside a sidebar that lists it
+// under the check.
+const EXTERNAL_KIND = {'external::api':'Flowable API', 'external::route':'Navigation route',
+  'external::missing':'Missing model reference', 'external::platform':'Flowable platform',
+  'external::dynamic':'Dynamic reference', 'external::lib':'External / library'};
 const nodeKind = n => (n.type!=='external')
   ? (TM[n.type]?TM[n.type][0]:n.type)
-  : (n.data.flowableApi?'Flowable API':n.data.route?'Navigation route':isPlatformRef(n.data)?'Flowable platform'
-     :isDynamicRef(n.data)?'Dynamic reference':'External / library');
+  : EXTERNAL_KIND[externalCatId(n.data||{})];
 
 // adjacency — entries carry the edge's suspect/dynamic flags so chips, relation lists and the
 // ego graph can mark uncertain links; rebuilt when the uncertain-links toggle flips.
@@ -943,6 +954,12 @@ function findingsChanged(){
 
 // ---------- insights (dashboard fuel) — one edge pass + one node pass at boot ----------
 let INSIGHTS = null;
+// The project's own central artifacts: a platform bean, a URL or a security policy is referenced by
+// every model that uses it and would take the whole list (the summary excludes the same). A bot the
+// platform ships (data.platform — a bot key no project class implements) is not the project's code
+// either: the start-case and start-process bots took hotspot slots ahead of its own models.
+const HOTSPOT_EXCLUDED = new Set(['external','securityPolicy','group']);
+const isHotspotCandidate = n => !!n && !HOTSPOT_EXCLUDED.has(n.type) && !(n.data && n.data.platform);
 function computeInsights(){
   const indeg = new Map(), outdeg = new Map(), containsByApp = new Map(), openAppByApp = new Map(), entryPoints = [];
   edges.forEach(e=>{
@@ -956,10 +973,7 @@ function computeInsights(){
     }
     if(byId.get(e.t)){ indeg.set(e.t,(indeg.get(e.t)||0)+1); outdeg.set(e.s,(outdeg.get(e.s)||0)+1); }
   });
-  // The project's own central artifacts: a platform bean, a URL or a security policy is referenced by
-  // every model that uses it and would take the whole list (the summary excludes the same types).
-  const HOTSPOT_EXCLUDED = new Set(['external','securityPolicy','group']);
-  const hotspots = [...indeg.entries()].filter(x=>x[1]>0 && byId.get(x[0]) && !HOTSPOT_EXCLUDED.has(byId.get(x[0]).type))
+  const hotspots = [...indeg.entries()].filter(x=>x[1]>0 && isHotspotCandidate(byId.get(x[0])))
     .sort((a,b)=> b[1]-a[1] || byId.get(a[0]).label.localeCompare(byId.get(b[0]).label))
     .slice(0,10).map(x=>({id:x[0], count:x[1]}));
   // Denominators for the dashboard ("3 of 16 services have schema gaps"). The numerators are the
@@ -7853,6 +7867,8 @@ function applySelection(id, ctx){
       cat=CATS.find(c=>c.id==='java::'+r);
     } else if(n.type==='variable'){
       cat=CATS.find(c=>c.id==='variable::'+(n.data.scopes||[])[0]);
+    } else if(n.type==='external'){
+      cat=CATS.find(c=>c.id===externalCatId(n.data||{}));
     }
     cat=cat||CATS.find(c=>c.id===n.type);
     // A filter typed in one category has no business in the next — following a chip out of a
