@@ -98,6 +98,10 @@ being an empty shell registered by key.
 A UTF-8 byte-order mark at the start of a JSON model is not a parse failure; the model is read like any
 other.
 
+An XML model or a Liquibase changelog that is not well-formed is reported with the line the XML breaks
+on, so the explorer and the IDE open the file there, and `-v` prints it as `path:line`. The XML
+parser's own `[Fatal Error]` lines are never printed, so under `-q` the run says nothing.
+
 A **key shared by two model types** is not one of them. A case and its start form both called
 `DRA-C001`, a data object and the service Design generated for it — this is common and legal. Both
 models are read completely; a reference that states its type (a `formKey`, a `calledElement`) reaches

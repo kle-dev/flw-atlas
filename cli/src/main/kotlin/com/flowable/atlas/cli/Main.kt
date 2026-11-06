@@ -237,7 +237,10 @@ fun run(args: Array<String>): Int {
     val diagnosticLines: List<String> = if (verbose > 0) {
         (result["diagnostics"] as? List<*>).orEmpty().mapNotNull { d ->
             // a shared key is not counted, so it is not listed either
-            (d as? Map<*, *>)?.takeIf { it["kind"] != "conflict" }?.let { "  ${it["kind"]} ${it["path"]}: ${it["message"]}" }
+            // `path:line`, the form a terminal and an editor open at the spot
+            (d as? Map<*, *>)?.takeIf { it["kind"] != "conflict" }?.let {
+                "  ${it["kind"]} ${it["path"]}${it["line"]?.let { l -> ":$l" } ?: ""}: ${it["message"]}"
+            }
         }
     } else emptyList()
 

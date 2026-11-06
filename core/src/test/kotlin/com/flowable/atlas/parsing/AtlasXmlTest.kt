@@ -2,7 +2,9 @@ package com.flowable.atlas.parsing
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.xml.sax.SAXParseException
 
 /**
  * [AtlasXml.El.text] is ElementTree's `.text`: everything before the first child element. The DOM
@@ -54,5 +56,33 @@ class AtlasXmlTest {
         """.trimIndent()
         val flow = AtlasXml.parse(bpmn.toByteArray()).iter("sequenceFlow").single()
         assertEquals("\${amount > 100}", flow.textOfDescendant("conditionExpression"))
+    }
+
+    /**
+     * Malformed XML throws, and prints nothing: the JDK's default error handler wrote `[Fatal Error] :2:3: …`
+     * to stderr even under `-q`. A fresh thread gets a fresh builder, whose default handler would capture the
+     * swapped stderr; the second parse proves that the builder's reset() did not drop the handler again.
+     */
+    @Test
+    fun malformedXmlThrowsWithItsLineAndPrintsNothing() {
+        val broken = "<definitions><process id=\"DEMO-P1\"><startEvent id=\"s\">\n</definitions>".toByteArray()
+        val lines = ArrayList<Int>()
+        val buf = java.io.ByteArrayOutputStream()
+        val prev = System.err
+        System.setErr(java.io.PrintStream(buf, true, "UTF-8"))
+        try {
+            val t = Thread {
+                repeat(2) {
+                    try { AtlasXml.parse(broken) } catch (e: SAXParseException) { lines.add(e.lineNumber) }
+                }
+            }
+            t.start(); t.join()
+        } finally {
+            System.setErr(prev)
+        }
+        assertEquals(listOf(2, 2), lines)
+        assertTrue("stderr: " + buf.toString("UTF-8"), buf.size() == 0)
+        assertEquals(2, AtlasXml.lineOf(RuntimeException("wrapped", SAXParseException("x", null, null, 2, 3))))
+        assertNull(AtlasXml.lineOf(IllegalStateException("no position")))
     }
 }

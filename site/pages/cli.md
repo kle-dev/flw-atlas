@@ -94,7 +94,7 @@ single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. 
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
 | `--fail-on-stale-waivers` | Make the run **exit 1** when a waiver matched nothing or has expired. Separate from `--fail-on` on purpose: a stale waiver is a problem with your file, not a finding about your project. |
 | `-q`, `--quiet` | Silence the status lines on stderr. |
-| `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it. |
+| `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it — as `path:line` when the parser says where a file broke. |
 | `-h`, `--help` | Print the usage text and exit 0. |
 | `--` | End of options; the next token is the path. |
 

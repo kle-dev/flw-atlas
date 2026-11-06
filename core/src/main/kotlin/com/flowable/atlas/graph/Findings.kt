@@ -266,7 +266,10 @@ object Findings {
                 "label" to (d["path"] ?: "?"),
                 "message" to "${d["kind"]}: ${d["message"]}",
                 "file" to d["path"],
-            ))
+            ).apply {
+                // where the XML broke, so the explorer and the IDE open the file there and not at line 1
+                d["line"]?.let { put("line", it) }
+            })
         }
         // Leftover markers — a TODO is a promise; the report lists the ones nobody kept. Keyed by the
         // first model the file defines, or by the file when it defines none.

@@ -16,8 +16,9 @@ import com.flowable.atlas.parsing.AtlasXml
  */
 object LiquibaseParser {
 
-    /** Thrown for a file that is a changelog but cannot be read as one — malformed XML, most often. */
-    class ParseException(message: String) : Exception(message)
+    /** Thrown for a file that is a changelog but cannot be read as one — malformed XML, most often, and
+     *  then [line] says where it broke. */
+    class ParseException(message: String, val line: Int? = null) : Exception(message)
 
     private val SQL_HEADER = Regex("""^\s*--\s*liquibase\s+formatted\s+sql\b(.*)$""", RegexOption.IGNORE_CASE)
 
@@ -35,7 +36,7 @@ object LiquibaseParser {
         val root = try {
             AtlasXml.parse(text.toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
-            throw ParseException(e.message?.lineSequence()?.firstOrNull() ?: "malformed XML")
+            throw ParseException(e.message?.lineSequence()?.firstOrNull() ?: "malformed XML", AtlasXml.lineOf(e))
         }
         if (root.tag != "databaseChangeLog") return null
         return parseXml(root, text)

@@ -5,6 +5,7 @@ import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.CustomFunctionExtractor
+import com.flowable.atlas.parsing.AtlasXml
 import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.Discovery
 import com.flowable.atlas.parsing.JsonPath
@@ -137,9 +138,11 @@ object Atlas {
         @Suppress("UNCHECKED_CAST")
         fun bucketList(name: String) = result[name] as ArrayList<Any?>
 
-        fun diag(kind: String, path: String, message: String) {
-            bucketList("diagnostics").add(linkedMapOf("kind" to kind, "path" to path, "message" to message))
-            bucketList("warnings").add("$kind $path: $message")
+        /** [line] is where in the file the problem is, when the parser said: the finding opens the file there. */
+        fun diag(kind: String, path: String, message: String, line: Int? = null) {
+            bucketList("diagnostics").add(linkedMapOf<String, Any?>("kind" to kind, "path" to path, "message" to message)
+                .apply { if (line != null) put("line", line) })
+            bucketList("warnings").add("$kind $path${if (line != null) ":$line" else ""}: $message")
         }
 
         // The first file of every (type, key), with its model, and the references each copy made: the same
@@ -231,7 +234,7 @@ object Atlas {
                     }
                 }
             } catch (e: Exception) {
-                diag("parse", label, "($mtype) ${e.message}")
+                diag("parse", label, "($mtype) ${e.message}", AtlasXml.lineOf(e))
             }
 
             // A TODO, FIXME or HACK in a model file is a promise someone made to come back. Kept with its

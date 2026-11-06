@@ -89,7 +89,8 @@ object LiquibaseCoverage {
                 LiquibaseParser.parse(txt, rel)
             } catch (e: LiquibaseParser.ParseException) {
                 // Liquibase stops at a changelog it cannot read, so this is the application failing to start
-                Dyn.mutableListOrNull(result["diagnostics"])?.add(linkedMapOf("kind" to "parse", "path" to rel, "message" to "(liquibase) ${e.message}"))
+                Dyn.mutableListOrNull(result["diagnostics"])?.add(linkedMapOf<String, Any?>("kind" to "parse", "path" to rel, "message" to "(liquibase) ${e.message}")
+                    .apply { e.line?.let { put("line", it) } })
                 null
             }
             if (parsed != null) files.add(LiquibaseReplay.File(rel, parsed))

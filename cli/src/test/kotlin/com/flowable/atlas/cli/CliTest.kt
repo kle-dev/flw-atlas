@@ -309,6 +309,27 @@ class CliTest {
         assertTrue("and says how many are waived", line.contains("waived"))
     }
 
+    /**
+     * A malformed XML model printed the parser's own `[Fatal Error] :2:3: …` to stderr even under `-q`, and
+     * `-v` named the file without the line. Run on a fresh thread: the parser's default handler would capture
+     * the stderr in place when its builder is created, so a builder an earlier test made would hide the noise.
+     */
+    @Test
+    fun aMalformedModelIsQuietUnderQAndNamedWithItsLineUnderV() {
+        val project = tempDir()
+        File(project, "DEMO-P1.bpmn20.xml").writeText(
+            "<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"><process id=\"DEMO-P1\"><startEvent id=\"s\">\n</definitions>\n")
+        val out = File(tempDir(), "s.md")
+        fun onFreshThread(args: Array<String>): String = stderrOf {
+            val t = Thread { run(args) }
+            t.start(); t.join()
+        }
+        assertEquals("", onFreshThread(arrayOf(project.path, "--summary", "-o", out.path, "-q")))
+        val verbose = onFreshThread(arrayOf(project.path, "--summary", "-o", out.path, "-v"))
+        assertTrue(verbose, verbose.contains("parse DEMO-P1.bpmn20.xml:2: (bpmn)"))
+        assertFalse(verbose, verbose.contains("[Fatal Error]"))
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun waiveEvery(out: File, which: (Map<String, Any?>) -> Boolean) {
         val graph = MiniJson.parse(File(out, "miniproject.graph.json").readText()) as Map<String, Any?>
