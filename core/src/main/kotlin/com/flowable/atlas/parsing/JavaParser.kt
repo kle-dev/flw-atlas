@@ -65,6 +65,16 @@ object JavaParser {
     // real variable reads that neither the setVariable/getVariable scan nor the model-side expression
     // harvest can see: the expression lives in .java, and the variable name is not a quoted argument.
     private val JAVA_EL_RE = Regex("""[#$]\{([^}"]*)}""")
+    // A Kotlin raw string has no escapes: a literal `${` in one is spelled `${'$'}{`.
+    private val KOTLIN_RAW_EL_RE = Regex("""\$\{'\$'}\{([^}"]*)}""")
+
+    /** Whether the `$` at [at] is escaped — preceded by an odd number of backslashes (`\${x}` is text,
+     *  `\\${x}` a backslash followed by a template). */
+    private fun escapedDollar(text: String, at: Int): Boolean {
+        var k = at - 1
+        while (k >= 0 && text[k] == '\\') k--
+        return (at - 1 - k) % 2 == 1
+    }
     private val EL_ROOT_RE = Regex("""(?<![\w.$'"])([A-Za-z_]\w*)(?!\s*[(\w:])""")
     private val JAVA_STR_RE = Regex("""\"([^"\\\n]{2,80})\"""")
     private val REQUEST_METHOD_RE = Regex("""RequestMethod\.(\w+)""")
@@ -506,23 +516,129 @@ object JavaParser {
         return out
     }
 
+    /**
+     * Where the body of the type declared up to [from] opens and closes, or null when it has none — a
+     * Kotlin `data class X(val a: Int)` ends at its parameter list, and the next brace belongs to the next
+     * declaration ([until] is where that one starts) or to a top-level function. Only a `{` outside the
+     * constructor's parentheses counts: a Kotlin default value may be a lambda.
+     */
+    private fun typeBody(text: String, from: Int, until: Int): IntRange? {
+        var parens = 0
+        var i = from
+        while (i < until) {
+            val c = text[i]
+            when {
+                c == '(' -> parens++
+                c == ')' -> parens--
+                parens > 0 -> {}
+                c == '{' -> return i..closingBrace(text, i)
+                // a statement or a member, not a header: the type ended without a body
+                c == ';' || c == '=' || c == '"' -> return null
+                c.isJavaIdentifierStart() -> {
+                    var k = i
+                    while (k < until && text[k].isJavaIdentifierPart()) k++
+                    if (text.substring(i, k) in KT_MEMBER_KEYWORDS) return null
+                    i = k - 1
+                }
+            }
+            i++
+        }
+        return null
+    }
+    private val KT_MEMBER_KEYWORDS = setOf("fun", "val", "var")
+
+    /**
+     * The brace depth at each of [positions] (ascending), or -1 for one inside a string or character
+     * literal. Comments are already blanked; literals are stepped over as [blankComments] does, so a `{`
+     * in `'{'` or in a log message does not count.
+     */
+    private fun braceDepths(text: String, positions: List<Int>): IntArray {
+        val out = IntArray(positions.size)
+        val n = text.length
+        var depth = 0
+        var i = 0
+        var p = 0
+        while (p < positions.size && i < n) {
+            if (positions[p] == i) { out[p++] = depth; continue }
+            val c = text[i]
+            val end = when {
+                c == '"' && text.startsWith("\"\"\"", i) -> text.indexOf("\"\"\"", i + 3).let { if (it < 0) n else it + 3 }
+                c == '"' || c == '\'' -> {
+                    var k = i + 1
+                    while (k < n && text[k] != c && text[k] != '\n') k += if (text[k] == '\\') 2 else 1
+                    minOf(k + 1, n)
+                }
+                else -> { if (c == '{') depth++ else if (c == '}') depth--; i + 1 }
+            }
+            while (p < positions.size && positions[p] < end) out[p++] = -1
+            i = end
+        }
+        while (p < positions.size) out[p++] = depth
+        return out
+    }
+
     fun parseJava(rawText: String, ffile: String): Map<String, Any?> {
         val text = blankComments(rawText)
         val kotlin = ffile.lowercase().endsWith(".kt")
         fun lineOf(idx: Int): Int = text.substring(0, idx).count { it == '\n' } + 1
 
         val pkg = PKG_RE.find(text)?.groupValues?.get(1) ?: ""
-        val types = TYPE_RE.findAll(text).map { it.groupValues[2] }.toList()
-        val primary = types.firstOrNull() ?: ffile.substringAfterLast('/').substringBeforeLast('.')
+        val typeDecls = TYPE_RE.findAll(text).toList()
+        val types = typeDecls.map { it.groupValues[2] }
+        // Every type the file declares, where, and inside which other one: a nested `@Component` and the
+        // second class of a Kotlin file are beans and `flowable:class` targets like any other, and the file
+        // being one record (named after its primary type) used to make them resolve to that type's header,
+        // or not at all. `nestedIn` is the `$`-joined chain of enclosing types — the binary name Flowable
+        // loads a `flowable:class` by is `pkg.Outer$Inner`.
+        val typeLines = LinkedHashMap<String, Int>()
+        val nestedIn = LinkedHashMap<String, String>()
+        val topLevel = ArrayList<String>()
+        val bodies = arrayOfNulls<IntRange>(typeDecls.size)
+        val chains = arrayOfNulls<String>(typeDecls.size)
+        val depths = braceDepths(text, typeDecls.map { it.range.first })
+        typeDecls.forEachIndexed { i, m ->
+            val at = m.range.first
+            // `sb.append("class Position {\n")` in a generated model's toString is no declaration
+            if (depths[i] < 0) return@forEachIndexed
+            val around = (0 until i).filter { bodies[it]?.let { b -> at in b } == true }
+            // A declaration deeper than the types around it sits in a method, an initializer or a top-level
+            // function: a local class nothing outside can name (and `object instanceof Foo` in a method
+            // body is no type at all). Read as a member, it was an alias for a name that does not exist.
+            if (depths[i] != around.size) return@forEachIndexed
+            bodies[i] = typeBody(text, m.range.last + 1, typeDecls.getOrNull(i + 1)?.range?.first ?: text.length)
+            // the innermost type around it: the one whose body opens last
+            val outer = around.maxByOrNull { bodies[it]!!.first }
+            chains[i] = outer?.let { o -> chains[o]?.let { "$it$${types[o]}" } ?: types[o] }
+            // the first declaration of a name is the one its line and its nesting both describe
+            if (typeLines.putIfAbsent(types[i], lineOf(at)) == null) {
+                val chain = chains[i]
+                if (chain != null) nestedIn[types[i]] = chain else topLevel.add(types[i])
+            }
+        }
 
         val beanNames = LinkedHashSet<String>()
+        // bean name → the type its stereotype annotates, which need not be the file's primary type
+        val beanOwners = LinkedHashMap<String, String>()
         for (m in BEAN_ANN_RE.findAll(text)) {
             val after = ANNOTATION_RE.replace(text.substring(m.range.last + 1, minOf(m.range.last + 1 + 300, text.length)), " ").trimStart()
             // the type it annotates — which need not be the file's first (a nested component)
             val type = TYPE_DECL_START_RE.find(after)?.groupValues?.get(1) ?: continue
-            beanNames.add(BEAN_NAME_ARG_RE.find(m.groupValues[2])?.groupValues?.get(1) ?: decap(type))
+            val name = BEAN_NAME_ARG_RE.find(m.groupValues[2])?.groupValues?.get(1) ?: decap(type)
+            beanNames.add(name)
+            beanOwners.putIfAbsent(name, type)
         }
-        for (m in REPOSITORY_RE.findAll(text)) beanNames.add(decap(m.groupValues[1]))
+        for (m in REPOSITORY_RE.findAll(text)) decap(m.groupValues[1]).let { beanNames.add(it); beanOwners.putIfAbsent(it, m.groupValues[1]) }
+
+        val ctlAnn = CONTROLLER_RE.find(text)
+        val ctlDecl = ctlAnn?.let { TYPE_RE.find(text, it.range.last + 1) }
+        // The file's own type: the one named like the file (Java's rule for a public type, Kotlin's
+        // convention), else the top-level type a stereotype or controller annotation sits on, else the first
+        // top-level one. The first alone made a Kotlin `data class OrderDto` written above the `@Component`
+        // class the file is about the bean's class — and the delegate.
+        val baseName = ffile.substringAfterLast('/').substringAfterLast('!').substringBeforeLast('.')
+        val primary = topLevel.firstOrNull { it == baseName }
+            ?: (beanOwners.values + listOfNotNull(ctlDecl?.groupValues?.get(2))).firstOrNull { it in topLevel }
+            ?: topLevel.firstOrNull() ?: types.firstOrNull() ?: baseName
         // Factory beans: the method after the annotation (other annotations in between skipped), and the
         // type it returns — the bean *is* that type. Without it the bean resolved to the configuration
         // class, which then "declared" every method a model called on the bean (53 phantom methods on the
@@ -567,8 +683,7 @@ object JavaParser {
         // and its handlers are the mappings inside that type's body. Taking the file's first `class ` as the
         // boundary let a data class or an enum before the controller swallow the base mapping, which then
         // served `ANY /base` as a handler of its own while every real handler lost its base.
-        val ctlAnn = CONTROLLER_RE.find(text)
-        val ctlDecl = ctlAnn?.let { TYPE_RE.find(text, it.range.last + 1) }
+        // (`ctlAnn` / `ctlDecl` are found above, with the primary type.)
         if (isController && ctlAnn != null && ctlDecl != null) {
             val consts = stringConstants(rawText)
             val bases = MAPPING_RE.findAll(text.substring(ctlAnn.range.first, ctlDecl.range.first))
@@ -687,22 +802,36 @@ object JavaParser {
         }
         // Names an embedded EL expression reads. `${vars:get(flagReturn)}` names its variable as a bare
         // identifier, not as a quoted argument, so nothing else picks it up.
-        for (m in JAVA_EL_RE.findAll(text)) {
+        fun readEl(body: String, at: Int) {
             // `@Value("${flamingo.mail.from}")` is a property placeholder: `flamingo` is no variable
-            if (Constants.isJavaConfigPlaceholder(m.groupValues[1])) continue
-            // `#{…}` in Java is Spring's SpEL, and anything inside an annotation's arguments is Spring
-            // configuration (`@Value("${timeout}")`) — neither is evaluated against a process scope
-            if (text[m.range.first] == '#' || insideAnnotationArgs(text, m.range.first)) continue
-            for (r in EL_ROOT_RE.findAll(m.groupValues[1])) {
+            if (Constants.isJavaConfigPlaceholder(body)) return
+            // anything inside an annotation's arguments is Spring configuration (`@Value("${timeout}")`),
+            // not evaluated against a process scope
+            if (insideAnnotationArgs(text, at)) return
+            for (r in EL_ROOT_RE.findAll(body)) {
                 val name = r.groupValues[1]
                 if (name !in Constants.FLOWABLE_CONTEXT && name !in Constants.JAVA_LITERALS) varReads.add(name)
             }
         }
+        for (m in JAVA_EL_RE.findAll(text)) {
+            // `#{…}` in Java is Spring's SpEL — not evaluated against a process scope either
+            if (text[m.range.first] == '#') continue
+            // In Kotlin an unescaped `${…}` is the language's own string template, filled in by the compiler
+            // and never seen by Flowable: `"Order total ${total}"` read a Kotlin local as a process variable,
+            // and a template naming a variable nothing else reads made unusedVars fall silent. A literal
+            // `${` is spelled `\${` in a Kotlin string.
+            if (kotlin && !escapedDollar(text, m.range.first)) continue
+            readEl(m.groupValues[1], m.range.first)
+        }
+        // …and `${'$'}{…}` in a Kotlin raw string, where a backslash escapes nothing
+        if (kotlin) for (m in KOTLIN_RAW_EL_RE.findAll(text)) readEl(m.groupValues[1], m.range.first)
 
         val out = linkedMapOf<String, Any?>(
             "file" to ffile, "package" to pkg, "primary" to primary,
             "fqn" to (if (pkg.isNotEmpty()) "$pkg.$primary" else primary),
-            "types" to types, "beanNames" to beanNames, "interfaces" to interfaces, "roles" to roles,
+            // A list, not the set it is collected in: the record is read as JSON-shaped data downstream, where
+            // a list reader sees a Set as nothing — the overview said `implements []` for every delegate.
+            "types" to types, "beanNames" to beanNames, "interfaces" to interfaces.toList(), "roles" to roles,
             "isController" to isController, "isGlue" to interfaces.any { it in GLUE_INTERFACES },
             "endpoints" to endpoints, "methods" to methods, "deps" to deps, "botKey" to botKey,
             "vars" to (varWrites + varReads + varsUndecided).toSortedSet().toList(),
@@ -723,8 +852,15 @@ object JavaParser {
             "keyedIdents" to keyedIdents,
             "keyedIdentKinds" to keyedIdentKinds,
             "topics" to (TOPIC_CALL_RE.findAll(text) + WORKER_ANN_RE.findAll(text)).map { it.groupValues[1] }.toSortedSet().toList(),
-            "line" to text.indexOf("class ").let { if (it != -1) lineOf(it) else 1 },
+            "line" to (typeLines[primary] ?: text.indexOf("class ").let { if (it != -1) lineOf(it) else 1 }),
         )
+        // The other types the file declares, by line, and the beans whose stereotype sits on one of them —
+        // what lets a reference land on the type it names. Only what differs from the primary type is
+        // carried: the record is part of graph.json, and a one-type file (nearly every Java file) says
+        // nothing new.
+        if (typeLines.keys.any { it != primary }) out["typeLines"] = typeLines
+        if (nestedIn.isNotEmpty()) out["nestedIn"] = nestedIn
+        beanOwners.filterValues { it != primary }.takeIf { it.isNotEmpty() }?.let { out["beanOwners"] = it }
         // bean name → line of its @Bean factory method, so a reference lands on the method, not the class
         if (beanMethods.isNotEmpty()) out["beanMethods"] = beanMethods
         if (beanTypes.isNotEmpty()) out["beanTypes"] = beanTypes

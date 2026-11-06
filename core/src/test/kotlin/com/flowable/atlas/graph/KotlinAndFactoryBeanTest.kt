@@ -107,6 +107,134 @@ class KotlinAndFactoryBeanTest {
     private fun resolvedClass(value: String): Map<String, Any?>? =
         (result["resolvedRefs"] as List<Map<String, Any?>>).firstOrNull { it["kind"] == "class" && it["value"] == value }
 
+    /**
+     * A file declaring more than one type: a Kotlin DTO above the `@Component` the file is about, a second
+     * class named by `flowable:class`, a nested `@Component`. Each reference lands on the type it names —
+     * on the file's node, at that type's declaration — instead of the file's first type or nowhere.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun multiTypeResult(): Map<String, Any?> {
+        val d = Files.createTempDirectory("atlas-multi-type-test").toFile()
+        try {
+            fun put(rel: String, text: String) = File(d, rel).apply { parentFile.mkdirs(); writeText(text.trimIndent()) }
+            put("src/main/kotlin/com/example/OrderDelegate.kt", """
+                package com.example
+
+                data class OrderDto(val id: String, val total: Int)
+
+                @Component("orderDelegate")
+                class OrderDelegate : JavaDelegate {
+                    override fun execute(execution: DelegateExecution) {}
+                }
+            """)
+            put("src/main/kotlin/com/example/Delegates.kt", """
+                package com.example
+
+                @Component("ktBean")
+                class KtBean : JavaDelegate {
+                    override fun execute(execution: DelegateExecution) {}
+                }
+
+                class KtDelegate : JavaDelegate {
+                    override fun execute(execution: DelegateExecution) {}
+                }
+            """)
+            put("src/main/java/com/example/WorkflowConfig.java", """
+                package com.example;
+
+                @Configuration
+                public class WorkflowConfig {
+
+                    @Component("approveDelegate")
+                    public static class ApproveDelegate implements JavaDelegate {
+                        public void execute(DelegateExecution execution) {}
+                    }
+                }
+            """)
+            put("p.bpmn", """
+                <definitions xmlns:flowable="http://flowable.org/bpmn">
+                  <process id="DEMO-multi">
+                    <serviceTask id="a" flowable:delegateExpression="${'$'}{orderDelegate}"/>
+                    <serviceTask id="b" flowable:class="com.example.KtDelegate"/>
+                    <serviceTask id="c" flowable:delegateExpression="${'$'}{approveDelegate}"/>
+                    <serviceTask id="d" flowable:class="com.example.WorkflowConfig${'$'}ApproveDelegate"/>
+                    <serviceTask id="e" flowable:class="com.example.WorkflowConfig.ApproveDelegate"/>
+                  </process>
+                </definitions>
+            """)
+            return Atlas.extract(d)
+        } finally {
+            d.deleteRecursively()
+        }
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aReferenceLandsOnTheTypeItNamesInAMultiTypeFile() {
+        val r = multiTypeResult()
+        val refs = r["resolvedRefs"] as List<Map<String, Any?>>
+        fun ref(kind: String, value: String) = refs.single { it["kind"] == kind && it["value"] == value }
+
+        // the file's own type, not the DTO declared above it
+        assertEquals("com.example.OrderDelegate", ref("bean", "orderDelegate")["targetFqn"])
+        val nodes = (r["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+        assertTrue("no node for the DTO", nodes.none { it["id"] == "java:com.example.OrderDto" })
+
+        // the second class of a Kotlin file resolves, on the file's node, at its own line
+        val kt = ref("class", "com.example.KtDelegate")
+        assertEquals("src/main/kotlin/com/example/Delegates.kt:8 (com.example.KtDelegate)", kt["target"])
+        assertEquals("com.example.KtBean", kt["targetFqn"])
+        assertEquals(null, kt["suspect"])
+
+        // a nested component: its declaration, by its name — and its binary name as a flowable:class
+        assertEquals("src/main/java/com/example/WorkflowConfig.java:7 (com.example.WorkflowConfig.ApproveDelegate)",
+            ref("bean", "approveDelegate")["target"])
+        val nested = ref("class", "com.example.WorkflowConfig\$ApproveDelegate")
+        assertEquals("src/main/java/com/example/WorkflowConfig.java:7 (com.example.WorkflowConfig.ApproveDelegate)", nested["target"])
+        assertEquals("com.example.WorkflowConfig", nested["targetFqn"])
+        assertEquals(null, nested["suspect"])
+        // the source spelling finds the same type, but Class.forName would not load it by that name
+        val dotted = ref("class", "com.example.WorkflowConfig.ApproveDelegate")
+        assertEquals(nested["target"], dotted["target"])
+        assertEquals(true, dotted["suspect"])
+        assertTrue("nothing left unresolved", (r["unresolvedRefs"] as List<*>).isEmpty())
+    }
+
+    /**
+     * A Kotlin string template that happens to name a process variable is the compiler's, not a read of
+     * it: the variable a script task writes and nothing reads stays reported, and the Kotlin parameter in
+     * the other template is no variable at all.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aKotlinStringTemplateReadsNoVariable() {
+        val d = Files.createTempDirectory("atlas-kotlin-template-test").toFile()
+        try {
+            fun put(rel: String, text: String) = File(d, rel).apply { parentFile.mkdirs(); writeText(text.trimIndent()) }
+            put("src/main/kotlin/com/example/Report.kt", """
+                package com.example
+                class Report {
+                    fun line(orderTotal: Int) = "Order total: ${'$'}{orderTotal}"
+                    fun notify(customer: String) = println("Notifying ${'$'}{customer}")
+                }
+            """)
+            put("models/DEMO-P002.bpmn", """
+                <definitions xmlns:flowable="http://flowable.org/bpmn">
+                  <process id="DEMO-P002">
+                    <scriptTask id="s" scriptFormat="groovy"><script>execution.setVariable("orderTotal", 10)</script></scriptTask>
+                  </process>
+                </definitions>
+            """)
+            val r = Atlas.extract(d)
+            val unused = (r["findings"] as List<Map<String, Any?>>).filter { it["check"] == "unusedVars" }.map { it["node"] }
+            assertEquals(listOf("variable:orderTotal"), unused)
+            val nodes = (r["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+            assertTrue("a Kotlin parameter is no variable", nodes.none { it["id"] == "variable:customer" })
+        } finally {
+            d.deleteRecursively()
+        }
+    }
+
     @Test
     fun aQualifiedClassFromAnotherPackageResolvesOnlyAsSuspect() {
         assertEquals(null, resolvedClass("com.acme.DupOne")!!["suspect"])

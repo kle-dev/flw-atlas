@@ -64,7 +64,9 @@ Neither is anything that names another scope than a process or case variable:
   `<#list … as x>` or `<#assign x>` local and a `?built_in`;
 - a bean a script names bare — `demoLookupBean.createTaskQuery()`, Spring Boot's
   `springProcessEngineConfiguration` — when nothing but that mention backs the name;
-- in Java, a Spring `@Value("${…}")` placeholder and any SpEL `#{…}`, and in a channel a SpEL `#{…}`.
+- in Java, a Spring `@Value("${…}")` placeholder and any SpEL `#{…}`, and in a channel a SpEL `#{…}`;
+- in Kotlin, a string template — `"Order total ${total}"` is filled in by the compiler, and only the
+  escaped spelling of an expression (`"\${vars:get(flag)}"`, or `${'$'}{…}` in a raw string) is read.
 
 A name several models use is only the same variable where a flow connects them. The explorer's
 *Also in* and *Read by* columns list those models; the same name in a model nothing connects to is

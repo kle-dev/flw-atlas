@@ -45,6 +45,25 @@ object ReferenceResolver {
     /** A bean ref whose root may as well be a variable: a `${x.method()}` harvest, or an `expression` attribute. */
     private fun isCallRel(rel: String) = rel.startsWith("calls ") || rel.endsWith("-expression")
 
+    /** The line a parsed Java/Kotlin file declares its type [type] on — the file's own line when unknown. */
+    private fun typeLine(jc: Map<String, Any?>, type: String): Any? =
+        (jc["typeLines"] as? Map<*, *>)?.get(type) ?: jc["line"]
+
+    /**
+     * A type a file declares besides its primary one, as a name finds it: the file's record and the type.
+     * [loads] is whether Flowable can load the type by that name — `Class.forName` takes a nested type's
+     * binary name `pkg.Outer$Inner` only, so its source spelling `pkg.Outer.Inner` finds it but would fail
+     * at runtime.
+     */
+    private class TypeAlias(val jc: Map<String, Any?>, val type: String, val loads: Boolean)
+
+    /** [type] as a reader names it: `pkg.Outer.Inner` for a nested type, `pkg.Type` for any other. */
+    private fun typeName(jc: Map<String, Any?>, type: String): String {
+        val pkg = (jc["package"] as? String).orEmpty()
+        val outer = ((jc["nestedIn"] as? Map<*, *>)?.get(type) as? String)?.replace('$', '.')
+        return listOf(pkg, outer.orEmpty(), type).filter { it.isNotEmpty() }.joinToString(".")
+    }
+
     /** Ref kinds that name a Flowable model (mirrors the tuple in the Python `resolve references` step). */
     internal val MODEL_KIND_NAMES = setOf(
         "process", "case", "decision", "form", "page",
@@ -132,6 +151,17 @@ object ReferenceResolver {
         // bean name two classes both claim (`@Component("x")` twice, or a factory method of that name).
         val ambiguousSimple = HashSet<String>()
         val ambiguousBeans = HashSet<String>()
+        // A type a file declares besides its primary one — the second class of a Kotlin file, a nested
+        // `@Component` — by `pkg.T`, or for a nested one by `pkg.Outer$T` (the binary name `flowable:class`
+        // loads) and, as names that find it but would not load, `pkg.Outer.T` and `pkg.T`; and by its simple
+        // name. Kept out of [fqnIndex] on purpose: that index is the set of Java nodes, one per file, and a
+        // reference through an alias lands on its file's node.
+        val typeAlias = HashMap<String, TypeAlias>()
+        val aliasSimple = HashMap<String, TypeAlias>()
+        fun alias(name: String, a: TypeAlias) {
+            val prev = typeAlias[name]
+            if (prev == null || a.loads && !prev.loads) typeAlias[name] = a
+        }
         for (path in javas) {
             val rel = relOf(path)
             // The read is inside the try as well: one unreadable source used to abort the whole run
@@ -147,8 +177,20 @@ object ReferenceResolver {
             val primary = jc["primary"] as String
             val fqn = jc["fqn"] as String
             for (b in jc["beanNames"] as Collection<String>) if (beanIndex.putIfAbsent(b, jc) != null) ambiguousBeans.add(b)
-            if (classIndex.putIfAbsent(primary, jc) != null) ambiguousSimple.add(primary)
+            if (classIndex.putIfAbsent(primary, jc) != null || primary in aliasSimple) ambiguousSimple.add(primary)
             fqnIndex[fqn] = jc
+            val pkg = (jc["package"] as? String).orEmpty().let { if (it.isEmpty()) "" else "$it." }
+            val nestedIn = jc["nestedIn"] as? Map<String, String> ?: emptyMap()
+            for (t in (jc["typeLines"] as? Map<String, Any?>)?.keys.orEmpty()) {
+                if (t == primary) continue
+                val outer = nestedIn[t]
+                if (outer == null) alias("$pkg$t", TypeAlias(jc, t, loads = true))
+                else {
+                    alias("$pkg$outer$$t", TypeAlias(jc, t, loads = true))
+                    for (name in listOf("$pkg${outer.replace('$', '.')}.$t", "$pkg$t")) alias(name, TypeAlias(jc, t, loads = false))
+                }
+                if (aliasSimple.putIfAbsent(t, TypeAlias(jc, t, loads = true)) != null || t in classIndex) ambiguousSimple.add(t)
+            }
             for (ep in jc["endpoints"] as List<Map<String, Any?>>) {
                 val ep2 = LinkedHashMap(ep)
                 ep2["file"] = rel
@@ -403,8 +445,12 @@ object ReferenceResolver {
                     val factoryType = (jc?.get("beanTypes") as? Map<*, *>)?.get(value) as? String
                     val beanType = factoryType?.let { JavaTypes.resolve(it, jc, fqnIndex.keys) }
                     val targetFqn = beanType ?: jc?.get("fqn")
-                    val line = (jc?.get("beanMethods") as? Map<*, *>)?.get(value) ?: jc?.get("line")
-                    target = if (jc != null) "${jc["file"]}:$line ($targetFqn)" else null
+                    // a stereotype on a type other than the file's primary one: its declaration, by its name
+                    val owner = (jc?.get("beanOwners") as? Map<*, *>)?.get(value) as? String
+                    val line = (jc?.get("beanMethods") as? Map<*, *>)?.get(value)
+                        ?: owner?.let { typeLine(jc, it) } ?: jc?.get("line")
+                    val shown = if (owner != null && beanType == null) typeName(jc!!, owner) else targetFqn
+                    target = if (jc != null) "${jc["file"]}:$line ($shown)" else null
                     ref2["target"] = target
                     ref2["targetType"] = "bean"
                     ref2["targetFqn"] = targetFqn
@@ -413,16 +459,28 @@ object ReferenceResolver {
                     if (jc != null && value in ambiguousBeans) ref2["suspect"] = true
                 }
                 kind == "class" -> {
-                    val simple = value.substringAfterLast('.')
-                    val jc = fqnIndex[value] ?: classIndex[simple]
-                    target = if (jc != null) "${jc["file"]}:${jc["line"]}" else null
+                    // the binary name of a nested class is `Outer$Inner`; its simple name is what follows the `$`
+                    val simple = value.substringAfterLast('.').substringAfterLast('$')
+                    val byFqn = fqnIndex[value]
+                    // a type that is not its file's primary one: the reference lands on the file's node, at
+                    // the type's own declaration — by a name of it, else (like a primary) by its simple one
+                    val named = if (byFqn == null) typeAlias[value] else null
+                    val alias = named ?: if (byFqn == null && classIndex[simple] == null) aliasSimple[simple] else null
+                    val exact = byFqn ?: named?.takeIf { it.loads }?.jc
+                    val jc = byFqn ?: named?.jc ?: classIndex[simple] ?: alias?.jc
+                    target = when {
+                        jc == null -> null
+                        alias != null -> "${jc["file"]}:${typeLine(jc, alias.type)} (${typeName(jc, alias.type)})"
+                        else -> "${jc["file"]}:${jc["line"]}"
+                    }
                     ref2["target"] = target
                     ref2["targetType"] = "class"
                     ref2["targetFqn"] = jc?.get("fqn")
-                    if (jc != null && fqnIndex[value] == null && simple in ambiguousSimple) ref2["suspect"] = true
+                    if (jc != null && exact == null && simple in ambiguousSimple) ref2["suspect"] = true
                     // A qualified name that matched only by its simple name names a class in another
-                    // package — `org.flowable….Foo` from a library bound to the project's own `com.acme.Foo`.
-                    if (jc != null && fqnIndex[value] == null && '.' in value) ref2["suspect"] = true
+                    // package — `org.flowable….Foo` from a library bound to the project's own `com.acme.Foo` —
+                    // and a nested type by its source spelling names one Flowable cannot load by that name.
+                    if (jc != null && exact == null && '.' in value) ref2["suspect"] = true
                 }
                 else -> {
                     ref2["target"] = null

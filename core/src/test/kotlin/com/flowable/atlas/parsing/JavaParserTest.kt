@@ -77,7 +77,7 @@ class JavaParserTest {
         assertEquals("ScoreService", jc["primary"])
         assertEquals("com.x.kt.ScoreService", jc["fqn"])
         assertTrue("scoreService" in (jc["beanNames"] as Set<String>))
-        assertEquals(setOf("JavaDelegate", "ExecutionListener"), jc["interfaces"] as Set<String>)
+        assertEquals(listOf("JavaDelegate", "ExecutionListener"), jc["interfaces"])
         assertTrue("delegate" in (jc["roles"] as Set<String>))
         assertTrue((jc["isGlue"] as Boolean))
         assertEquals(listOf("execute", "helper"), (jc["methods"] as List<Map<String, Any?>>).map { it["name"] })
@@ -468,5 +468,121 @@ class JavaParserTest {
         // idempotent: the resolver runs it again once a constant in the path is resolved
         val again = JavaParser.withPathVariables("/a/{id}/b/{part:[0-9]+}", eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"] as List<Map<String, Any?>>)
         assertEquals(eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"], again)
+    }
+
+    /**
+     * A file is one record named after its own type: the one named like the file, not whichever comes
+     * first. A Kotlin `data class` above the `@Component` the file is about made the DTO the bean's class.
+     */
+    @Test
+    fun theFilesOwnTypeIsThePrimaryOneAndTheOthersAreKept() {
+        val src = """package com.example
+
+            data class OrderDto(val id: String, val total: Int)
+
+            @Component("orderDelegate")
+            class OrderDelegate : JavaDelegate {
+                override fun execute(execution: DelegateExecution) {}
+            }"""
+        val jc = JavaParser.parseJava(src, "src/main/kotlin/com/example/OrderDelegate.kt")
+        assertEquals("OrderDelegate", jc["primary"])
+        assertEquals("com.example.OrderDelegate", jc["fqn"])
+        assertEquals(6, jc["line"])
+        assertEquals(mapOf("OrderDto" to 3, "OrderDelegate" to 6), jc["typeLines"])
+        assertEquals("a bodyless data class nests nothing", null, jc["nestedIn"])
+        assertEquals("the owner is the primary type", null, jc["beanOwners"])
+    }
+
+    @Test
+    fun aNestedComponentIsOwnedByItsOwnType() {
+        val src = """package com.example;
+
+            @Configuration
+            public class WorkflowConfig {
+                @Component("approveDelegate")
+                public static class ApproveDelegate implements JavaDelegate {
+                    public void execute(DelegateExecution execution) {}
+                }
+            }"""
+        val jc = JavaParser.parseJava(src, "WorkflowConfig.java")
+        assertEquals("WorkflowConfig", jc["primary"])
+        assertEquals(mapOf("WorkflowConfig" to 4, "ApproveDelegate" to 6), jc["typeLines"])
+        assertEquals(mapOf("ApproveDelegate" to "WorkflowConfig"), jc["nestedIn"])
+        assertEquals(mapOf("approveDelegate" to "ApproveDelegate"), jc["beanOwners"])
+    }
+
+    @Test
+    fun aTypeAfterABodylessClassOrInsideAFunctionIsNotNestedInIt() {
+        val src = """package com.example
+            data class Row(val a: Int = 1, val f: () -> Unit = { })
+            fun helper() { class Local }
+            class Outer { inner class Mid { class Deep } }"""
+        val jc = JavaParser.parseJava(src, "Rows.kt")
+        assertEquals(mapOf("Mid" to "Outer", "Deep" to "Outer\$Mid"), jc["nestedIn"])
+        // a class local to a function is no type anything outside can name
+        assertEquals(listOf("Row", "Outer", "Mid", "Deep"), (jc["typeLines"] as Map<*, *>).keys.toList())
+        // no type is named like the file and none carries a stereotype: the first is the primary
+        assertEquals("Row", jc["primary"])
+    }
+
+    /**
+     * Only a declaration is a type: not `class Position {` in a string (every OpenAPI-generated model's
+     * `toString` has one, which made the model nested in itself), not a class local to a method, and not
+     * `object instanceof Foo`.
+     */
+    @Test
+    fun aClassInAStringOrAMethodBodyIsNoMemberType() {
+        val src = """package com.example;
+
+            public class Position {
+                public static class Lot { }
+                public boolean equals(Object object) {
+                    if (object instanceof Position) { return true; }
+                    class Helper { }
+                    return false;
+                }
+                public String toString() {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("class Position {\n");
+                    char brace = '{';
+                    return sb.toString();
+                }
+                static class After { }
+            }"""
+        val jc = JavaParser.parseJava(src, "Position.java")
+        assertEquals("Position", jc["primary"])
+        assertEquals(mapOf("Position" to 3, "Lot" to 4, "After" to 16), jc["typeLines"])
+        assertEquals(mapOf("Lot" to "Position", "After" to "Position"), jc["nestedIn"])
+    }
+
+    /**
+     * In Kotlin `"…${x}…"` is the compiler's string template, never a Flowable expression: it read Kotlin
+     * locals as process variables. A literal expression is `\${…}` in a string, `${'$'}{…}` in a raw one.
+     */
+    @Test
+    fun aKotlinStringTemplateIsNoExpression() {
+        fun reads(src: String) = JavaParser.parseJava("package com.x\n$src", "N.kt").let { it["varReads"] to it["vars"] }
+        assertEquals(emptyList<String>() to emptyList<String>(),
+            reads("class N { fun f(total: Int) = println(\"Order \${total} for \${customer.name}\") }"))
+        assertEquals(listOf("flagReturn") to listOf("flagReturn"),
+            reads("class N { val el = \"\\\${vars:get(flagReturn)}\" }"))
+        assertEquals(listOf("flag2") to listOf("flag2"),
+            reads("class N { val el = \"\"\"\${'\$'}{vars:get(flag2)}\"\"\" }"))
+        // an escaped backslash before the `$` leaves the template a template
+        assertEquals(emptyList<String>() to emptyList<String>(),
+            reads("class N { fun f(total: Int) = \"a\\\\\${total}\" }"))
+        // Java has no string templates: the same text there is an expression, as before
+        assertEquals(listOf("total"), JavaParser.parseJava(
+            "package com.x;\nclass N { String el = \"Order \${total}\"; }", "N.java")["varReads"])
+    }
+
+    /** The overview reads the record as a list; a Set read as a list was empty — `implements []`. */
+    @Test
+    fun interfacesAreAListInDeclarationOrder() {
+        val jc = JavaParser.parseJava(
+            "package com.x;\npublic class D implements JavaDelegate, Serializable { }", "D.java",
+        )
+        assertTrue(jc["interfaces"] is List<*>)
+        assertEquals(listOf("JavaDelegate", "Serializable"), jc["interfaces"])
     }
 }
