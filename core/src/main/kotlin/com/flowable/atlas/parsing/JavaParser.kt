@@ -409,7 +409,9 @@ object JavaParser {
      * parameter, header or cookie also not with a `defaultValue`, an `Optional`, a Kotlin `T?` or a Kotlin
      * default value — and never an unannotated one, a model attribute or a map that takes them all.
      */
-    private fun handlerParam(raw: String, kotlin: Boolean, consts: Map<String, String>): Map<String, Any?>? {
+    private fun handlerParam(
+        raw: String, kotlin: Boolean, consts: Map<String, String>, secretLiterals: MutableSet<String>,
+    ): Map<String, Any?>? {
         val anns = ArrayList<Pair<String, String?>>()
         val rest = StringBuilder()
         var i = 0
@@ -478,7 +480,13 @@ object JavaParser {
         }
         val rec = linkedMapOf<String, Any?>("name" to (if (source == "body") pname else wire ?: pname), "in" to source, "type" to type)
         if (required) rec["required"] = true
-        default?.let { rec["default"] = it }
+        // A credential the handler falls back to would sit on the endpoint page in plain text — and in the
+        // class's string lists, which is why the masked value is handed back to the caller.
+        default?.let { d ->
+            val shown = SecretScan.redactParamDefault(rec["name"].toString(), source, d)
+            if (shown != d) secretLiterals.add(d)
+            rec["default"] = shown
+        }
         if (implicit) rec["implicit"] = true
         return rec
     }
@@ -679,6 +687,9 @@ object JavaParser {
 
         val isController = CONTROLLER_RE.containsMatchIn(text)
         val endpoints = ArrayList<Map<String, Any?>>()
+        // Literals kept out of the class's string lists: a handler's credential default (see handlerParam)
+        // and, further down, the value of a constant named like a secret.
+        val secretLiterals = HashSet<String>()
         // The controller is the type declared after the annotation, its base mapping sits between the two,
         // and its handlers are the mappings inside that type's body. Taking the file's first `class ` as the
         // boundary let a data class or an enum before the controller swallow the base mapping, which then
@@ -709,7 +720,7 @@ object JavaParser {
                         .firstOrNull { it !in CONTROL_KEYWORDS } ?: "?"
                 // what the handler takes — one signature for all of its paths, each held against its own path;
                 // absent, not empty, when the signature cannot be read, so an empty list is a fact
-                val declared = sig?.let { splitParams(it.second).mapNotNull { p -> handlerParam(p, kotlin, consts) } }
+                val declared = sig?.let { splitParams(it.second).mapNotNull { p -> handlerParam(p, kotlin, consts, secretLiterals) } }
                 for (base in bases) for (path in mappingPaths(args, consts, types)) {
                     val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
                     val ep = linkedMapOf<String, Any?>("http" to http, "path" to full, "handler" to handler,
@@ -826,6 +837,13 @@ object JavaParser {
         // …and `${'$'}{…}` in a Kotlin raw string, where a backslash escapes nothing
         if (kotlin) for (m in KOTLIN_RAW_EL_RE.findAll(text)) readEl(m.groupValues[1], m.range.first)
 
+        // The value of a constant named like a secret (`static final String API_KEY = "…"`) never names a
+        // model, nor does a handler's credential default, so reference resolution loses nothing without them
+        // — and every string literal of a class is part of graph.json, where the key would otherwise sit in
+        // plain text.
+        STRING_CONST_RE.findAll(text)
+            .filter { SecretScan.isSecretKey(it.groupValues[1]) && SecretScan.isLiteral(it.groupValues[2]) }
+            .mapTo(secretLiterals) { it.groupValues[2] }
         val out = linkedMapOf<String, Any?>(
             "file" to ffile, "package" to pkg, "primary" to primary,
             "fqn" to (if (pkg.isNotEmpty()) "$pkg.$primary" else primary),
@@ -838,15 +856,16 @@ object JavaParser {
             "varWrites" to varWrites.toList(), "varReads" to varReads.toList(),
             "varsUndecided" to varsUndecided.toList(),
             "readsAllVariables" to JAVA_VARS_ALL_RE.containsMatchIn(text),
-            "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
+            "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.filter { it !in secretLiterals }.toCollection(LinkedHashSet()),
             // What says a literal might name a model: the methods it is the first argument of, and whether a
             // constant holds it or a comparison tests it. A log line, a map key or an annotation value that
             // happens to equal a model key says nothing, and used to draw a (suspect) reference all the same.
-            "literalCalls" to STR_CTX_RE.findAll(text).groupBy({ it.groupValues[2] }, { it.groupValues[1] })
+            "literalCalls" to STR_CTX_RE.findAll(text).filter { it.groupValues[2] !in secretLiterals }
+                .groupBy({ it.groupValues[2] }, { it.groupValues[1] })
                 .mapValues { (_, v) -> v.toSortedSet().toList() },
             "literalFacts" to (STRING_CONST_RE.findAll(text).map { it.groupValues[2] } +
                 EQUALS_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } } +
-                CASE_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } }).toSortedSet().toList(),
+                CASE_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } }).filter { it !in secretLiterals }.toSortedSet().toList(),
             "keyedStrings" to keyedStrings,
             "keyedKinds" to keyedKinds,
             "keyedIdents" to keyedIdents,

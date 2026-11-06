@@ -287,7 +287,12 @@ object XmlHelpers {
         return fields
     }
 
-    /** Field-injection values on a delegate/listener element (`<flowable:field>`). */
+    /**
+     * Field-injection values on a delegate/listener element (`<flowable:field>`), as the artifacts may carry
+     * them: a literal password is `***` and a URL's credentials are masked (see [SecretScan.redactFieldValue]).
+     * Every reader of a key, a topic or a bean name gets the value unchanged — none of those is named like a
+     * secret. The `hardcodedSecrets` finding reads [readLiteralFields], which this does not touch.
+     */
     fun readFields(el: El): LinkedHashMap<String, Any?> {
         val fields = LinkedHashMap<String, Any?>()
         val ext = extEl(el) ?: return fields
@@ -295,11 +300,11 @@ object XmlHelpers {
             val name = fld.attr("name") ?: continue
             val s = fld.findChild("string")
             val e = fld.findChild("expression")
-            fields[name] = when {
+            fields[name] = SecretScan.redactFieldValue(name, when {
                 s?.text?.trim()?.isNotEmpty() == true -> s.text!!.trim()
                 e?.text?.trim()?.isNotEmpty() == true -> e.text!!.trim()
                 else -> fld.attr("stringValue") ?: fld.attr("expression")
-            }
+            })
         }
         return fields
     }

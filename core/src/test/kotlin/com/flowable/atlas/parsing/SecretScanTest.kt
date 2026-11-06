@@ -67,4 +67,49 @@ class SecretScanTest {
             assertTrue(k, SecretScan.isSecretKey(k))
         }
     }
+
+    @Test
+    fun aUrlLosesItsCredentialsAndNothingElse() {
+        assertEquals("https://***@api.example.com/v1", SecretScan.redactUrl("https://svc:s3cret@api.example.com/v1"))
+        assertEquals("/orders?access_token=***&page=2&api_key=***",
+            SecretScan.redactUrl("/orders?access_token=abc&page=2&api_key=xyz"))
+        // the fix is not the leak: credentials and a token written as expressions stay as they are
+        val expr = "https://\${u}:\${p}@host/x?token={{env.token}}"
+        assertEquals(expr, SecretScan.redactUrl(expr))
+        // a templated pagination value is judged whole, not cut at its first space and masked half-way
+        val paged = "https://crm.example.com/leads?\$orderby=createdon desc&\$skiptoken=<cookie pagenumber='\${page}' />"
+        assertEquals(paged, SecretScan.redactUrl(paged))
+        // and a URL with nothing to mask is the very same string, so a golden without credentials never moves
+        val plain = "{{endpoints.platform}}/platform-api/search/case-instances?caseDefinitionKey=DEMO-C001&size=50"
+        assertTrue(plain === SecretScan.redactUrl(plain))
+    }
+
+    @Test
+    fun aFieldValueIsMaskedByWhatTheFieldIs() {
+        assertEquals(SecretScan.REDACTED, SecretScan.redactFieldValue("password", "hunter2"))
+        assertEquals("\${vault.pw}", SecretScan.redactFieldValue("password", "\${vault.pw}"))
+        assertEquals("https://***@host/x?api_key=***", SecretScan.redactFieldValue("requestUrl", "https://u:p@host/x?api_key=k"))
+        assertEquals("Accept: text/plain\nAuthorization: ***\nX-Api-Key: ***",
+            SecretScan.redactFieldValue("requestHeaders", "Accept: text/plain\nAuthorization: Basic dTpw\nX-Api-Key: k1"))
+        assertEquals("Authorization: Bearer \${token}", SecretScan.redactFieldValue("requestHeaders", "Authorization: Bearer \${token}"))
+        // a script body is no query string: only a URL's userinfo is masked there
+        val script = "def u = 'https://u:p@host/x?token=t'"
+        assertEquals("def u = 'https://***@host/x?token=t'", SecretScan.redactFieldValue("script", script))
+        assertEquals(42, SecretScan.redactFieldValue("password", 42))
+        // a request body: the secret-named pair is masked, the rest reads as the JSON it is
+        assertEquals("""{"user": "demo", "apiKey": "***", "tokenType": "Bearer", "secret": "${'$'}{vault.s}"}""",
+            SecretScan.redactFieldValue("requestBody", """{"user": "demo", "apiKey": "k1", "tokenType": "Bearer", "secret": "${'$'}{vault.s}"}"""))
+        val body = """{"orderId": "42"}"""
+        assertTrue(body === SecretScan.redactJsonPairs(body))
+    }
+
+    @Test
+    fun aHandlersDefaultIsMaskedOnlyWhenItIsACredential() {
+        assertEquals(SecretScan.REDACTED, SecretScan.redactParamDefault("Authorization", "header", "Bearer abc"))
+        assertEquals(SecretScan.REDACTED, SecretScan.redactParamDefault("api_key", "query", "k1"))
+        // `Authorization` as a query parameter is a name like any other, and a page size is no secret
+        assertEquals("x", SecretScan.redactParamDefault("Authorization", "query", "x"))
+        assertEquals("50", SecretScan.redactParamDefault("size", "query", "50"))
+        assertEquals("\${auth.default}", SecretScan.redactParamDefault("Authorization", "header", "\${auth.default}"))
+    }
 }

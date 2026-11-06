@@ -374,7 +374,9 @@ object ModelParsers {
     fun parseService(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
         val cfg = objOf(doc["config"]) ?: emptyMap()
-        val base = (cfg["baseUrl"] ?: cfg["url"]) as? String
+        // Credentials in the base URL are the finding below (read from the raw document); the record, every
+        // operation URL built on it and the REST calls carry the URL with them masked.
+        val base = ((cfg["baseUrl"] ?: cfg["url"]) as? String)?.let(SecretScan::redactUrl)
         val columns = listOfObjs(doc["columnMappings"]).map { cm ->
             linkedMapOf<String, Any?>("name" to (cm["name"] ?: cm["columnName"]), "columnName" to cm["columnName"], "type" to cm["type"]).also { col ->
                 // A column relation: this column holds a key of another service's table — the relation, over
@@ -411,7 +413,7 @@ object ModelParsers {
         dictionaryRefs(doc["outputParameters"])
         for (op in listOfObjs(doc["operations"])) {
             val oc = objOf(op["config"]) ?: emptyMap()
-            val rawUrl = oc["url"] as? String
+            val rawUrl = (oc["url"] as? String)?.let(SecretScan::redactUrl)
             var full = rawUrl
             if (base != null && full != null && !full.startsWith("http")) {
                 full = base.trimEnd('/') + "/" + full.trimStart('/')
@@ -421,7 +423,7 @@ object ModelParsers {
                 // every data object bound to the service, which is what tells a generated CRUD operation
                 // that nothing *names* from one that nothing *uses*.
                 "key" to op["key"], "name" to op["name"], "type" to op["type"], "method" to oc["method"],
-                "url" to oc["url"], "fullUrl" to full,
+                "url" to (rawUrl ?: oc["url"]), "fullUrl" to full,
                 "params" to operationParams(op["inputParameters"]),
                 // An operation's declared outputs are the other half of its contract — what the caller
                 // gets back and can map into a variable. Falls back to the service-level list, which
@@ -468,7 +470,11 @@ object ModelParsers {
      * for variables: its names are the call's parameters, which belong to no process or case.
      */
     private fun scriptOperation(oc: Map<String, Any?>, op: Map<String, Any?>, rec: MutableMap<String, Any?>) {
-        val script = oc["script"] as? String ?: return
+        // A URL's literal credentials in the body are a hardcodedSecrets finding on `config.script` (read from
+        // the raw document), so the record carries them masked. Masked before validating, not after: a
+        // problem's offsets then point into the body the explorer shows, and the credential sits inside a
+        // string literal, where `***` changes no structure.
+        val script = (oc["script"] as? String)?.let(SecretScan::redactUserInfo) ?: return
         val lang = oc["scriptLanguage"] as? String
         rec["script"] = script
         if (lang != null) rec["scriptLanguage"] = lang
@@ -627,7 +633,11 @@ object ModelParsers {
                 val label = componentCaption(n)
                 component = linkedMapOf(
                     "id" to n["id"], "type" to n["type"], "label" to label,
-                    "required" to (n["isRequired"] ?: false), "value" to n["value"],
+                    // A link keeps its target in `value`: its credentials are masked like any other URL's. A
+                    // password field's literal `value` is a password the form ships with, prefilled.
+                    "required" to (n["isRequired"] ?: false),
+                    "value" to if (ftype == "password" && (n["value"] as? String)?.let(SecretScan::isLiteral) == true) SecretScan.REDACTED
+                        else SecretScan.redactAnyUrl(n["value"]),
                 )
                 // What the modeller wrote about this component for whoever reads the form next — the
                 // form equivalent of a BPMN element's documentation, and just as much the answer to "why
@@ -751,7 +761,7 @@ object ModelParsers {
                     val url = if (uk == "queryUrl" && raw != null && sourceLive(es, n["type"], "Rest")) {
                         withQueryParams(raw, es["queryParams"])
                     } else raw ?: es[uk]
-                    dataSources.add(linkedMapOf("kind" to "rest", "url" to url))
+                    dataSources.add(linkedMapOf("kind" to "rest", "url" to SecretScan.redactAnyUrl(url)))
                     ctx.addRestCall(key, ffile, n["id"], "GET", url, "form-query")
                     // the raw URL is scanned with every other extraSettings value below
                     if (url is String && url != raw) recordUrlOpUses(url, key, mtype, ffile, ctx)
@@ -862,7 +872,7 @@ object ModelParsers {
                         // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback
                         val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
                         restCalls.add(linkedMapOf(
-                            "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),
+                            "where" to n["id"], "method" to method, "url" to SecretScan.redactUrl(url), "path" to es?.get("path"),
                         ))
                         ctx.addRestCall(key, ffile, n["id"], method, url, "form-button")
                         recordUrlOpUses(url, key, mtype, ffile, ctx)
@@ -1213,7 +1223,7 @@ object ModelParsers {
         // header mappings carried no callee at all. A link's URL is where it goes, not what it calls.
         val url = pyOr(pyOr(es["url"], n["url"]), es["invokeServiceUrl"]) as? String
         if (!url.isNullOrBlank() && (truthy(es["invokeServiceUrl"]) || urlRole(n["type"] as? String, es) == UrlRole.CALL)) {
-            return "rest" to url.trim()
+            return "rest" to SecretScan.redactUrl(url.trim())
         }
         return null to null
     }
@@ -1364,7 +1374,7 @@ object ModelParsers {
         val info = withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "channelType" to doc["channelType"], "type" to doc["type"],
-            "topics" to doc["topics"], "destination" to doc["destination"], "eventKey" to ek,
+            "topics" to doc["topics"], "destination" to SecretScan.redactAnyUrl(doc["destination"]), "eventKey" to ek,
         ), doc)
         SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
         return info

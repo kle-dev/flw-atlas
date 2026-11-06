@@ -43,7 +43,9 @@ is fine, but knowing the reasoning first will save you time.
 - **Generated artifacts contain your project's data by construction.** An `.explorer.html` embeds
   model keys, expressions, and code references. It is a report about your repository; treat sharing
   one the way you would treat sharing the repository. `.gitignore` keeps them out of this repo for
-  that reason.
+  that reason. The one thing they leave out is a credential written into a model: the value a
+  [`hardcodedSecrets`](https://kle-dev.github.io/flw-atlas/checks/) finding points at — a literal
+  password, the credentials in a URL — appears as `***`.
 - **The plugin requires a restart on install/update** (`require-restart="true"`). It registers
   languages and file types, which cannot be loaded dynamically.
 

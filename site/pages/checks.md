@@ -234,6 +234,16 @@ about a secret (`tokenUrl`, `passwordField`, `credentialsType`), and for anythin
 A placeholder such as `changeme` *is* reported: a committed literal is a literal. Move the value to an
 expression or to the environment's configuration — and rotate what was committed.
 
+No other artifact carries the value either. A secret-named field injection's literal, the credentials
+in a URL (`https://user:secret@…`) and a query parameter named like a secret (`?access_token=…`) appear
+as `***` in `graph.json`, the explorer, the Markdown artifacts and a `--slice`, wherever the model's
+configuration is shown — a service's base URL, a script operation's body, a REST call and the external
+node it reaches, an HTTP task's request URL, its `Authorization` header and a secret-named key in its
+request body, a password field's literal default, the default a REST handler declares for an
+`Authorization` header or a secret-named parameter — and the value of a Java constant named like a
+secret is not carried at all. A credential no rule recognises — a mail body that says *your password
+is …*, a password assigned inside a script — is no finding either, and is shown as written.
+
 ### `unsafeQueries` — a value that can change the query
 
 A `.query` model's `templateContent` or `templateFilter` interpolating a parameter as `${name}` with no

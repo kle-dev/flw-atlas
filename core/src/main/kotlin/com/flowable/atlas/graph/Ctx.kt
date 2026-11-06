@@ -2,6 +2,7 @@ package com.flowable.atlas.graph
 
 import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.ModelKinds
+import com.flowable.atlas.parsing.SecretScan
 
 /**
  * The model an element's in/out mappings are handed to — a process, case, service, agent, data object,
@@ -156,16 +157,18 @@ class Ctx {
      * form never calls, while the service's own page had none.
      */
     fun addRestCall(source: Any?, sourceFile: String, where: Any?, method: Any?, url: Any?, kind: String) {
+        // The one door every REST call comes through, and what GraphBuilder turns into `external:<url>` node
+        // ids, labels and edges: a credential in the URL is masked here or it is in every artifact.
         restCalls.add(linkedMapOf(
             "source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile, "where" to where,
-            "method" to method, "url" to url, "kind" to kind,
+            "method" to method, "url" to SecretScan.redactAnyUrl(url), "kind" to kind,
         ))
     }
 
     /** Record a link of the model being parsed — see [links]. */
     fun addLink(source: Any?, sourceFile: String, where: Any?, url: String) {
         links.add(linkedMapOf("source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile,
-            "where" to where, "url" to url))
+            "where" to where, "url" to SecretScan.redactUrl(url)))
     }
 
     /** Record that [consumer] invokes operation [opKey] on a service ([targetKind] = "service") or a

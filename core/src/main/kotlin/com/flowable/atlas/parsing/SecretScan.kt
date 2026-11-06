@@ -67,4 +67,116 @@ object SecretScan {
         literalFields.entries.filter { (name, value) ->
             isLiteral(value) && (isSecretKey(name) || hasUrlCredential(value))
         }.map { it.key }
+
+    // ---- redaction -------------------------------------------------------------------------------------
+    //
+    // The finding names a path; the artifacts used to print the value at that path anyway — a field
+    // injection's map, a service's base URL, a REST call's node id — so the same run that warned about a
+    // password published it in graph.json, the explorer and summary.md. Values are masked where the parsers
+    // capture them, once, so every renderer inherits it. The finding inputs (SecretScan.scan on the raw
+    // document, XmlHelpers.readLiteralFields) are read before any of this and stay exactly as they were.
+
+    /** What stands in for a masked value — short, unmistakable, and never a key anything resolves. */
+    const val REDACTED = "***"
+
+    /** `scheme://userinfo@` — group 1 the scheme, group 2 the userinfo. */
+    private val URL_USERINFO = Regex("([a-zA-Z][a-zA-Z0-9+.-]*://)([^/\\s:@]+:[^/\\s@]+)@")
+
+    /**
+     * One query parameter: group 1 the separator, 2 the name, 3 the value — everything up to the next
+     * parameter, so a templated value (`$skiptoken=<cookie pagenumber='${…}' />`, from a real service) is
+     * judged whole: cut at its first space it looked like a literal, and masking it broke the URL.
+     */
+    private val QUERY_PARAM = Regex("([?&])([^=&#\\s\"']+)=([^&#]*)")
+
+    /** One `Name: value` line of a header blob: group 1 the name with its colon, 2 the value. */
+    private val HEADER_LINE = Regex("(?m)^(\\s*[A-Za-z0-9_-]+\\s*:\\s*)(\\S.*?)\\s*$")
+
+    private val AUTH_HEADERS = setOf("authorization", "proxy-authorization")
+
+    /** [value] with the literal userinfo of every URL in it masked; the same instance when there is none. */
+    fun redactUserInfo(value: String): String {
+        if (!value.contains("://")) return value
+        val out = URL_USERINFO.replace(value) { m ->
+            // `https://${user}:${pw}@host` is the fix, not the leak — left as written
+            if (isLiteral(m.groupValues[2])) m.groupValues[1] + REDACTED + "@" else m.value
+        }
+        return if (out == value) value else out
+    }
+
+    /**
+     * A URL as an artifact may show it: literal credentials in the userinfo (the whole `user:password`
+     * becomes [REDACTED]) and the value of a query parameter named like a secret (`?access_token=***`)
+     * masked. Everything a reader or the REST matcher uses — scheme, host, path, the other parameters — is
+     * untouched, and a URL with nothing to mask comes back as the same instance, so the goldens of a project
+     * without credentials do not move.
+     */
+    fun redactUrl(url: String): String {
+        val noUser = redactUserInfo(url)
+        if (!noUser.contains('?')) return noUser
+        val out = QUERY_PARAM.replace(noUser) { m ->
+            // a credential is one token: a value with a space in it is a template or prose, not a key
+            val v = m.groupValues[3]
+            if (isSecretKey(m.groupValues[2]) && isLiteral(v) && v.none { it.isWhitespace() }) m.groupValues[1] + m.groupValues[2] + "=" + REDACTED
+            else m.value
+        }
+        return if (out == url) url else out
+    }
+
+    /** [url] through [redactUrl] when it is a string; anything else unchanged. */
+    fun redactAnyUrl(url: Any?): Any? = if (url is String) redactUrl(url) else url
+
+    /**
+     * A field injection's value as the artifacts may carry it: the whole value when the field names a secret
+     * and holds a literal; a URL field (`requestUrl`) through [redactUrl]; the credential of an
+     * `Authorization` (or secret-named) line in a header field; the userinfo of any URL anywhere else; and a
+     * secret-named `"key": "value"` pair in any of them (see [redactJsonPairs]). Query parameters are masked
+     * only in a URL field — in a script body `?name=` is not a query string.
+     */
+    fun redactFieldValue(name: String, value: Any?): Any? {
+        if (value !is String) return value
+        if (isSecretKey(name) && isLiteral(value)) return REDACTED
+        val low = name.lowercase()
+        var out = if (low.endsWith("url") || low.endsWith("uri")) redactUrl(value) else redactUserInfo(value)
+        if (low.contains("header")) out = redactHeaders(out)
+        return redactJsonPairs(out)
+    }
+
+    /** `"name": "value"` — group 1 everything up to the value, 2 the name, 3 the value. */
+    private val JSON_PAIR = Regex("(\"([^\"\\\\\\s]+)\"\\s*:\\s*\")([^\"\\\\]*)\"")
+
+    /**
+     * [text] with the literal value of every secret-named `"key": "value"` pair masked — an HTTP task's
+     * `requestBody` of `{"password": "…"}` is the same credential as a `password` field, one level down. The
+     * key, the quotes and everything around them stay, so a body still reads as the JSON it is.
+     */
+    fun redactJsonPairs(text: String): String {
+        if (!text.contains(':')) return text
+        val out = JSON_PAIR.replace(text) { m ->
+            if (isSecretKey(m.groupValues[2]) && isLiteral(m.groupValues[3])) m.groupValues[1] + REDACTED + "\"" else m.value
+        }
+        return if (out == text) text else out
+    }
+
+    /** A `Name: value` header blob with the value of every credential-carrying literal header masked. */
+    fun redactHeaders(blob: String): String {
+        if (!blob.contains(':')) return blob
+        val out = HEADER_LINE.replace(blob) { m ->
+            val header = m.groupValues[1].substringBefore(':').trim()
+            if (isCredentialHeader(header) && isLiteral(m.groupValues[2])) m.groupValues[1] + REDACTED else m.value
+        }
+        return if (out == blob) blob else out
+    }
+
+    /** A header that carries a credential: `Authorization`, `Proxy-Authorization`, or one named like a secret. */
+    fun isCredentialHeader(name: String): Boolean = name.lowercase() in AUTH_HEADERS || isSecretKey(name)
+
+    /**
+     * The default a REST handler declares for a parameter, as the artifacts may carry it: a literal default of
+     * a credential header (`@RequestHeader(value = "Authorization", defaultValue = "Bearer …")`) or of a
+     * parameter named like a secret (`@RequestParam(name = "api_key", defaultValue = "…")`) is [REDACTED] —
+     * the endpoint page shows that the handler falls back to a value, never the value.
+     */
+    fun redactParamDefault(name: String, source: String, value: String): String =
+        if (isLiteral(value) && (isSecretKey(name) || source == "header" && isCredentialHeader(name))) REDACTED else value
 }

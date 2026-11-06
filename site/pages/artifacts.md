@@ -105,7 +105,9 @@ It is designed to make that easy:
   `includeInStageOverview` and `overviewIndex`, its place in Work's stage overview. In **`apps`**, an app
   keeps `flowApp`, `url` and `order`, and each page its `label` and `url`. The
   [Playwright guide](#playwrightmd-driving-flowable-work-in-a-browser) is built from them, and its §10
-  queries them.
+  queries them. A credential written into a model is the exception: a secret-named literal, the
+  credentials in a URL and a secret-named query parameter are kept as `***` — see
+  [`hardcodedSecrets`](../checks/#hardcodedsecrets-a-secret-written-into-a-model).
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
