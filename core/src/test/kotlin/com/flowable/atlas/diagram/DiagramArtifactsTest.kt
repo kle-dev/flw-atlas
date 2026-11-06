@@ -144,4 +144,40 @@ class DiagramArtifactsTest {
         val tables = DiagramArtifacts.render(resultWith(node("decision", "DEMO-eligibility", "DEMO-eligibility.dmn")), dmnDir)
         assertEquals(setOf("DEMO-eligibility.svg"), tables.keys)
     }
+
+    /** A model that is gone loses its drawing; the folder keeps whatever is not an SVG, and goes when it is empty. */
+    @Test
+    fun writeKeepsTheFolderToExactlyTheseDrawings() {
+        val dir = Files.createTempDirectory("atlas-diagrams").toFile()
+        try {
+            val drawings = File(dir, "DEMO.diagrams")
+            DiagramArtifacts.write(drawings, mapOf("a.svg" to "<svg/>", "gone.svg" to "<svg/>"))
+            val update = DiagramArtifacts.write(drawings, mapOf("a.svg" to "<svg/>"))
+            assertEquals(listOf("a.svg"), update.written.map { it.name })
+            assertEquals(listOf("gone.svg"), update.removed.map { it.name })
+            assertEquals(setOf("a.svg"), drawings.list()!!.toSet())
+            // A key that changed only its case is drawn under its new spelling, on any file system — a
+            // case-sensitive one kept the old file beside the new one.
+            DiagramArtifacts.write(drawings, mapOf("A.svg" to "<svg/>"))
+            assertEquals(setOf("A.svg"), drawings.list()!!.toSet())
+
+            File(drawings, "notes.txt").writeText("mine")
+            DiagramArtifacts.write(drawings, emptyMap())
+            assertEquals("a file of the user's keeps the folder", setOf("notes.txt"), drawings.list()!!.toSet())
+            File(drawings, "notes.txt").delete()
+            File(drawings, "b.svg").writeText("<svg/>")
+            DiagramArtifacts.write(drawings, emptyMap())
+            assertTrue("nothing left to draw, nothing left", !drawings.exists())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    /** A project given as one model file labels it by its name; its bytes are the file itself. */
+    @Test
+    fun aSingleModelFileIsItsOwnRoot() {
+        val file = File(root, "DEMO-onboarding.bpmn20.xml")
+        val out = DiagramArtifacts.render(resultWith(node("process", "DEMO-onboarding", file.name)), file)
+        assertEquals(setOf("DEMO-onboarding.svg"), out.keys)
+    }
 }

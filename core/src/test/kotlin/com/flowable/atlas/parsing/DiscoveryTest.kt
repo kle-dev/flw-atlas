@@ -38,4 +38,44 @@ class DiscoveryTest {
             dir.deleteRecursively()
         }
     }
+
+    /** One model file is a project of one — only an archive used to count, so --help's promise found nothing. */
+    @Test
+    fun aSingleModelFileIsDiscoveredAsAModel() {
+        val bpmn = File("src/test/resources/miniproject/processes/order.bpmn")
+        assertEquals(listOf("order.bpmn"), Discovery.discover(bpmn).models.map { it.name })
+        val result = com.flowable.atlas.graph.Atlas.extract(bpmn)
+        @Suppress("UNCHECKED_CAST")
+        val ids = ((result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).map { it["id"] }
+        assertTrue(ids.toString(), "process:orderProcess" in ids)
+    }
+
+    /**
+     * A folder that cannot be listed is said, as a warning: models may have been under it, and a dropped
+     * folder used to look exactly like an empty one. Not an error — a root-owned database volume inside a
+     * checkout must not fail every `--fail-on error` pipeline.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anUnreadableFolderIsAWarningNotSilence() {
+        val dir = Files.createTempDirectory("atlas-discovery-unreadable").toFile()
+        val sub = File(dir, "sub")
+        try {
+            File(dir, "order.bpmn").writeText("<definitions><process id=\"DEMO-P001\"/></definitions>")
+            sub.mkdirs()
+            File(sub, "review.cmmn").writeText("<definitions><case id=\"DEMO-C001\"/></definitions>")
+            sub.setReadable(false)
+            org.junit.Assume.assumeFalse("this user can read any folder (root)", sub.list() != null)
+
+            assertEquals(listOf(sub), Discovery.discover(dir).unreadable)
+            val result = com.flowable.atlas.graph.Atlas.extract(dir)
+            val diag = (result["diagnostics"] as List<Map<String, Any?>>).single { it["path"] == "sub" }
+            assertEquals("skip", diag["kind"])
+            val finding = (result["findings"] as List<Map<String, Any?>>).single { it["check"] == "parseIssues" && it["file"] == "sub" }
+            assertEquals("warning", finding["severity"])
+        } finally {
+            sub.setReadable(true)
+            dir.deleteRecursively()
+        }
+    }
 }

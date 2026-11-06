@@ -39,7 +39,8 @@ class AtlasGeneratorService(private val project: Project) {
         /**
          * [explorerHtml] is the `.explorer.html` produced (if any); [written] lists all files written.
          * [findings] are the analysis's, beside the `waivers.json` in [outputDir] — handed to the Findings
-         * window, which would otherwise run the very same analysis again.
+         * window, which would otherwise run the very same analysis again. [removed] are the drawings of
+         * models that are gone, deleted from the diagrams folder — the VFS has to hear of those too.
          */
         data class Success(
             val explorerHtml: Path?,
@@ -47,6 +48,7 @@ class AtlasGeneratorService(private val project: Project) {
             val log: String,
             val outputDir: Path? = null,
             val findings: List<Map<String, Any?>> = emptyList(),
+            val removed: List<Path> = emptyList(),
         ) : Outcome
         data class Failure(val message: String, val log: String) : Outcome
     }
@@ -159,20 +161,19 @@ class AtlasGeneratorService(private val project: Project) {
                 written.add(p)
             }
             // Each process/case/decision's DI layout → one SVG in `<name>.diagrams/`. Additive post-pass
-            // over the finished result; a project with no BPMN/CMMN/DMN layout emits none.
-            if (diagrams.isNotEmpty()) {
-                val dir = outputDir.resolve("$name.diagrams")
-                dir.toFile().mkdirs()
-                for ((fn, svg) in diagrams) {
-                    val p = dir.resolve(fn)
-                    p.toFile().writeText(svg, Charsets.UTF_8)
-                    written.add(p)
-                }
+            // over the finished result; a project with no BPMN/CMMN/DMN layout emits none. The folder is made
+            // to hold exactly this run's drawings, as the CLI's is — but only when diagrams were asked for:
+            // unticking them is a settings choice, not a model that went away.
+            val removed = ArrayList<Path>()
+            if (AtlasArtifact.DIAGRAMS_SVG in artifacts) {
+                val drawn = DiagramArtifacts.write(outputDir.resolve("$name.diagrams").toFile(), diagrams)
+                drawn.written.mapTo(written) { it.toPath() }
+                drawn.removed.mapTo(removed) { it.toPath() }
             }
             // the page to open afterwards: the explorer, else the ER diagram page when that is all that was chosen
             val explorer = written.firstOrNull { it.fileName.toString().endsWith(AtlasArtifact.EXPLORER_HTML.suffix) }
                 ?: written.firstOrNull { AtlasArtifact.isErdPage(it.fileName.toString()) }
-            Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result))
+            Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result), removed)
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {

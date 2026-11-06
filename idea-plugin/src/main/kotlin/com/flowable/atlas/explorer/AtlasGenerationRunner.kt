@@ -152,7 +152,7 @@ object AtlasGenerationRunner {
                     // One refresh for everything written, here on the pooled thread — refreshing file by
                     // file on the EDT froze the IDE for a project with a few hundred diagrams.
                     val lfs = LocalFileSystem.getInstance()
-                    lfs.refreshNioFiles(outcome.written)
+                    lfs.refreshNioFiles(outcome.written + outcome.removed)
                     explorerVf = outcome.explorerHtml?.let { lfs.findFileByNioFile(it) }
                     outcome.written.filter { AtlasArtifact.isPage(it.fileName.toString()) }
                         .forEach { AtlasExplorerFiles.rememberRoot(project, it, projectDir) }

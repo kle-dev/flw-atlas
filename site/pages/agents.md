@@ -31,7 +31,9 @@ look — so an agent knows which number to act on. This is the right thing to pa
 when the question is "what is this project".
 
 **3 · `--slice <type:key>`** — one model with its full context, both directions, plus the findings that
-touch it. The right size when the task is about one model, which it usually is.
+touch it. The right size when the task is about one model, which it usually is. An agent that knows
+the model by its file rather than its key can pass the path instead, relative or absolute; a target that
+matches nothing names the nearest ids.
 
 **4 · `--json`** — the full graph. **Never paste it whole**; query it with `jq`. The file documents
 itself: a `_schema` key at the top describes the shape and ships seven ready-made recipes.
@@ -67,9 +69,10 @@ jq '.findings[] | select(.severity=="error") | {check, label, message, file}' gr
 1. **Once per project:** `./atlas <project>`, then copy `<project>.CLAUDE.md` to the repository root as
    `CLAUDE.md`. Or write the output into the project — `./atlas <project> <project>/atlas-output` — keep
    your own `CLAUDE.md` and add the `@atlas-output/<project>.CLAUDE.md` line the file's header prints;
-   then a regeneration is what Claude reads next time, with no copy step. (Atlas's output folder ignores
-   itself in git; add `!<project>.CLAUDE.md` to its `.gitignore` if the team should get the file.) Either
-   way, regenerate when the models change materially.
+   then a regeneration is what Claude reads next time, with no copy step. (Atlas's output folder keeps
+   its artifacts out of git; add `!<project>.CLAUDE.md` to its `.gitignore` if the team should get the
+   file.) `--claude` alone writes a `CLAUDE.md` into the project, but never over one Atlas did not write.
+   Either way, regenerate when the models change materially.
 2. **Starting a task:** give the agent `--summary`, or let it read the `CLAUDE.md` you committed.
 3. **Working on one model:** `--slice <type:key>`. It contains the callers, which is the context an
    agent most often lacks and most confidently guesses at.

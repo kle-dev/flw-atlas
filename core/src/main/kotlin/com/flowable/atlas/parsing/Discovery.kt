@@ -4,7 +4,7 @@ import com.flowable.atlas.model.ModelPaths
 import java.io.File
 
 /**
- * Walks a project directory (or classifies a single archive) into the file lists Atlas analyses —
+ * Walks a project directory (or classifies a single file) into the file lists Atlas analyses —
  * a port of `flowable_atlas.py` `discover` (~line 1250). Build-output directories ([ModelPaths.EXCLUDE_DIRS])
  * are pruned; the rest are bucketed into Flowable models, `.zip`/`.bar` archives, `.java` and `.kt`
  * sources (one parser reads both — see [JavaParser]), and `.xml`/`.sql` Liquibase-changelog candidates.
@@ -27,6 +27,8 @@ object Discovery {
         val testSources: List<File> = emptyList(),
         /** Symbolic links whose target lies outside the project — not followed (see [FileWalk.files]). */
         val outsideLinks: List<File> = emptyList(),
+        /** Directories the walk entered but could not list (permissions): nothing under them was read. */
+        val unreadable: List<File> = emptyList(),
     )
 
     /** A file that belongs to a template model without being one: the variation that holds the body a
@@ -44,16 +46,13 @@ object Discovery {
         val identity = ArrayList<File>()
         val testSources = ArrayList<File>()
         val outsideLinks = ArrayList<File>()
-
-        if (root.isFile) {
-            if (ModelPaths.isArchive(root.name)) archives.add(root)
-            return Discovered(models, archives, javas, xmls)
-        }
+        val unreadable = ArrayList<File>()
 
         // The list a file goes into, or null for a file Atlas does not read.
         fun bucketOf(f: File): MutableList<File>? {
             val low = f.name.lowercase()
-            val rel by lazy { f.relativeTo(root).invariantSeparatorsPath }
+            // a lone file is a project of one, and its path within it is its name
+            val rel by lazy { if (f == root) f.name else f.relativeTo(root).invariantSeparatorsPath }
             return when {
                 // Test code is not the project (see ModelPaths.isTestSource); models under a test
                 // source set still are, which is why this is a per-file rule and not a pruned directory.
@@ -71,15 +70,21 @@ object Discovery {
             }
         }
 
-        // FileWalk, not walkTopDown(): the discovery order propagates into every insertion-ordered map
-        // downstream, so a filesystem-dependent order made the generated artifacts machine-dependent.
-        FileWalk.files(root, onLeave = { link ->
-            // Reported only where the report loses something: a folder, which may hold anything, or a file
-            // Atlas would have read. A sub-project's `.editorconfig -> ../../.editorconfig` was never part
-            // of it, and a warning per such link would teach readers to skim the list.
-            if (link.isDirectory || bucketOf(link) != null) outsideLinks.add(link)
-        }) { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
-            .forEach { f -> bucketOf(f)?.add(f) }
-        return Discovered(models, archives, javas, xmls, templateParts, configs, identity, testSources, outsideLinks)
+        if (root.isFile) {
+            // One file is a project of one: the model it is, the archive it is. Only archives used to count,
+            // so a lone `order.bpmn` — which --help promised to read — was a run that found nothing.
+            bucketOf(root)?.add(root)
+        } else {
+            // FileWalk, not walkTopDown(): the discovery order propagates into every insertion-ordered map
+            // downstream, so a filesystem-dependent order made the generated artifacts machine-dependent.
+            FileWalk.files(root, onLeave = { link ->
+                // Reported only where the report loses something: a folder, which may hold anything, or a file
+                // Atlas would have read. A sub-project's `.editorconfig -> ../../.editorconfig` was never part
+                // of it, and a warning per such link would teach readers to skim the list.
+                if (link.isDirectory || bucketOf(link) != null) outsideLinks.add(link)
+            }, onUnreadable = { unreadable.add(it) }) { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
+                .forEach { f -> bucketOf(f)?.add(f) }
+        }
+        return Discovered(models, archives, javas, xmls, templateParts, configs, identity, testSources, outsideLinks, unreadable)
     }
 }

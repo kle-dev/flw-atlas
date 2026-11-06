@@ -47,4 +47,37 @@ class SliceRendererTest {
         assertNull(SliceRenderer.render(result, "process:doesNotExist"))
         assertNull(SliceRenderer.render(result, "nothing-has-this-key"))
     }
+
+    /** What a reader has in hand when the exact id is not it: the file, another case, the label, the class name. */
+    @Test
+    fun theFormsAReaderHasInHandMatchToo() {
+        for ((target, how) in listOf(
+            "ORDERPROCESS" to "case", "processes/order.bpmn" to "file", "./processes/order.bpmn" to "file",
+            "order.bpmn" to "file", "Order Process" to "label",
+            // the absolute path an agent's file tools hand it
+            File("src/test/resources/miniproject/processes/order.bpmn").absolutePath to "file",
+        )) {
+            val text = SliceRenderer.render(result, target)
+            assertNotNull(target, text)
+            assertTrue(text, text!!.contains("# `process:orderProcess`"))
+            assertTrue("says how it matched: $text", text.startsWith("_`$target` matched by $how:"))
+        }
+        val bean = SliceRenderer.render(result, "DemoBean")
+        assertNotNull("a class by its simple name", bean)
+        assertTrue(bean!!.contains("# `java:com.example.DemoBean`"))
+        // A file shared by a class and its members renders the class, which lists them.
+        val byFile = SliceRenderer.render(result, "src/main/java/com/example/CustomerController.java")!!
+        assertEquals(byFile, 1, Regex("^# `", RegexOption.MULTILINE).findAll(byFile).count())
+    }
+
+    @Test
+    fun aMissSuggestsTheNearestIds() {
+        assertTrue(SliceRenderer.suggest(result, "ordrProcess").contains("process:orderProcess"))
+        assertEquals("the typo'd type still finds the key", "process:orderProcess",
+            SliceRenderer.suggest(result, "bpmn:orderProcess").first())
+        assertTrue(SliceRenderer.suggest(result, "zzzzzzzzzzzzzzzzzzzz").isEmpty())
+        // Two edits from every short key is no resemblance: `zz` used to suggest `id`, `a` and `zip`.
+        assertTrue(SliceRenderer.suggest(result, "zz").toString(), SliceRenderer.suggest(result, "zz").isEmpty())
+        assertTrue("nothing to compare, nothing suggested", SliceRenderer.suggest(result, "").isEmpty())
+    }
 }

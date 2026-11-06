@@ -59,7 +59,10 @@ java -jar cli/build/libs/cli-*-all.jar <path> [options]
 ```
 
 `<path>` is a project directory, a single model file, or an exported `.zip` / `.bar` archive. Exactly
-one path is allowed; `--` ends option parsing, so a path that begins with a dash still works.
+one path is allowed; `--` ends option parsing, so a path that begins with a dash still works. A single
+model file is a project of one: its references to models outside it are reported as missing. Any other
+file, and a directory with no Flowable models, archives or Java sources in it, is a misuse (exit 2) —
+a run that found nothing is the wrong directory, not a clean project.
 
 A directory is read only inside itself: a symbolic link whose target lies outside it — a `vendor`
 folder linked in from a sibling checkout, an `up -> ..` — is not followed, so one project's report never
@@ -78,38 +81,39 @@ These eight are mutually exclusive — passing two is an error, not a silent pre
 | Flag | Writes | Default file name |
 |---|---|---|
 | *(none)* | The full Markdown report | `APP_OVERVIEW.md` |
-| `--all` | All six artifacts into a **directory** — the Playwright guide as `<name>.playwright.md` and its project map `<name>.playwright-map.md` — plus `<name>.diagrams/` when any model has a layout and `<name>.erd.html` when the project has a table | `<name>.*` in `-o`, default `.` |
+| `--all` | All six artifacts into a **directory** — the Playwright guide as `<name>.playwright.md` and its project map `<name>.playwright-map.md` — plus `<name>.diagrams/` when any model has a layout and `<name>.erd.html` when the project has a table | `<name>.*` in `-o`, default `./atlas-output/<name>/` |
 | `--summary` | The compact LLM-first overview | `APP_OVERVIEW.summary.md` |
 | `--html` | The interactive explorer | `APP_OVERVIEW.html` |
 | `--erd` | The [ER diagram designer](../erd/): the project's tables and their relations, on a page of its own | `APP_OVERVIEW.erd.html` |
 | `--json` | The traversable graph | `APP_OVERVIEW.json` |
-| `--claude` | Drop-in agent context | `CLAUDE.md` |
+| `--claude` | Drop-in agent context. Never replaces a `CLAUDE.md` Atlas did not write: if the project has its own, the run stops (exit 2) and asks for `-o` or `--stdout` | `CLAUDE.md` |
 | `--playwright` | The [agent's guide to driving Flowable Work](../artifacts/#playwrightmd-driving-flowable-work-in-a-browser) in a browser, with this project's stages, tasks, required fields and button conditions; also a Claude Code skill. One file: the project map `--all` writes beside it is inline here, and with no `graph.json` beside it, its lookups say how to make one | `APP_OVERVIEW.playwright.md` |
 | `--claude-template` | The project-independent Flowable primer. Needs **no** path | stdout |
 
 Only `--all` derives file names from the project (`<name>.summary.md`, `<name>.explorer.html`, …). A
-single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. See
-[Generated artifacts](../artifacts/) for what each one contains.
+single-artifact run writes `APP_OVERVIEW.*` (or `CLAUDE.md`) unless you name the file with `-o`, and
+without `-o` it writes it **into the analysed project directory** — for an archive or a model file, into
+the folder it is in. See [Generated artifacts](../artifacts/) for what each one contains.
 
 ### Options
 
 | Flag | Meaning |
 |---|---|
-| `-o <path>`, `--output <path>` | Output file — or, with `--all`, the output **directory** (created if missing). Also accepts `-o<path>` and `--output=<path>`. |
-| `--slice <type:key>` | Render one node with its full context instead of a whole report. A bare `<key>` matches any type, and every match is rendered. |
-| `--stdout` | Write the single artifact to stdout and touch no files. |
-| `--open` | Open the result in a browser. Applies to `--all` (the first HTML written), `--html` and `--erd`. |
+| `-o <path>`, `--output <path>` | Output file — or, with `--all`, the output **directory**. Missing folders are created either way. Also accepts `-o<path>` and `--output=<path>`; a path that starts with a dash has to be given that way, since `-o --stdout` is a missing value, not a file called `--stdout`. An output that cannot be written — a file where `--all` needs a folder, a folder where a file goes, a read-only location — is refused before the analysis runs (exit 2). |
+| `--slice <type:key>` | Render one node with its full context instead of a whole report. A bare `<key>` matches any type, and every match is rendered. When nothing matches exactly, the id or key in another case, a Java class's simple name, a model's file path (`processes/order.bpmn`, or the same file's absolute path) and a label are tried in that order, and the slice says what it matched by. A miss names the nearest ids (`did you mean: process:orderProcess`). |
+| `--stdout` | Write the single artifact to stdout and touch no files. Not with `--all`, which writes a folder (exit 2). |
+| `--open` | Open the result in a browser — with `open` on macOS, `xdg-open` on Linux, the default handler on Windows. Applies to `--all` (the first HTML written), `--html` and `--erd`. Where nothing can open a browser it says so, and the run still succeeds. |
 | `--pretty` | Indent `graph.json`. It is minified by default. |
 | `--expr-allowlist <list>` | Comma-separated expression namespaces / functions your project registers itself, so they stop being reported as *suspect*. See [Expressions](../expressions/#the-allowlist). |
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
 | `--no-custom-functions` | Do not discover custom functions at all. |
-| `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any`, `defects`, `advice` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on defects`, `--fail-on missingRefs,invalidExpr`). `defects` matches every finding of a defect-kind check and stays green on advice. Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2). `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. |
-| `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts: the `--all` directory, or the folder of the file `-o` names — the same folder the explorer's *Save* writes it to. |
+| `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any`, `defects`, `advice` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on defects`, `--fail-on missingRefs,invalidExpr`). `defects` matches every finding of a defect-kind check and stays green on advice. Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2), and so is an empty list, so an unset CI variable (`--fail-on "$ATLAS_FAIL_ON"`) cannot switch the gate off. `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. |
+| `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts — the same folder the explorer's *Save* writes it to: the `--all` directory; the folder of the file `-o` names; without `-o`, the folder the single artifact is written to (the project directory, or the folder of the archive or model file); and the working directory for `--stdout` and a `--slice` without `-o`, which write no file. |
 | `--waiver-author <name>` | Prefills the `by` of a rule accepted from the generated explorer page. Left out, a rule written from a CLI-generated page carries no author; inside the IDE the plugin supplies the project's git identity. |
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
-| `--fail-on-stale-waivers` | Make the run **exit 1** when a waiver matched nothing or has expired. Separate from `--fail-on` on purpose: a stale waiver is a problem with your file, not a finding about your project. |
-| `-q`, `--quiet` | Silence the status lines on stderr. |
-| `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it — as `path:line` when the parser says where a file broke. |
+| `--fail-on-stale-waivers` | Make the run **exit 1** when a waiver matched nothing or has expired. Separate from `--fail-on` on purpose: a stale waiver is a problem with your file, not a finding about your project. With both, both verdicts are printed before the run exits. |
+| `-q`, `--quiet` | Silence the status lines on stderr. Errors are still printed. |
+| `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it — as `path:line` when the parser says where a file broke; with `--all`, every diagram written instead of one line for the folder; and the stack trace of a run that failed (exit 3). |
 | `-h`, `--help` | Print the usage text and exit 0. |
 | `--` | End of options; the next token is the path. |
 
@@ -125,15 +129,18 @@ exist. Tighten to `--fail-on any` once the project is clean, and record what you
 [`waivers.json`](../checks/#accepting-a-finding) rather than dropping the gate.
 
 Short flags cluster: `-vq`, `-qv` and `-oreport.md` all work, and `o` consumes the rest of its token
-or the next one.
+or the next one. A flag that takes no value refuses one: `--all=foo` and `--stdout=false` are errors,
+not a silent `--all` or `--stdout`.
 
 ### Flag precedence
 
-`--slice` and `--pretty` sit outside the mutually-exclusive format group, which has two consequences
-worth knowing because nothing warns you:
+`--slice` and `--pretty` sit outside the mutually-exclusive format group, which has consequences
+worth knowing because nothing warns you about the last three:
 
 - `--all --slice X` is an error (exit 2), like any other conflict between two output requests.
+- `--all --stdout` is an error too (exit 2): `--all` writes a folder of files, which stdout cannot hold.
 - `--slice X --json` writes the slice and **ignores `--json`**.
+- `--slice X --stdout -o file` prints the slice and writes no file: `--stdout` touches no files.
 - `--claude-template` returns before the path is even checked, and ignores `--stdout` (it prints to
   stdout anyway when no `-o` is given).
 
@@ -142,26 +149,43 @@ worth knowing because nothing warns you:
 | Code | When |
 |---|---|
 | `0` | Success. |
-| `1` | The run succeeded and wrote its artifacts, but a finding matched `--fail-on`. |
-| `2` | Argument misuse: an unknown flag, two format flags, `--all` with `--slice`, an unknown `--fail-on` value, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
+| `1` | The run succeeded and wrote its artifacts, but a gate failed: a finding matched `--fail-on`, or `--fail-on-stale-waivers` found a stale waiver. Nothing else exits 1. |
+| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
+| `3` | The run failed once under way — an artifact could not be written (a disk that filled up, a name taken by a folder), or an unexpected error. Artifacts may be missing or partial. The reason is one line on stderr; `-v` adds the stack trace. |
 
 ## The status line
 
-Every run ends with one line on stderr — the health check. This is the fastest way to see whether
-Atlas understood your project:
+Every run that writes the report — `--all`, or one artifact to a file — ends with one line on stderr: the
+health check. This is the fastest way to see whether Atlas understood your project:
 
 ```
-412 models (9 files · 3 archives) · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · 17 suspect / 4 dynamic links · ⚠ 3 parse issue(s)
+Flowable Atlas — order-management: 412 models (9 files · 3 archives) · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · 17 suspect / 4 dynamic links · custom fns: myfns.* (12) from frontend/customisation.ts · ⚠ 2 script issue(s) · ⚠ 3 parse issue(s), see -v · 19 defects · 24 advice · 5 waived
 ```
+
+`--all` lists each file it wrote before it — the diagrams as one line for their folder,
+`✓ …/order-management.diagrams/ (249 SVGs)`, unless `-v` asks for each — and a single-artifact run
+prints it as `wrote <file> — …`. Only the detail you asked for follows it: the parse issues with `-v`,
+a stale or unexplained waiver, and the verdict of `--fail-on`. A `--stdout` run and a `--slice` keep
+stderr for warnings and errors (a slice written with `-o` names its file): the summary carries the same
+scale line.
 
 - **java** — the Java *and Kotlin* sources read (one parser handles both); test source sets are not
   counted, because they are not scanned.
 - **resolved / unresolved refs** — references Atlas could and could not tie to something real.
 - **suspect / dynamic links** — resolved, but not certainly: *suspect* came from an ambiguous
   match, *dynamic* from an expression-valued reference.
-- **⚠ parse issues** — files that could not be read or fully parsed. These are never silent: they
-  also appear in `graph.json`'s `diagnostics`, in the summary's Health block, in the overview's
-  Findings section, and as a clickable badge in the explorer.
+- **custom fns** — the frontend expression functions the project registers itself, and where they were
+  found; see [Expressions](../expressions/).
+- **⚠ script issues** — script tasks and listeners whose code has a problem Atlas can see.
+- **⚠ parse issues** — files that could not be read or fully parsed, and folders that could not be
+  listed. These are never silent: they also appear in `graph.json`'s `diagnostics`, in the summary's
+  Health block, in the overview's Findings section, and as a clickable badge in the explorer.
+- **defects · advice** — the open findings of each [kind](../checks/): what is wrong now, and what is
+  worth a look.
+- **waived** — findings your [`waivers.json`](../checks/#accepting-a-finding) accepts; they are not
+  counted above.
+- **⚠ stale waivers** — rules in that file that matched nothing or have expired;
+  `--fail-on-stale-waivers` makes them fail the run.
 
 Add `-q` to suppress it. Everything it counts is also in the artifacts themselves, so a scripted
 run does not need to parse this line.

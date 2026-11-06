@@ -45,6 +45,33 @@ object DiagramArtifacts {
         return out
     }
 
+    /** What [write] did to a `<name>.diagrams/` folder. */
+    data class Update(val written: List<File>, val removed: List<File>)
+
+    /**
+     * Make [dir] hold exactly [diagrams] (from [render]): each one written, and every other `.svg` directly
+     * in it deleted — the drawing of a model that was deleted, renamed, or whose `<key>.svg` name moved to
+     * another model when keys started to clash. The overview points readers at every SVG in the folder, so
+     * a leftover is a drawing of something that no longer exists, shown as current. Nothing else in the
+     * folder is touched; with no diagram left the folder goes too, but only when that leaves it empty.
+     */
+    fun write(dir: File, diagrams: Map<String, String>): Update {
+        // Compared exactly, not ignoring case: a key that became `order` leaves an `Order.svg` that a
+        // case-sensitive file system keeps beside the new `order.svg`. Deleting it first is harmless where
+        // the two are one file — the write below puts it back under the new spelling.
+        val removed = dir.listFiles().orEmpty()
+            .filter { it.isFile && it.name.endsWith(".svg", ignoreCase = true) && it.name !in diagrams }
+            .sortedBy { it.name }
+            .filter { it.delete() }
+        if (diagrams.isEmpty()) {
+            if (dir.isDirectory && dir.list().isNullOrEmpty()) dir.delete()
+            return Update(emptyList(), removed)
+        }
+        dir.mkdirs()
+        val written = diagrams.map { (fn, svg) -> File(dir, fn).also { it.writeText(svg, Charsets.UTF_8) } }
+        return Update(written, removed)
+    }
+
     /**
      * `<key>.svg`, unless that name is taken — compared ignoring case, since macOS and Windows file
      * systems would let `Order.svg` overwrite `order.svg`. A process and a case sharing a key, or two keys

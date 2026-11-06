@@ -45,9 +45,10 @@ class CliTest {
         val drawings = File(out, "miniproject.diagrams").listFiles()!!.map { it.name }.toSet()
         assertTrue("the order form is drawn: $drawings", "orderForm.svg" in drawings)
         assertTrue("no process of the fixture has a layout to draw: $drawings", "orderProcess.svg" !in drawings)
-        val ignore = File(out, ".gitignore").readText()
-        assertTrue("everything is ignored", ignore.lineSequence().any { it.trim() == "*" })
-        assertTrue("except the waivers", ignore.contains("!waivers.json"))
+        // The .gitignore names what Atlas wrote and nothing else — every artifact, by its suffix.
+        val patterns = ignorePatterns(out)
+        for (f in expected - ".gitignore") assertTrue("$f is ignored by $patterns", ignored(patterns, f))
+        assertFalse("waivers.json is not", ignored(patterns, "waivers.json"))
         // The guide points into its map, and CLAUDE.md names both.
         val guide = File(out, "miniproject.playwright.md").readText()
         assertTrue("the guide points at its map", guide.contains("miniproject.playwright-map.md"))
@@ -143,6 +144,16 @@ class CliTest {
         // A bare key works too — a reader should not have to know Atlas calls it a `process`.
         assertEquals(0, run(arrayOf(fixtureDir().path, "--slice", "orderProcess", "--stdout", "-q")))
         assertEquals(2, run(arrayOf(fixtureDir().path, "--slice", "nope:nothing", "--stdout", "-q")))
+        // …and so does what an agent editing a model knows first: its file, or the key in another case.
+        for (target in listOf("processes/order.bpmn", "ORDERPROCESS")) {
+            assertTrue(target, stdoutOf { assertEquals(target, 0, run(arrayOf(fixtureDir().path, "--slice", target, "-q"))) }
+                .contains("# `process:orderProcess`"))
+        }
+        // A near miss names the id it was probably meant to be, instead of an example that does not exist.
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(fixtureDir().path, "--slice", "ordrProcess", "--stdout", "-q")) }
+        assertEquals(2, code)
+        assertTrue(err, err.contains("did you mean") && err.contains("process:orderProcess"))
     }
 
     @Test
@@ -337,6 +348,278 @@ class CliTest {
         assertFalse(verbose, verbose.contains("[Fatal Error]"))
     }
 
+    /**
+     * `--claude` alone writes a drop-in `CLAUDE.md` into the project — and used to replace the team's own
+     * without a word. It regenerates only a file Atlas wrote; a file the user names with -o is theirs to name.
+     */
+    @Test
+    fun aHandWrittenClaudeMdIsNeverReplaced() {
+        val project = projectCopy()
+        val claudeMd = File(project, "CLAUDE.md").apply { writeText("# Team rules\nAlways run the tests.\n") }
+        val before = claudeMd.readBytes()
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(project.path, "--claude", "-q")) }
+        assertEquals(2, code)
+        assertTrue(err, err.startsWith("error: ") && err.contains("not written by Atlas"))
+        assertTrue("the team's file is untouched", before.contentEquals(claudeMd.readBytes()))
+
+        claudeMd.delete()
+        assertEquals(0, run(arrayOf(project.path, "--claude", "-q")))
+        assertTrue(claudeMd.readText().startsWith("# CLAUDE.md — "))
+        assertEquals("Atlas's own file is regenerated", 0, run(arrayOf(project.path, "--claude", "-q")))
+
+        claudeMd.writeText("# Team rules\n")
+        assertEquals("a file named with -o is the user's call", 0, run(arrayOf(project.path, "--claude", "-o", claudeMd.path, "-q")))
+        assertTrue(claudeMd.readText().startsWith("# CLAUDE.md — "))
+    }
+
+    /**
+     * The .gitignore names Atlas's artifacts and nothing else, so a folder it lands in stays safe to commit.
+     * It used to say `*`: written into a project folder, every model added there afterwards was invisible to git.
+     */
+    @Test
+    fun theGitignoreHidesOnlyWhatAtlasWrote() {
+        val out = tempDir()
+        File(out, "x.bpmn").writeText("<definitions/>")
+        File(out, "sub").mkdirs()
+        File(out, "sub/notes.summary.md").writeText("mine")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q")))
+        val patterns = ignorePatterns(out)
+        assertTrue("no catch-all: $patterns", patterns.none { it == "*" || it.startsWith("!") })
+        assertTrue("every pattern is an artifact suffix anchored to the folder: $patterns", patterns.all { it.startsWith("/*.") })
+        assertFalse(ignored(patterns, "x.bpmn"))
+        // The real thing, when git is here to ask.
+        val git = runCatching { ProcessBuilder("git", "--version").start().waitFor() == 0 }.getOrDefault(false)
+        if (git) {
+            fun gitIn(vararg a: String) = ProcessBuilder(listOf("git", "-C", out.path) + a).redirectErrorStream(true).start().waitFor()
+            assertEquals(0, gitIn("init", "-q"))
+            assertEquals("a model of the user's is not ignored", 1, gitIn("check-ignore", "-q", "x.bpmn"))
+            assertEquals("nor a file of theirs that only looks like an artifact", 1, gitIn("check-ignore", "-q", "sub/notes.summary.md"))
+            assertEquals("nor the waivers", 1, gitIn("check-ignore", "-q", "waivers.json"))
+            assertEquals("the analysis is", 0, gitIn("check-ignore", "-q", "miniproject.summary.md"))
+            assertEquals("and the drawings", 0, gitIn("check-ignore", "-q", "miniproject.diagrams/orderForm.svg"))
+        }
+    }
+
+    /** Without -o, `--all` writes into `atlas-output/<name>/` like the launcher — not into the working directory. */
+    @Test
+    fun allWithoutOutputWritesIntoItsOwnFolder() {
+        val cwd = tempDir()
+        val java = File(System.getProperty("java.home"), "bin/java").path
+        val p = ProcessBuilder(java, "-cp", System.getProperty("java.class.path"), "com.flowable.atlas.cli.MainKt",
+            fixtureDir().path, "--all", "-q").directory(cwd).redirectErrorStream(true).start()
+        val log = p.inputStream.bufferedReader().readText()
+        assertEquals(log, 0, p.waitFor())
+        assertEquals("the working directory holds only the folder", listOf("atlas-output"), cwd.list()!!.toList())
+        assertTrue(File(cwd, "atlas-output/miniproject/miniproject.explorer.html").isFile)
+        assertTrue(File(cwd, "atlas-output/miniproject/.gitignore").isFile)
+    }
+
+    /** A single model file is a project of one, as --help always said; anything else is not a project at all. */
+    @Test
+    fun aSingleModelFileIsAnalysed() {
+        val summary = stdoutOf {
+            assertEquals(0, run(arrayOf(File(fixtureDir(), "processes/order.bpmn").path, "--summary", "--stdout", "-q")))
+        }
+        assertTrue(summary, summary.contains("1 models") && summary.contains("orderProcess"))
+        // With a layout, it is drawn — the bytes are read back from the file itself.
+        val out = tempDir()
+        assertEquals(0, run(arrayOf(File(repoRoot(), "core/src/test/resources/diagram/DEMO-onboarding.bpmn20.xml").path,
+            "--all", "-o", out.path, "-q")))
+        assertTrue(File(out, "DEMO-onboarding.bpmn20.diagrams/DEMO-onboarding.svg").isFile)
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(File(repoRoot(), "README.md").path, "--summary", "--stdout")) }
+        assertEquals(2, code)
+        assertTrue(err, err.contains("not a project directory, a model file or a .zip/.bar archive"))
+    }
+
+    /** A run that finds nothing is the wrong directory, not a clean project — and must not pass a CI gate. */
+    @Test
+    fun aPathWithNothingToAnalyseIsAMisuse() {
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(tempDir().path, "--summary", "--stdout", "--fail-on", "error", "-q")) }
+        assertEquals(2, code)
+        assertTrue(err, err.contains("no Flowable models, archives or Java sources"))
+        val javaOnly = tempDir().also { File(it, "Foo.java").writeText("package com.example; public class Foo {}") }
+        val warn = stderrOf { code = run(arrayOf(javaOnly.path, "--summary", "--stdout")) }
+        assertEquals("Java alone is a project — one that deploys its models from elsewhere", 0, code)
+        assertTrue(warn, warn.contains("no Flowable models found"))
+    }
+
+    /**
+     * Without -o a single artifact lands in the project, so that is where its waivers.json is read — the
+     * folder the explorer's advice sends a CLI user to. It used to be the working directory, whatever it was.
+     */
+    @Test
+    fun aRunWithoutOutputReadsTheWaiversBesideTheFileItWrites() {
+        val project = projectCopy()
+        val scratch = tempDir()
+        assertEquals(1, run(arrayOf(project.path, "--all", "-o", scratch.path, "-q", "--fail-on", "error")))
+        waiveEvery(scratch) { it["severity"] == "error" }
+        File(scratch, "waivers.json").copyTo(File(project, "waivers.json"))
+        assertEquals("the project's waivers are read", 0, run(arrayOf(project.path, "--summary", "--fail-on", "error", "-q")))
+        assertTrue(File(project, "APP_OVERVIEW.summary.md").isFile)
+        assertEquals("stdout writes nowhere, so it reads the working directory", 1,
+            run(arrayOf(project.path, "--summary", "--stdout", "--fail-on", "error", "-q")))
+    }
+
+    /**
+     * An output that cannot be written is said in one line, before the analysis where it can be (exit 2), and
+     * as a failed run where it cannot (exit 3) — never as a stack trace with exit 1, the code that means "a
+     * finding matched, the report is written". Every case here fails for root as well as for a user.
+     */
+    @Test
+    fun aRunThatCannotWriteIsAnErrorNotAFinding() {
+        val dir = tempDir()
+        val nested = File(dir, "new/sub/x.md")
+        assertEquals("missing folders of a single file are created", 0, run(arrayOf(fixtureDir().path, "--summary", "-o", nested.path, "-q")))
+        assertTrue(nested.isFile)
+
+        val blocker = File(dir, "blocker").apply { writeText("a file") }
+        for (args in listOf(arrayOf("--all", "-o", blocker.path), arrayOf("--summary", "-o", File(blocker, "x.md").path),
+            arrayOf("--json", "-o", dir.path), arrayOf("--summary", "--output="))) {
+            var code = -1
+            val err = stderrOf { code = run(arrayOf(fixtureDir().path, *args, "-q", "--fail-on", "error")) }
+            assertEquals(args.joinToString(" "), 2, code)
+            assertTrue(err, err.startsWith("error: ") && !err.contains("Exception") && err.trim().lines().size == 1)
+        }
+
+        // Past the checks, a write that fails is a failed run: here an artifact's name is taken by a folder.
+        val out = tempDir().also { File(it, "miniproject.summary.md").mkdirs() }
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")) }
+        assertEquals(3, code)
+        assertTrue(err, err.startsWith("error: could not write the output") && err.trim().lines().size == 1)
+    }
+
+    /** Both gates are reported before either decides: a stale waiver used to hide the --fail-on tally. */
+    @Test
+    fun staleWaiversFailTheRunOnlyWithTheFlag() {
+        val out = tempDir()
+        File(out, "waivers.json").writeText("""{"version":1,"waivers":[{"check":"unusedForms","node":"form:DEMO-NOPE","reason":"x"}]}""")
+        val report = File(out, "report.md").path
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--summary", "-o", report, "-q")))
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "-o", report, "-q", "--fail-on-stale-waivers")))
+        val err = stderrOf { run(arrayOf(fixtureDir().path, "--summary", "-o", report, "--fail-on-stale-waivers", "--fail-on", "error")) }
+        assertTrue(err, err.contains("matched nothing: unusedForms on form:DEMO-NOPE"))
+        assertTrue(err, err.contains("--fail-on-stale-waivers: 1 stale waiver(s)"))
+        assertTrue(err, err.contains("--fail-on error:"))
+    }
+
+    /** What each flag silently did instead of saying no — every one of these is a misuse now. */
+    @Test
+    fun flagMisuseIsAnErrorNotAPreference() {
+        val out = tempDir()
+        val fixture = fixtureDir().path
+        assertEquals(2, run(arrayOf(fixture, "--all", "--stdout", "-o", out.path, "-q")))
+        assertTrue("--all --stdout wrote nothing", out.list()!!.isEmpty())
+        // An unset CI variable must not switch the gate off.
+        assertEquals(2, run(arrayOf(fixture, "--summary", "--stdout", "-q", "--fail-on", "")))
+        assertEquals(2, run(arrayOf(fixture, "--summary", "--stdout", "-q", "--fail-on", ",")))
+        // An option's value is never the next option: this used to write a file called `--stdout`.
+        assertEquals(2, run(arrayOf(fixture, "--summary", "-o", "--stdout", "-q")))
+        assertEquals(2, run(arrayOf(fixture, "--all=foo", "-q")))
+        assertEquals(2, run(arrayOf(fixture, "--summary", "--stdout=false", "-q")))
+        // `--slice "$NODE"` with the variable unset names no node.
+        assertEquals(2, run(arrayOf(fixture, "--slice", "", "--stdout", "-q")))
+        assertEquals(2, run(arrayOf(fixture, "--slice= ", "--stdout", "-q")))
+        // The forms that are right stay right.
+        assertEquals(0, run(arrayOf(fixture, "--summary", "-o${File(out, "a.md").path}", "-q")))
+        assertEquals(0, run(arrayOf(fixture, "--summary", "--output=${File(out, "b.md").path}", "-q")))
+    }
+
+    /** Re-running into the same folder leaves no drawing of a model that is gone; files of the user's stay. */
+    @Test
+    fun allRemovesTheDrawingsOfModelsThatAreGone() {
+        val out = tempDir()
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q")))
+        val drawings = File(out, "miniproject.diagrams")
+        File(drawings, "gone.svg").writeText("<svg/>")
+        File(drawings, "notes.txt").writeText("mine")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q")))
+        assertFalse(File(drawings, "gone.svg").exists())
+        assertTrue(File(drawings, "orderForm.svg").isFile)
+        assertTrue(File(drawings, "notes.txt").isFile)
+    }
+
+    /**
+     * The status line is the thing to read, so it ends the run: it used to come first and scroll away under
+     * one line per drawing — 250 on a large project. The drawings are one line, unless -v asks for each.
+     */
+    @Test
+    fun theStatusLineEndsTheRun() {
+        val out = tempDir()
+        val lines = stderrOf { run(arrayOf(fixtureDir().path, "--all", "-o", out.path)) }.lines().filter { it.isNotBlank() }
+        assertTrue(lines.joinToString("\n"), lines.last().startsWith("Flowable Atlas — miniproject:") && lines.last().contains("defects"))
+        val drawings = lines.filter { ".diagrams" in it }
+        assertEquals(lines.joinToString("\n"), 1, drawings.size)
+        assertTrue(drawings.single(), drawings.single().endsWith("(4 SVGs)"))
+        val verbose = stderrOf { run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-v")) }.lines()
+        val status = verbose.indexOfFirst { it.startsWith("Flowable Atlas — ") }
+        assertEquals("-v lists each drawing", 4, verbose.count { ".diagrams/" in it && it.endsWith(".svg") })
+        assertTrue("and still ends the list with the status line", status > verbose.indexOfLast { it.trimStart().startsWith("✓") })
+    }
+
+    /** `--open` on Windows: `start` is a cmd.exe builtin no PATH probe finds, so it never opened anything. */
+    @Test
+    fun theOpenerFitsThePlatform() {
+        assertEquals(listOf("rundll32", "url.dll,FileProtocolHandler", "C:\\a b\\x.html"),
+            openerCommand("Windows 11", "C:\\a b\\x.html") { false })
+        assertEquals(listOf("open", "/x.html"), openerCommand("Mac OS X", "/x.html") { it == "open" })
+        assertEquals(listOf("xdg-open", "/x.html"), openerCommand("Linux", "/x.html") { it == "xdg-open" })
+        assertEquals(null, openerCommand("Linux", "/x.html") { false })
+    }
+
+    // ---- flags no test exercised: each one decides an artifact or an exit code ----
+
+    @Test
+    fun theAllowlistIsCommaSeparatedAndTrimmed() {
+        val out = tempDir()
+        @Suppress("UNCHECKED_CAST")
+        fun bogus(vararg extra: String): Boolean {
+            val g = File(out, "g.json")
+            assertEquals(0, run(arrayOf(fixtureDir().path, "--json", "-o", g.path, "-q", *extra)))
+            val findings = (MiniJson.parse(g.readText()) as Map<String, Any?>)["findings"] as List<Map<String, Any?>>
+            return findings.any { it["message"] == "Unknown function 'vars:bogus'" }
+        }
+        assertTrue("the fixture calls an unknown function", bogus())
+        assertFalse(bogus("--expr-allowlist", " vars:bogus , other"))
+        assertFalse(bogus("--expr-allowlist=vars:bogus"))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun customFunctionsComeFromTheNamedPathUnlessTurnedOff() {
+        val out = tempDir()
+        val g = File(out, "g.json")
+        val source = File(repoRoot(), "site/flowable-demo/frontend/customisation.ts").path
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--json", "-o", g.path, "-q", "--custom-functions", source)))
+        val cf = (MiniJson.parse(g.readText()) as Map<String, Any?>)["customFunctions"] as? Map<String, Any?>
+        assertTrue("$cf", (cf?.get("namespaces") as? Map<String, Any?>)?.containsKey("demofns") == true)
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--json", "-o", g.path, "-q", "--custom-functions", source, "--no-custom-functions")))
+        assertEquals("turned off, there is nothing to report", null, (MiniJson.parse(g.readText()) as Map<String, Any?>)["customFunctions"])
+    }
+
+    @Test
+    fun theWaiverAuthorReachesThePage() {
+        val page = File(tempDir(), "x.html")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--html", "-o", page.path, "-q", "--waiver-author", "DEMO-team")))
+        assertTrue(page.readText().contains("\"waiverAuthor\":\"DEMO-team\""))
+    }
+
+    @Test
+    fun theClaudeTemplateNeedsNoPath() {
+        val t = File(tempDir(), "t.md")
+        assertEquals(0, run(arrayOf("--claude-template", "-o", t.path, "-q")))
+        assertEquals(File(repoRoot(), "CLAUDE.template.md").readText(), t.readText())
+    }
+
+    @Test
+    fun doubleDashEndsOptions() {
+        assertEquals(0, run(arrayOf("--summary", "--stdout", "-q", "--", fixtureDir().path)))
+        assertEquals("after --, a flag is a second path", 2, run(arrayOf("--summary", "--stdout", "-q", "--", fixtureDir().path, "--all")))
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun waiveEvery(out: File, which: (Map<String, Any?>) -> Boolean) {
         val graph = MiniJson.parse(File(out, "miniproject.graph.json").readText()) as Map<String, Any?>
@@ -357,6 +640,14 @@ class CliTest {
         return buf.toString("UTF-8")
     }
 
+    private fun stdoutOf(block: () -> Unit): String {
+        val buf = java.io.ByteArrayOutputStream()
+        val prev = System.out
+        System.setOut(java.io.PrintStream(buf, true, "UTF-8"))
+        try { block() } finally { System.setOut(prev) }
+        return buf.toString("UTF-8")
+    }
+
     // ---- helpers ----
 
     // A rule, not Files.createTempDirectory: each `--all` run writes about a megabyte, and directories
@@ -364,6 +655,17 @@ class CliTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private fun tempDir(): File = tmp.newFolder()
+
+    /** The fixture copied to a folder of its own, for a test that writes into the project. */
+    private fun projectCopy(): File = File(tempDir(), "miniproject").also { fixtureDir().copyRecursively(it) }
+
+    /** The pattern lines of the `.gitignore` in [dir]. */
+    private fun ignorePatterns(dir: File): List<String> =
+        File(dir, ".gitignore").readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+
+    // Whether a top-level [name] in that folder matches one of Atlas's patterns: a suffix anchored to the folder.
+    private fun ignored(patterns: List<String>, name: String): Boolean =
+        patterns.any { p -> p.startsWith("/*") && name.endsWith(p.removePrefix("/*").removeSuffix("/")) }
 
     private fun fixtureDir(): File =
         File(repoRoot(), "core/src/test/resources/miniproject").also {

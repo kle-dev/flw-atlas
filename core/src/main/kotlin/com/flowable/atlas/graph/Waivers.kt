@@ -254,14 +254,6 @@ object Waivers {
     }
 
     /**
-     * The `.gitignore` Atlas drops next to the generated artifacts.
-     *
-     * The output folder is regenerated wholesale and may carry client data, so it is the last place that
-     * should be committed — but the waivers in it are decisions a team made, and they belong in review.
-     * Ignoring everything except that one file lets the folder be committed without ever carrying an
-     * analysis into a repository.
-     */
-    /**
      * Drop [OUTPUT_GITIGNORE] into [dir] unless the folder already has one. Written once, never
      * rewritten: a project that tuned its version keeps it. Every writer of an output folder — the CLI's
      * `--all` and the plugin's generate-all — calls this, so the folder is safe to commit whichever
@@ -288,11 +280,29 @@ object Waivers {
         return git ?: System.getProperty("user.name")?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    val OUTPUT_GITIGNORE = """
-        # Written by Flowable Atlas. The analysis here is regenerated and may contain client data;
-        # waivers.json is the one file that is yours — decisions about findings, meant to be reviewed.
-        *
-        !.gitignore
-        !$FILE_NAME
-    """.trimIndent() + "\n"
+    /**
+     * The name endings of everything a generate-all writes into its folder: `<name>` plus one of these. The
+     * `.diagrams` one is a folder. The plugin's artifact list is held to this one by a test, so a new
+     * artifact cannot be left out of [OUTPUT_GITIGNORE].
+     */
+    val ARTIFACT_SUFFIXES = listOf(
+        ".summary.md", ".overview.md", ".graph.json", ".explorer.html", ".erd.html", ".CLAUDE.md",
+        ".playwright.md", ".playwright-map.md", ".diagrams",
+    )
+
+    /**
+     * The `.gitignore` Atlas drops next to the generated artifacts.
+     *
+     * The analysis there is regenerated and may carry client data, so it should never be committed — but
+     * waivers.json beside it holds decisions a team made, and those belong in review. It used to say `*`
+     * and un-ignore that one file, which is right only in a folder Atlas owns: written into a project
+     * folder (`--all` used to default to the working directory), it hid every model added there afterwards
+     * from git. So it names what Atlas writes, by suffix, anchored to the folder, and nothing else: any
+     * folder it lands in stays safe to commit, waivers.json included without a negation.
+     */
+    val OUTPUT_GITIGNORE = (listOf(
+        "# Written by Flowable Atlas. It ignores the analysis Atlas writes into this folder: regenerated on",
+        "# every run, and it may contain client data. Everything else stays visible to git — $FILE_NAME",
+        "# above all: the team's decisions about findings, meant to be reviewed and committed.",
+    ) + ARTIFACT_SUFFIXES.map { if (it == ".diagrams") "/*$it/" else "/*$it" }).joinToString("\n") + "\n"
 }

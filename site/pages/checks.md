@@ -21,11 +21,11 @@ Every check is one of two **kinds**, and the split is the first thing every surf
 - **Advice** — nothing is broken. The check names a pattern worth a look — a call with no error path, a
   form nothing references, an async job without its own retry policy — and acting on it is optional.
 
-The Checks page, the summary, the overview, the generated `CLAUDE.md` and the CLI status line all lead
-with the two numbers (`3 defects · 41 advice`), `graph.json` carries them as `stats.defects` and
-`stats.advice`, and `--fail-on defects` makes a pipeline red on the first kind only. Within each kind the
-checks are ordered by how much they deserve attention: broken first, then unfinished, then how a process
-is configured to behave.
+The Checks page, the summary, the overview and the generated `CLAUDE.md` all lead with the two numbers
+(`3 defects · 41 advice`), the CLI status line ends with them, `graph.json` carries them as
+`stats.defects` and `stats.advice`, and `--fail-on defects` makes a pipeline red on the first kind only.
+Within each kind the checks are ordered by how much they deserve attention: broken first, then
+unfinished, then how a process is configured to behave.
 
 The explorer and the IDE's findings tool window label every advice finding *advice* and draw it grey. The
 *Severity* column below is what `graph.json`, the summary and `--fail-on` see — every advice check is a
@@ -545,8 +545,10 @@ for everyone is the wrong answer to one of those, so a project can accept indivi
 `waivers.json`.
 
 Atlas writes that file's folder for you. With `--all` it sits beside the artifacts, next to a
-`.gitignore` that ignores everything in the folder **except** `waivers.json` — the analysis is
-regenerated and may carry client data, the decisions are yours and belong in review.
+`.gitignore` that ignores exactly the artifacts Atlas writes there, by their suffixes (`/*.summary.md`,
+`/*.graph.json`, `/*.diagrams/`, …) — the analysis is regenerated and may carry client data, the decisions
+are yours and belong in review. Nothing else in the folder is ignored, so `waivers.json`, and any file of
+yours that lands beside it, stays visible to git. A folder that already has a `.gitignore` keeps its own.
 
 ```json
 {

@@ -478,6 +478,12 @@ object Atlas {
         for (link in discovered.outsideLinks) {
             diag("skip", relOf(link), "a symbolic link out of the project — not followed")
         }
+        // A `skip`, so a warning: a root-owned database volume inside a checkout is common, and turning that
+        // into an error would fail every `--fail-on error` pipeline over a folder that holds no models.
+        // Not silent, though — models may have been under it, and a dropped folder looked like an empty one.
+        for (dir in discovered.unreadable) {
+            diag("skip", relOf(dir).ifEmpty { "." }, "directory could not be listed (permissions) — nothing under it was read")
+        }
 
         fun tooLarge(label: String, size: Long): Boolean {
             if (size <= MAX_MODEL_BYTES) return false

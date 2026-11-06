@@ -122,6 +122,30 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         for (n in named) assertTrue("CLAUDE.md names $n, which was not written", Files.exists(out.resolve(n)))
     }
 
+    /**
+     * The output folder's .gitignore names Atlas's artifacts one by one (a catch-all `*` hid the user's own
+     * files from git), so an artifact the plugin learns to write must be on that list, or it gets committed.
+     */
+    fun testTheOutputGitignoreNamesEveryArtifact() {
+        val suffixes = com.flowable.atlas.graph.Waivers.ARTIFACT_SUFFIXES
+        for (a in AtlasArtifact.entries) assertTrue("${a.suffix} is not in Waivers.ARTIFACT_SUFFIXES", a.suffix in suffixes)
+        assertTrue(".${com.flowable.atlas.render.PlaywrightRenderer.MAP_SUFFIX}" in suffixes)
+        for (s in suffixes) assertTrue(s, com.flowable.atlas.graph.Waivers.OUTPUT_GITIGNORE.lines().any { it.startsWith("/*$s") })
+    }
+
+    /** A regeneration leaves no drawing of a model that is gone — and says which, so the VFS hears of it. */
+    fun testARegenerationRemovesTheDrawingsOfModelsThatAreGone() {
+        val out = dir.toPath().resolve("atlas-output")
+        val stale = out.resolve("${dir.name}.diagrams/DEMO-gone.svg")
+        Files.createDirectories(stale.parent)
+        Files.writeString(stale, "<svg/>")
+        val outcome = AtlasGeneratorService.getInstance(project)
+            .generateAll(dir.toPath(), out, EmptyProgressIndicator(), setOf(AtlasArtifact.SUMMARY_MD, AtlasArtifact.DIAGRAMS_SVG))
+        assertTrue(outcome.toString(), outcome is AtlasGeneratorService.Outcome.Success)
+        assertFalse(Files.exists(stale))
+        assertEquals(listOf(stale), (outcome as AtlasGeneratorService.Outcome.Success).removed)
+    }
+
     fun testAPageRemembersTheFolderItWasMadeFrom() {
         val page = dir.toPath().resolve("atlas-output/a.explorer.html")
         assertNull(AtlasExplorerFiles.rootOf(project, page))

@@ -252,7 +252,9 @@ page they were four screens of fields with no hierarchy. Every folder field on t
 browse button writes the chosen folder relative to the active Flowable project (an absolute path only
 for a folder outside it). Unticking every artifact is not a way to generate nothing: the selection
 falls back to the explorer HTML. Generating into the output folder also drops a `.gitignore` there that keeps
-everything except `waivers.json` out of the repository — the same file the CLI writes.
+the generated artifacts out of the repository and nothing else — `waivers.json` and any file of yours stay
+visible — the same file the CLI writes. With *Diagrams (SVG)* ticked, a regeneration also removes the
+drawings of models that no longer exist from `<name>.diagrams/`.
 
 
 | Option | Default |

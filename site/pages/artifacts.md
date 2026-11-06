@@ -19,8 +19,8 @@ atlas-output/order-management/
 ```
 
 Only `--all` names files after the project — after the directory's real name, so a project analysed
-from inside itself as `.` is named like any other. A single-artifact run writes `APP_OVERVIEW.*` unless you
-name the file yourself — see the [CLI reference](../cli/#output-format).
+from inside itself as `.` is named like any other. A single-artifact run writes `APP_OVERVIEW.*` into the
+project unless you name the file yourself — see the [CLI reference](../cli/#output-format).
 
 ## `<project>.explorer.html` — the explorer
 
@@ -230,7 +230,9 @@ Written by `--all` when any model can be drawn. One SVG per process, case or dec
 the model's diagram interchange — deployment `bpmndi` / `cmmndi` / `dmndi` XML, or a Flowable Design
 workspace's ORYX JSON; one per form or page, as a **wireframe** of its twelve-column grid; and for a
 decision with no canvas, its **decision table** drawn from its rules. They are the pictures the explorer
-shows on a model's page and the IDE's model preview draws — one renderer for all three.
+shows on a model's page and the IDE's model preview draws — one renderer for all three. The folder holds
+this run's drawings and no others: a model that is gone loses its drawing on the next run, and a file in
+it that is not an SVG is left alone.
 
 Nothing is downloaded and no Design instance is contacted: the geometry is already in your models.
 
@@ -245,7 +247,10 @@ java -jar cli-<version>-all.jar <project> --slice process:orderProcess --stdout
 
 One node with what it uses, **who uses it**, the findings that touch it, and its own attributes — sized
 for an agent that has been asked to change exactly one model. A bare key without a type matches any
-type and renders every match.
+type and renders every match. So does what an agent usually has in hand instead: the model's file path
+(`--slice processes/order.bpmn`, or its absolute path), a Java class's simple name, a label, or the key
+in another case — the slice then opens with a line saying what it matched by. A target that matches
+nothing names the nearest ids instead.
 
 ## Uncertain links
 
