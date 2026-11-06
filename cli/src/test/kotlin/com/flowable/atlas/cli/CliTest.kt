@@ -4,9 +4,10 @@ import com.flowable.atlas.model.MiniJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
-import java.nio.file.Files
 
 /**
  * Contract tests for the standalone CLI (`run(argv)`), mirroring Python's `tests/test_cli.py`:
@@ -352,7 +353,11 @@ class CliTest {
 
     // ---- helpers ----
 
-    private fun tempDir(): File = Files.createTempDirectory("atlas-cli-test").toFile()
+    // A rule, not Files.createTempDirectory: each `--all` run writes about a megabyte, and directories
+    // nobody deleted piled up in $TMPDIR at a dozen per build.
+    @get:Rule val tmp = TemporaryFolder()
+
+    private fun tempDir(): File = tmp.newFolder()
 
     private fun fixtureDir(): File =
         File(repoRoot(), "core/src/test/resources/miniproject").also {

@@ -1,9 +1,10 @@
 package com.flowable.atlas.parsing
 
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
-import java.nio.file.Files
 
 /**
  * Heuristic project-folder detection for the multi-project (monorepo) case. Granularity is the
@@ -13,8 +14,10 @@ import java.nio.file.Files
  */
 class ProjectDetectionTest {
 
+    @get:Rule val tmp = TemporaryFolder()
+
     private fun tempRoot(vararg relPaths: String): File {
-        val root = Files.createTempDirectory("atlas-detect-test").toFile()
+        val root = tmp.newFolder()
         for (rel in relPaths) {
             val f = File(root, rel)
             f.parentFile.mkdirs()

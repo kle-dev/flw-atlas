@@ -72,9 +72,14 @@ class RenderersSmokeTest {
     @Test
     fun onlyAProjectWithTablesHasAnErPage() {
         assertTrue(ErdHtmlRenderer.hasTables(result))
-        val empty = java.nio.file.Files.createTempDirectory("no-tables").toFile().also { it.deleteOnExit() }
-        java.io.File(empty, "DEMO-P001.bpmn").writeText("""<definitions><process id="DEMO-P001"/></definitions>""")
-        assertFalse(ErdHtmlRenderer.hasTables(Atlas.extract(empty)))
+        // deleted in a finally block — deleteOnExit removes only an empty directory, and this one holds a model
+        val empty = java.nio.file.Files.createTempDirectory("no-tables").toFile()
+        try {
+            java.io.File(empty, "DEMO-P001.bpmn").writeText("""<definitions><process id="DEMO-P001"/></definitions>""")
+            assertFalse(ErdHtmlRenderer.hasTables(Atlas.extract(empty)))
+        } finally {
+            empty.deleteRecursively()
+        }
     }
 
     /**

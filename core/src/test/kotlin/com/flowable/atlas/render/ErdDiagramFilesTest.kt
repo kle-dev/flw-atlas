@@ -2,9 +2,10 @@ package com.flowable.atlas.render
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
-import java.nio.file.Files
 
 /**
  * The project's ER diagrams reach the page that carries the designer: found where people keep them, not
@@ -13,7 +14,10 @@ import java.nio.file.Files
  */
 class ErdDiagramFilesTest {
 
-    private fun project(): File = Files.createTempDirectory("erd-files").toFile().also { it.deleteOnExit() }
+    // A rule, not deleteOnExit: that deletes only an empty directory, and these never are.
+    @get:Rule val tmp = TemporaryFolder()
+
+    private fun project(): File = tmp.newFolder()
 
     @Test
     fun findsDiagramsAndSkipsBuildOutput() {
@@ -48,7 +52,7 @@ class ErdDiagramFilesTest {
 
     @Test
     fun aSingleFileOrArchiveHasNoProjectDiagrams() {
-        val f = File.createTempFile("model", ".bpmn").also { it.deleteOnExit() }
+        val f = tmp.newFile("model.bpmn")
         assertEquals(emptyList<Any>(), ErdDiagramFiles.find(f))
     }
 

@@ -62,10 +62,15 @@ class WaiverWriterParityTest {
             "rules" to set.waivers.map(::rule), "notes" to set.notes.map(::note),
         ))
         val tmp = Files.createTempFile("atlas-waivers-input", ".json").toFile().apply { writeText(input, Charsets.UTF_8) }
-        val script = File(GoldenFiles.repoRoot, "scripts/waiver-selftest.mjs")
-        val p = ProcessBuilder(node, script.path, tmp.path).redirectErrorStream(true).start()
-        val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
-        assertEquals("waiver-selftest.mjs failed:\n$out", 0, p.waitFor())
+        val out = try {
+            val script = File(GoldenFiles.repoRoot, "scripts/waiver-selftest.mjs")
+            val p = ProcessBuilder(node, script.path, tmp.path).redirectErrorStream(true).start()
+            p.inputStream.readBytes().toString(Charsets.UTF_8).also {
+                assertEquals("waiver-selftest.mjs failed:\n$it", 0, p.waitFor())
+            }
+        } finally {
+            tmp.delete()
+        }
         assertEquals("the two writers disagree — see the KDoc on Waivers.serialize", expected, out)
     }
 

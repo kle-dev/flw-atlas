@@ -205,7 +205,11 @@ class PlaywrightRendererTest {
     @Test
     fun anOutputDirectoryOutsideTheProjectIsSpelledOutInFull() {
         val out = Files.createTempDirectory("atlas-out").toFile()
-        val text = PlaywrightRenderer.render(demoResult, demoDir, PlaywrightRenderer.Layout(out, graph = true, map = true))
+        val text = try {
+            PlaywrightRenderer.render(demoResult, demoDir, PlaywrightRenderer.Layout(out, graph = true, map = true))
+        } finally {
+            out.deleteRecursively()
+        }
         val jq = text.lines().first { it.startsWith("jq '.cases[]") }
         val shown = PlaywrightRenderer.shellArg(ClaudeRenderer.shownDir(out) + "/flowable-demo.graph.json")
         assertTrue(jq, jq.endsWith(" $shown"))
