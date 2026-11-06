@@ -172,7 +172,9 @@ with nothing to show is left out:
   that deploy it, and *Other attributes*.
 
 The header is the type's icon in a tinted tile, the title and one identity line (kind · key · file path,
-each copyable, the path opening the file inside IntelliJ). The **health strip** under it answers "is this
+each copyable, the path opening the file inside IntelliJ). On a narrow page the path keeps to that line
+and gives up its folders and archives before the file's own name; hovering it shows the whole path.
+The **health strip** under it answers "is this
 one fine?" whichever tab is open: the open defects and advice, the gaps the Connections tables found (or
 *✓ fits*, or *? unclear* when all Atlas can say is that it cannot tell), how many models it *uses* and is
 *used by*, the apps that ship it — or *in no app* — and the tests that deploy it. Every item brings up the
@@ -301,8 +303,13 @@ implementation, the operation it calls and its field injections. A long table ge
 and past a hundred rows it shows the first ones and a *show all* button — the filter still searches
 every row. In a narrow panel — an IntelliJ tool window — a table keeps the columns it cannot do without on
 the row, drops the others under it, and a matrix cell that drops says whose it is; nothing scrolls
-sideways. Text cut to fit — a cell, a chip, a tag, a card's title, a name in the list — says itself in
-full when you hover it or tab to it, beside whatever tooltip the element already had.
+sideways. A findings table does this already at an editor tab's width — severity, message and *accept…*
+on the row, the model, element and file under it — because its seven columns do not fit there. A chip
+that is a cell's value — a finding's model, the model a call goes to — shows its name without the kind
+label (the column and the icon say it, and hovering the chip names it), and an element's name keeps its
+room before the id beside it does; a file column names the file, an archive entry by its own name. Text
+cut to fit — a cell, a chip, a tag, a card's title, a name in the list — ends in an ellipsis and says
+itself in full when you hover it or tab to it, beside whatever tooltip the element already had.
 
 The identifier in a row copies out of it: a node's key or a Java class's full name in a category table, an
 element id, the key of the form, decision or process a row points at, a field id, a property or parameter

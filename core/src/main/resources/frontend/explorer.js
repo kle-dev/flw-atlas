@@ -2478,7 +2478,14 @@ const FIND_CAP=200;
 // What accepting does, said where the decision is taken — on the button and in the form — instead of as a
 // paragraph above every model's findings, which a reader met on every page and stopped reading.
 const ACCEPT_TIP='Accept: it stays in the report, in its own section, out of the counts and the CI gate. Nothing is written until you save.';
-const fileBase=p=>String(p||'').split('/').pop();
+// A file's own name: for a model inside an app archive that is the entry, not "<App>-bar.zip!form-…" — every
+// row of one app read the same up to its ellipsis. The full path stays one hover away where this is shown.
+const fileBase=p=>String(p||'').split(/[\/!]/).pop();
+/** A path as two pieces, so a cut takes the folders and archives and leaves the file's own name whole. */
+function filePathHtml(p){
+  const s=String(p||''), i=Math.max(s.lastIndexOf('/'), s.lastIndexOf('!'))+1;
+  return '<span class="fp"><span class="fp-dir">'+esc(s.slice(0,i))+'</span><span class="fp-name">'+esc(s.slice(i))+'</span></span>';
+}
 const SHOWACC_KEY='atlas-chk-showacc';
 function showAccepted(){ try{ return localStorage.getItem(SHOWACC_KEY)==='1'; }catch(e){ return false; } }
 /** What a rule says about the finding it covers: the reason, who, until when — and whether it is saved. */
@@ -2522,7 +2529,7 @@ function findingRow(f, o){
       // on a model's own page the file is the page's: its line is what is left, and the button that opens
       // it joins the actions — a column of nothing but an IDE-only button read as an empty one in a browser
       where:!f.file?'' : o.lineOnly?(f.line!=null?lineRef(f.file,f.line):'')
-        : '<span class="fp">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line),
+        : '<span class="fp" data-tip="'+esc(f.file)+'">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line),
       act:(o.lineOnly&&f.file?openBtn(f.file,f.line):'')+(rule?'<button type="button" class="dgbtn wv-edit" data-fi="'+f.fi+'">edit</button><button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
               :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'" data-tip="'+ACCEPT_TIP+'">accept…</button>'),
     }};
@@ -3705,8 +3712,12 @@ function nodeChip(id,f){
   const cls=f&&f.sus?' nc-sus':f&&f.dyn?' nc-dyn':'';
   const flag=f&&f.sus?'<span class="ncflag" title="suspect — ambiguous match">≈</span>'
            :f&&f.dyn?'<span class="ncflag" title="dynamic — reference is an expression">ƒ</span>':'';
-  return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link">'+nodeIcon(n)+
-    '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(nodeKind(n))+'</span>'+copyBtn(n.key,nodeKind(n)+' key')+'</span>';
+  // The tip names the kind as well: in a table cell the kind label is hidden (explorer.css), so hovering is
+  // where it is still said — label · kind, the shape a page's tab already uses. An expression's label is its
+  // source text, thousands of characters on real forms: the tip keeps a line of it, the cut-text bubble the rest.
+  const kind=nodeKind(n), lb=String(n.label==null?'':n.label), tl=lb.length>160?lb.slice(0,160)+'…':lb;
+  return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link" data-tip="'+esc(tl+' · '+kind)+'">'+nodeIcon(n)+
+    '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(kind)+'</span>'+copyBtn(n.key,kind+' key')+'</span>';
 }
 // `label ↓` — one element inside a model, opened where it lives. `data-goto`/`data-goto-el` is the
 // contract wireNodeLinks() reads; `tip` is optional because in the detail pane the surrounding row
@@ -4100,8 +4111,9 @@ function identLine(n){
   return '<div class="dident">'+
     '<span class="dkindw"'+(hint?' data-tip="'+esc(hint)+'"':'')+'>'+esc(nodeKind(n))+'</span>'+
     '<span class="dsep" aria-hidden="true">·</span><span class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</span>'+
-    (n.file?'<span class="dsep" aria-hidden="true">·</span><span class="dfile" data-tip="Click to copy the path" data-copy="'+enc(n.file)+
-      '"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file,(n.data||{}).line)+'</span>':'')+
+    // the tip carries the whole path: on a narrow page its folders are cut before its name is (explorer.css)
+    (n.file?'<span class="dsep" aria-hidden="true">·</span><span class="dfile" data-tip="'+esc(n.file)+'\nClick to copy the path" data-copy="'+enc(n.file)+
+      '">'+filePathHtml(n.file)+copyBtn(n.file,'path')+openBtn(n.file,(n.data||{}).line)+'</span>':'')+
     '</div>';
 }
 /** Icon tile, title, identity line and the health strip — what a page says whichever tab is open. The
@@ -4643,8 +4655,10 @@ function callsTable(n, c){
         callee:(ep||other)?vlink((ep||other).id, (ep||other).label):'<span class="mono">'+esc(r.url||'')+'</span> '+tag('not in project'),
         in:(r.method?tag(r.method)+' ':'')+vc, out:r.path?'<span class="mono">'+esc(r.path)+'</span>':''}};
   });
-  return gapTable([{k:'el',label:'Element',w:'minmax(12ch,1.3fr)'},{k:'callee',label:'Calls',w:'minmax(14ch,1.5fr)'},
-      {k:'in',label:'Hands over',w:'minmax(12ch,1.3fr)',cls:'tags',opt:true},{k:'out',label:'Takes back',w:'minmax(10ch,1fr)',cls:'tags',opt:true}],
+  // The element gets the most room: it carries a name and an id. Hands over keeps 12ch, because its pills
+  // name up to two gap variables and do not wrap.
+  return gapTable([{k:'el',label:'Element',w:'minmax(16ch,1.9fr)'},{k:'callee',label:'Calls',w:'minmax(14ch,1.4fr)'},
+      {k:'in',label:'Hands over',w:'minmax(12ch,1.1fr)',cls:'tags',opt:true},{k:'out',label:'Takes back',w:'minmax(10ch,.8fr)',cls:'tags',opt:true}],
     sites.map(st=>{
       const cn=st.callee.id&&byId.get(st.callee.id);
       const known=st.callee.state==='ok'||st.callee.state==='unknown';

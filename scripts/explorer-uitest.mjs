@@ -1448,6 +1448,35 @@ const probe = `<script>
   });
 
 
+  // --- what a table cell shows: a chip's name, an element's name before its id, a file's own name ---
+  steps.push(()=>{ location.hash=enc('process:orderProcess')+'&p=connections'; });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('the breadcrumb keeps its path where it fits', !document.getElementById('crumbs').classList.contains('solo'));
+    // An element's name outlasts its id: both used to shrink alike, "Decide appr… ⌖ decideT…"
+    const calls=det.querySelector('details.sect[data-sect="fit-calls"] .tbl');
+    ok('the process has a Calls table', !!calls);
+    const names=calls?[...calls.querySelectorAll('.cellx>.cxn')]:[];
+    const cutNames=names.filter(e=>e.scrollWidth>e.clientWidth+1);
+    ok('the Calls table shows every element name whole', names.length>0 && !cutNames.length, cutNames.map(e=>e.textContent).join(' | '));
+    const tags=calls?[...calls.querySelectorAll('.td.tags')].filter(e=>e.getClientRects().length):[];
+    ok('and clips no gap name under the next column', tags.every(t=>t.scrollWidth<=t.clientWidth+1));
+    // a chip that is a cell's value says its name, not its kind; its tooltip still says the kind
+    const chip=calls&&calls.querySelector('.td>.nc');
+    ok('a chip in a table cell hides its kind label', !!chip && getComputedStyle(chip.querySelector('.ty')).display==='none');
+    ok('and its tooltip names the kind', !!chip && / · /.test(chip.getAttribute('data-tip')||'') &&
+       (chip.getAttribute('data-tip')||'').endsWith(nodeKind(byId.get(dec(chip.dataset.id)))), chip&&chip.getAttribute('data-tip'));
+    const rel=det.querySelector('.reltbl .rnb>.nc .ty');
+    ok('a relation neighbour keeps its kind label', !rel || getComputedStyle(rel).display!=='none');
+    // the file column names the file: a model inside an app archive used to read "<App>-bar.zip!form…" on every row
+    ok('a file is named by its archive entry', fileBase('x/DEMO-bar.zip!form-DEMO-F1.form')==='form-DEMO-F1.form' &&
+       fileBase('archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn')==='archived.bpmn' && fileBase('a/b/c.bpmn')==='c.bpmn');
+    const ff=FINDS.find(f=>f.file), wh=document.createElement('div'); wh.innerHTML=ff?findingRow(ff).cells.where:'';
+    const wfp=wh.querySelector('.fp');
+    ok('a finding\\'s file keeps its whole path one hover away', !!wfp && wfp.getAttribute('data-tip')===ff.file && wfp.textContent===fileBase(ff.file),
+       wfp&&(wfp.textContent+' / '+wfp.getAttribute('data-tip')));
+  });
+
   // --- the IDE palette bridge ---
   // A host pushes (mode, nine colours); the page wears them while it shows the IDE's mode, and drops them
   // — property by property, never the whole inline style — when the reader forces the other mode or an
@@ -2002,6 +2031,44 @@ const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('explorer-uitest: not an explorer report'); process.exit(2); }
 const tmp = path.join(work, 'report.html');
 
+// What an editor-tab width does to the report pages, checked at every narrow size: a chip in the findings
+// table keeps its model's name readable (a fixed kind label once left it 0px wide), the accept button stays in
+// its table, a check's description is cut with an ellipsis instead of at the card's edge, and no entry-point
+// chip runs past its card. Steps, for the probes below; each expects `ok` and `steps` in scope.
+const narrowReportSteps = `
+  const cutAt=el=>{ const r=el.getBoundingClientRect(), p=el.closest('.hrow').getBoundingClientRect(); return r.right<=p.right+0.5; };
+  const pillsEllipsise=(sel,label)=>{
+    const ps=[...document.querySelectorAll(sel)].filter(e=>e.getClientRects().length);
+    const bad=ps.filter(h=>{ const cs=getComputedStyle(h); return cs.textOverflow!=='ellipsis' || cs.overflow!=='hidden' || !cutAt(h); });
+    ok(label, ps.length>0 && !bad.length, ps.length+' pills, '+bad.length+' clipped: '+bad.slice(0,2).map(h=>h.textContent.slice(0,40)).join(' | '));
+  };
+  steps.push(()=>{ location.hash='/checks'; });
+  steps.push(()=>{
+    const nms=[...document.querySelectorAll('#view-checks .fndtbl .nc .nm')].filter(e=>e.getClientRects().length);
+    const thin=nms.filter(e=>e.clientWidth<Math.min(e.scrollWidth, 48));
+    ok('a findings chip keeps its model name readable', nms.length>0 && !thin.length, thin.length+' of '+nms.length+' under 48px: '+thin.slice(0,3).map(e=>e.textContent+'='+e.clientWidth).join(' | '));
+    const acc=[...document.querySelectorAll('#view-checks .wv-acc')].filter(e=>e.getClientRects().length);
+    const out=acc.filter(b=>b.getBoundingClientRect().right>b.closest('.tbl').getBoundingClientRect().right+1);
+    ok('every accept button stays inside its table', acc.length>0 && !out.length, out.length+' of '+acc.length+' stick out');
+    pillsEllipsise('#view-checks .hrow .hs', 'a check\\'s description is cut with an ellipsis, inside its row');
+    location.hash='/overview';
+  });
+  steps.push(()=>{
+    pillsEllipsise('#view-overview .hlist-top .hs', 'so is the overview\\'s');
+    const col=[...document.querySelectorAll('#view-overview .dash-col')].find(c=>/Entry points/.test(c.textContent));
+    const box=col&&col.querySelector('.dashrows').getBoundingClientRect();
+    const past=col?[...col.querySelectorAll('.nc')].filter(c=>!c.hidden && c.getBoundingClientRect().right>box.right+1):[];
+    ok('no entry-point chip runs past its card', !!col && !past.length, past.map(c=>c.textContent).join(' | '));
+    location.hash=encodeURIComponent('process:orderProcess')+'&p=connections';
+  });
+  steps.push(()=>{
+    // where the Calls table drops its optional columns under the row, the id beside a name still goes first
+    const calls=document.querySelector('#detail details.sect[data-sect="fit-calls"] .tbl');
+    const names=calls?[...calls.querySelectorAll('.cellx>.cxn')].filter(e=>e.getClientRects().length):[];
+    const cut=names.filter(e=>e.scrollWidth>e.clientWidth+1);
+    ok('a Calls element name outlasts its id', names.length>0 && !cut.length, cut.map(e=>e.textContent+'='+e.clientWidth+'/'+e.scrollWidth).join(' | '));
+  });`;
+
 // A narrow window has two layouts. On a touch screen (<=800px, coarse pointer) the page stacks and the
 // category list becomes a <select>. With a mouse — an editor tab between two tool windows — the shell stays:
 // the sidebar is its icon rail and the list a drawer over the page, because the stacked layout hid the whole
@@ -2082,7 +2149,17 @@ const narrowProbe = `<script>
     ok('opening a node from the drawer opens it and closes the drawer', state.sel===window.__pick && document.getElementById('view-browse').classList.contains('list-off'), 'sel='+state.sel);
     let st=null; try{ st=localStorage.getItem('atlas-list-hidden'); }catch(e){}
     ok('the drawer is not a stored choice', st===null, 'stored='+st);
+    location.hash=encodeURIComponent('process:archivedProcess');
   });
+  steps.push(()=>{
+    // a model inside an archive: its path stays on the key's line, and a cut takes the archives, not the name
+    const d=document.querySelector('#detail .dident'), f=d&&d.querySelector('.dfile'), k=d&&d.querySelector('.dkey'), nm=d&&d.querySelector('.fp-name');
+    ok('the path stays on the key\\'s line', !!f && !!k && Math.abs(f.getBoundingClientRect().top-k.getBoundingClientRect().top)<=2,
+       f&&k&&(Math.round(f.getBoundingClientRect().top)+' vs '+Math.round(k.getBoundingClientRect().top)));
+    ok('and shows the file\\'s own name whole', !!nm && nm.textContent==='archived.bpmn' && nm.scrollWidth<=nm.clientWidth, nm&&(nm.textContent+' '+nm.clientWidth+'/'+nm.scrollWidth));
+    ok('with the whole path one hover away', !!f && (f.getAttribute('data-tip')||'').indexOf(byId.get('process:archivedProcess').file)===0);
+  });
+${narrowReportSteps}
 ${stepRunner(300)}
 })();
 </script>`;
@@ -2188,6 +2265,7 @@ const ideProbe = `<script>
   steps.push(()=>{
     ok('showing the list brings it back', document.querySelector('.listcol').getBoundingClientRect().width>0 && document.getElementById('listshow').hidden);
   });
+${narrowReportSteps}
 ${stepRunner(300)}
 })();
 </script>`;

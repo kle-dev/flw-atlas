@@ -368,7 +368,10 @@
   .hk-tiers{display:flex;flex-wrap:wrap;gap:var(--space-1)}
   .hk-none{font-size:var(--text-xs);color:var(--ink-faint)}
   .hsum .hlist{border:0;border-radius:0}
-  .hlist-top .hs{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* A check's description pill is cut with an ellipsis and keeps its closing border. `.hs` is inline-flex
+     for the hero's strip buttons and their icons, and text-overflow does nothing in a flex container: the
+     sentence was sliced mid-word at the card's edge. These pills are text alone, so a block does. */
+  .hlist-top .hs,.hrow .hs{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hsum-foot{border-top:1px solid var(--line);padding:var(--space-15) var(--space-3);font-size:var(--text-xs);color:var(--ink-faint)}
   .hsum-link{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
   .hsum-link:hover{text-decoration:underline}
@@ -756,8 +759,11 @@
      two hundred rows with an icon each, all showing, is noise around the one identifier being looked for.
      The open-in-IDE button stays — in the IDE it is why the cell has buttons at all. A chip in a row keeps
      its own rule, so a row of chips does not light up all at once. */
-  /* an id beside its name: both give way before the buttons do (its own 30% cap measured the cell, not this box) */
-  .cellx>.card-id{flex:0 1 auto;min-width:0;max-width:none}
+  /* An id beside its name gives way first and keeps a few characters and its ellipsis: the name is what a
+     reader scans for, and the whole id is one copy button away. Shrinking both alike cut "Decide approval"
+     to "Decide appr…" beside an id cut just as far. Both give way before the buttons do (its own 30% cap
+     measured the cell, not this box). */
+  .cellx>.card-id{flex:0 1000 auto;min-width:4ch;max-width:none}
   .tbl .tr .cpy:not(.opn),.card-h .cpy:not(.opn){opacity:0;transition:opacity .1s ease}
   .card-h:hover>.cpy,.card-h:focus-within>.cpy,.card-h .cpy:focus-visible,.card-h .cpy.ok{opacity:1}
   .tbl .tr:hover .cpy:not(.nc .cpy),.tbl .tr:focus-within .cpy:not(.nc .cpy),.tbl .cpy:focus-visible,.tbl .cpy.ok,
@@ -929,7 +935,16 @@
   .dkey{font-family:var(--mono);color:var(--accent)}
   .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);cursor:pointer;min-width:0;
     display:inline-flex;align-items:center;gap:var(--space-05)}
-  .dfile .fp{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* The path stays on the key's line — it wrapped to a line of its own under a dangling "·" on every page of
+     a Design export — and a cut takes its folders and archives before the file's own name. A zero basis
+     makes it shrink into the room left on the line instead of wrapping; max-content stops it growing past
+     its text. Below 16ch of room it still wraps, whole. */
+  .dident .dfile{flex:1 1 0;min-width:min(16ch,100%);max-width:max-content}
+  .dfile .fp{display:flex;min-width:0}
+  .dfile .fp-dir{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* the name never shrinks while folders are left to cut (a shrink by any fraction of a pixel already draws
+     its ellipsis); only a name wider than the whole line is cut */
+  .dfile .fp-name{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dfile:hover{color:var(--ink-dim)}
   .dfile.copied .fp{color:var(--cov-good,#2e7d32)}
   .dfile.copied::after{content:"✓ copied";margin-left:var(--space-15);color:var(--cov-good,#2e7d32)}
@@ -1082,12 +1097,20 @@
   .nc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line2);
     border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);cursor:pointer;max-width:380px}
   .nc:hover{border-color:var(--accent);background:var(--hover)}
-  /* A chip shrinks by its name, never by its type or icon, and never past its cell: a table cell clips
-     an inline-flex child instead of ellipsising it, so a long key was sliced mid-chip in the checks table. */
+  /* A chip never shrinks past its cell: a table cell clips an inline-flex child instead of ellipsising it,
+     so a long key was sliced mid-chip in the checks table. Inside the chip the kind label gives way first
+     (a large shrink factor) and the name last: a fixed kind label once took a 110px cell whole and left
+     "PROCESSES" where the model's name should be. Neither wraps. */
   .nc .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
-  .nc .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;flex:none}
+  .nc .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;
+    flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .nc .ti{flex:none}
   .tbl .td>.nc{max-width:100%}
+  /* A chip that is a table cell's value, or over a gap table, shows its name; the column and the icon say
+     the kind, and the chip's tooltip names it. The name is what a reader scans a Model or Calls column for.
+     A relation's neighbours keep theirs: they wrap instead of squeezing, and their kinds differ row to row
+     ("External / library" beside a project bean is the point of the row). */
+  .tbl .td>.nc .ty,.gapblk .nc .ty{display:none}
   .tbl .td.tags .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
   /* uncertain links: suspect (loose/cross-type match) and dynamic (expression-valued) */
   .nc.nc-sus,.nc.nc-dyn{border-style:dashed;opacity:.85}
@@ -1157,9 +1180,10 @@
   .gm-none,.gm-info{color:var(--ink-faint)}
   .covlegend .gm{font-size:inherit}
   .tbl .td.tags .gm+.gm{margin-left:var(--space-1)}
+  /* a mark naming more than its cell holds ("✗ shippingPriority, subOrderId") ends in an ellipsis, and
+     hovering it says the rest, instead of running under the next column */
+  .tbl .td.tags .gm{max-width:100%;overflow:hidden;text-overflow:ellipsis}
   .ctdir{display:inline-block;min-width:3ch;margin-right:var(--space-15);font-family:var(--sans);font-size:var(--text-2xs);font-weight:600}
-  /* a chip in a gap table shows its name; the icon says the kind */
-  .gapblk .nc .ty{display:none}
   .tbl .nl{display:none}
   .tbl .td .card-id{margin-left:var(--space-15)}
   /* a callers matrix with more callers than columns: one mini cell per caller, hover says who */
@@ -1282,9 +1306,20 @@
     .tbl .th,.tbl>div.tr,.tbl .trs{grid-template-columns:var(--ncols, 1.1em minmax(0,1fr) auto)}
     .tbl .td.opt{grid-column:2/-1;font-size:var(--text-2xs);color:var(--ink-faint);white-space:normal}
     .tbl .th .td.opt{display:none}
-    /* findings: severity, message and the accept control share the row; the model, element and file
-       drop under it — four fixed cells did not fit the generic first/last-column layout */
+    /* a matrix cell that dropped under its row says whose it is */
+    .tbl .td.opt .nl{display:inline;margin-right:var(--space-15);color:var(--ink-dim)}
+    /* relations: the relation on a line of its own, its chips on the next */
+    .reltbl .th{display:none}
+    .reltbl .td.rel,.reltbl .td.rnbs{grid-column:2/-1}
+  }
+  /* Findings: severity, message and the accept control share the row; the model, element and file drop
+     under it — four fixed cells did not fit the generic first/last-column layout. Earlier than the other
+     tables: seven columns' minimums add up to more than an editor tab's Checks page (~690px at 800px), so
+     the grid ran past its table, which clipped the accept button and squeezed the model to nothing. */
+  @container (max-width:760px){
     .fndtbl .th,.fndtbl>div.tr,.fndtbl .trs{grid-template-columns:1.1em auto minmax(0,1fr) auto}
+    .fndtbl .td.opt{grid-column:2/-1;font-size:var(--text-2xs);color:var(--ink-faint);white-space:normal}
+    .fndtbl .th .td.opt{display:none}
     .fndtbl .td.fmodel{grid-column:2/-1}
     .fndtbl .th .td.fmodel{display:none}
     /* a model's own findings drop the severity column its check's head already says: message and accept */
@@ -1293,11 +1328,6 @@
        put the message into the chevron's 1em track — one letter per line */
     .fndtbl.nosev .td.wrap{grid-row:1;grid-column:2}
     .fndtbl.nosev .td.wv-cell{grid-row:1;grid-column:3}
-    /* a matrix cell that dropped under its row says whose it is */
-    .tbl .td.opt .nl{display:inline;margin-right:var(--space-15);color:var(--ink-dim)}
-    /* relations: the relation on a line of its own, its chips on the next */
-    .reltbl .th{display:none}
-    .reltbl .td.rel,.reltbl .td.rnbs{grid-column:2/-1}
   }
   .cards{display:flex;flex-direction:column;gap:var(--space-15);margin:var(--space-2) 0}
   .card{border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel);overflow:hidden}
