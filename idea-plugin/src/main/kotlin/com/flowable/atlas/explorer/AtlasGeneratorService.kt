@@ -145,10 +145,14 @@ class AtlasGeneratorService(private val project: Project) {
                 // The file spells its sibling paths from the project root and only names the ones that
                 // are actually being written — the user picks the artifact set in Settings → Generation.
                 AtlasArtifact.CLAUDE_MD to {
-                    val siblings = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.GRAPH_JSON in artifacts
+                    // The overview too: without a slice to offer, it is where the file sends the agent for
+                    // one model.
+                    val beside = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.OVERVIEW_MD in artifacts &&
+                        AtlasArtifact.GRAPH_JSON in artifacts
                     val guide = AtlasArtifact.PLAYWRIGHT_MD in artifacts
-                    ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), siblings,
-                        playwright = guide, playwrightMap = guide))
+                    // Not the CLI: the file must not send the agent to a jar or a slice the plugin does not offer.
+                    ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), beside,
+                        playwright = guide, playwrightMap = guide, cli = false))
                 },
                 // Its lookups point at the graph only when the graph is written beside it.
                 AtlasArtifact.PLAYWRIGHT_MD to { PlaywrightRenderer.render(result, root, guideLayout(outputDir, artifacts)) },

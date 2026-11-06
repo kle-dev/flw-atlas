@@ -85,7 +85,8 @@ jq '.findings[] | select(.kind=="defect" and (.waived|not)) | {check, label, mes
 6. **After changing a model:** run Atlas again with `--baseline <project>.graph.json --fail-on defects`
    (the [CLI reference](../cli/#gate-the-change-not-the-backlog) has the details). It exits 1 and lists each
    defect the graph does not have yet — what the edit added — so the agent can fix it before it reports
-   done. The generated `CLAUDE.md` gives the agent the exact command as the last step of its procedure.
+   done. A `CLAUDE.md` the CLI generated gives the agent the exact command as the last step of its
+   procedure; the one the IDE plugin writes leaves it out, as it names no jar to run.
 7. **Reviewing a change:** `--changes --stdout --baseline <the base>` says what it did, model by model —
    the tasks, flows and fields added, removed or changed, the references, the findings it brought and
    resolved. It is the part of a pull request an agent cannot read when the models sit in a `.zip`; the

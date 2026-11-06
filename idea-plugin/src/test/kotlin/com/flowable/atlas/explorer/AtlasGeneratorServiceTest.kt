@@ -82,10 +82,18 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         assertTrue(guide, guide.lines().filter { it.startsWith("jq '") }.all { it.endsWith(" $graph") })
         val claude = Files.readString(out.resolve("${dir.name}.CLAUDE.md"))
         assertTrue(claude.contains("${dir.name}.playwright.md") && claude.contains("${dir.name}.playwright-map.md"))
+        // written by the IDE: no CLI jar the user may not have, no slice the plugin does not offer
+        assertFalse(claude, claude.contains("<atlas-cli>.jar") || claude.contains("--slice"))
+        assertTrue(claude, claude.contains("*Tools → Flowable Atlas → Generate → Atlas Explorer…*"))
 
         val alone = dir.toPath().resolve("atlas-output-2")
         service.generateAll(dir.toPath(), alone, EmptyProgressIndicator(), setOf(AtlasArtifact.CLAUDE_MD))
-        assertFalse(Files.readString(alone.resolve("${dir.name}.CLAUDE.md")).contains("playwright"))
+        val unticked = Files.readString(alone.resolve("${dir.name}.CLAUDE.md"))
+        assertFalse(unticked.contains("playwright"))
+        // it says which checkboxes to tick, by the labels the settings page shows
+        for (a in listOf(AtlasArtifact.SUMMARY_MD, AtlasArtifact.OVERVIEW_MD, AtlasArtifact.GRAPH_JSON)) {
+            assertTrue(unticked, unticked.contains("*${a.label}*"))
+        }
         assertFalse(Files.exists(alone.resolve("${dir.name}.playwright-map.md")))
     }
 

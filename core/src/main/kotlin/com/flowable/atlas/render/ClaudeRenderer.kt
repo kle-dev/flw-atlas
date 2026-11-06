@@ -45,11 +45,19 @@ object ClaudeRenderer {
      * [playwright] says `<name>.playwright.md` (the browser guide for Flowable Work) is written beside it;
      * [playwrightMap] that the guide keeps its project details in `<name>.playwright-map.md` beside it,
      * which is what `--all`, the launcher and the plugin write — `--playwright` alone keeps them inline.
+     *
+     * [cli] says the command-line tool wrote the file. The IDE plugin passes `false`: its users have no
+     * CLI jar to hand and the plugin offers no slice, so the file sends the agent to the overview and the
+     * graph, and the user to the IDE's menu, instead of telling either to run a jar.
      */
     data class Layout(
         val outDir: File? = null, val siblings: Boolean = true,
         val playwright: Boolean = false, val playwrightMap: Boolean = false,
+        val cli: Boolean = true,
     )
+
+    /** Where a plugin user regenerates the artifacts — one spelling with the summary's and the overview's. */
+    private const val IDE_GENERATE = Siblings.IDE_GENERATE
 
     /**
      * The Atlas output directory as seen from the project root, with a trailing slash — or `""` when it
@@ -166,12 +174,13 @@ object ClaudeRenderer {
         val L = ArrayList<String>()
         L.add("# CLAUDE.md — `$name` (Flowable solution project)\n")
         // Claude Code loads `CLAUDE.md`, never `<name>.CLAUDE.md`, so the file has to say how it gets there.
-        if (layout.siblings) {
+        if (layout.siblings || !layout.cli) {
             val import = if (prefix.isNotEmpty()) ", or keep your own `CLAUDE.md` and import this file " +
                     "with a line `@$prefix$name.CLAUDE.md`" else ""
+            val regenerate = if (layout.cli) "`./atlas <project-dir> <out-dir>`" else "$IDE_GENERATE in the IDE"
             L.add("$MARKER. Use it as the project's `CLAUDE.md`: copy it to the " +
                     "repository root$import (Claude Code loads `CLAUDE.md`, never `$name.CLAUDE.md`). Hand " +
-                    "edits belong in your copy; regenerate with `./atlas <project-dir> <out-dir>` and diff._\n")
+                    "edits belong in your copy; regenerate with $regenerate and diff._\n")
         } else {
             L.add("$MARKER (`--claude`). Hand edits are yours to keep; " +
                     "regenerate with `--claude --stdout` and diff._\n")
@@ -181,19 +190,35 @@ object ClaudeRenderer {
         L.add("## 0. Understand this project — start here\n")
         L.add("Don't guess — build the picture in order:")
         val steps = ArrayList<String>()
-        if (!layout.siblings) {
+        if (!layout.siblings && layout.cli) {
             // `--claude` alone writes only this file: sending the agent to a summary that does not exist
             // costs it a failed read and the trust in the rest of the list.
             steps.add("Generate the Atlas artifacts first: `java -jar <atlas-cli>.jar <project-dir> --all -o <out-dir>` " +
                     "(or `./atlas <project-dir> <out-dir>`). It writes `$name.summary.md`, `$name.overview.md`, " +
                     "`$name.graph.json` and `$name.explorer.html` into `<out-dir>`; the steps below read them from there.")
+        } else if (!layout.siblings) {
+            // The plugin's user unticked them; the IDE that wrote this file is where they come from.
+            // The checkboxes by their labels in Settings (AtlasArtifact), so the user finds them as written.
+            steps.add("Generate the Atlas artifacts first: in the IDE, $IDE_GENERATE with *Summary (Markdown)*, " +
+                    "*Overview (Markdown)* and *Graph (JSON)* ticked under *Settings → Tools → Flowable Atlas → " +
+                    "Generation*. It writes " +
+                    "`$name.summary.md`, `$name.overview.md` and `$name.graph.json` beside this file; the steps " +
+                    "below read them from there.")
         }
         steps.add("Read **`${art("summary.md")}`** — apps, inventory, entry points, integrations, hotspots, " +
                 "open findings. A few KB; read it whole.")
-        // The launcher always adds `--all`, which `--slice` refuses; only the jar form works as typed.
-        steps.add("For one model, ask for its slice: `java -jar <atlas-cli>.jar <project-dir> --slice process:<key> --stdout` — " +
-                "what it contains, what it uses, **who uses it**, the variables it sets and reads, and the " +
-                "findings that touch it, on one page.")
+        if (layout.cli) {
+            // The launcher always adds `--all`, which `--slice` refuses; only the jar form works as typed.
+            steps.add("For one model, ask for its slice: `java -jar <atlas-cli>.jar <project-dir> --slice process:<key> --stdout` — " +
+                    "what it contains, what it uses, **who uses it**, the variables it sets and reads, and the " +
+                    "findings that touch it, on one page.")
+        } else {
+            // The plugin ships no CLI jar and offers no slice: the overview holds the model's own section,
+            // and the graph answers who uses it.
+            steps.add("For one model, read its entry in **`${art("overview.md")}`** — search it for the model's " +
+                    "key — its steps in execution order with what follows each, or its plan, rules or fields; " +
+                    "**who uses it** is the `usedBy` recipe below.")
+        }
         steps.add("For the wider picture, **`${art("overview.md")}`** — every model in execution order, the " +
                 "access map, the data layer, the findings.")
         // Telling an agent to "query the graph" without saying how, or how big it is, invites it to read
@@ -219,10 +244,14 @@ object ClaudeRenderer {
         // An agent that edits a model has no way to see that it broke a reference; this is the check that
         // does, phrased as a command because a named tool is what agents demonstrably use. Against the graph
         // as generated — what is new since then is what the change added, unless the file is stale.
-        val base = if (layout.siblings) g else "<out-dir>/$name.graph.json"
-        steps.add("After changing models, check that you added no defect: `java -jar <atlas-cli>.jar <project-dir> " +
-                "--summary --stdout --baseline $base --fail-on defects > /dev/null`. Exit 1 lists on stderr each " +
-                "defect that file does not have; fix what your change introduced before you finish.")
+        // Only when the CLI wrote the file: the check is a run of the jar, which a plugin user does not have,
+        // and the plugin has no baseline comparison to offer in its place.
+        if (layout.cli) {
+            val base = if (layout.siblings) g else "<out-dir>/$name.graph.json"
+            steps.add("After changing models, check that you added no defect: `java -jar <atlas-cli>.jar <project-dir> " +
+                    "--summary --stdout --baseline $base --fail-on defects > /dev/null`. Exit 1 lists on stderr each " +
+                    "defect that file does not have; fix what your change introduced before you finish.")
+        }
         steps.forEachIndexed { i, step -> L.add("${i + 1}. $step") }
         // The browser guide is a few hundred lines that a coding task never needs, so it is not in this
         // file — one instruction says when to read it, which is the kind of line agents demonstrably follow.
@@ -245,7 +274,8 @@ object ClaudeRenderer {
             val shown = shownDir(outAbs)
             L.add("")
             L.add("The Atlas files live in `$shown` (as generated); if they are missing, regenerate them: " +
-                    "`./atlas <project-dir> <out-dir>`, or in the IDE *Tools → Flowable Atlas → Generate*.")
+                    (if (layout.cli) "`./atlas <project-dir> <out-dir>`, or in the IDE $IDE_GENERATE."
+                    else "in the IDE, $IDE_GENERATE."))
         }
         L.add("")
 

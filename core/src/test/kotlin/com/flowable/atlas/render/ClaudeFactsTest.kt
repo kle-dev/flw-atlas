@@ -244,6 +244,24 @@ class ClaudeFactsTest {
         val alone = render(layout = ClaudeRenderer.Layout(siblings = false))
         assertTrue("alone, the graph is the one step 1 generates", alone.contains("--baseline <out-dir>/$name.graph.json"))
         assertFalse("the generic primer knows no project's graph", ClaudeRenderer.renderGeneric().contains("--baseline"))
+        val ide = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = true, cli = false))
+        assertFalse("the IDE wrote it: there is no jar to run the check with", ide.contains("--baseline"))
+    }
+
+    /**
+     * Written by the IDE plugin, the file sends nobody to a CLI jar the user may not have or to a slice
+     * the plugin does not offer: one model is read in the overview, and the IDE's menu regenerates.
+     */
+    @Test
+    fun aFileTheIdeWroteNamesNoCliJarAndSendsOneModelToTheOverview() {
+        val out = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = true, cli = false))
+        assertFalse(out, out.contains("<atlas-cli>.jar") || out.contains("--slice") || out.contains("./atlas"))
+        assertTrue(out, out.contains("For one model, read its entry in **`$name.overview.md`**"))
+        assertTrue(out, out.contains("regenerate with *Tools → Flowable Atlas → Generate → Atlas Explorer…* in the IDE"))
+        val unticked = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = false, cli = false))
+        assertTrue(unticked, unticked.contains("1. Generate the Atlas artifacts first: in the IDE, " +
+            "*Tools → Flowable Atlas → Generate → Atlas Explorer…*"))
+        assertFalse(unticked, unticked.contains("java -jar") || unticked.contains("--claude"))
     }
 
     @Test

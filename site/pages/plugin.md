@@ -249,7 +249,10 @@ the project. Once it is chosen, *Tools → Flowable Atlas → Open Atlas ER Diag
 [Playwright guide](../artifacts/#playwrightmd-driving-flowable-work-in-a-browser), `<project>.playwright.md`
 with its project map: what an agent needs to open a case, complete its tasks and bring it to a stage in
 Flowable Work, through a browser. With *CLAUDE.md primer* also ticked, the generated CLAUDE.md says when to
-read it.
+read it. A CLAUDE.md the plugin writes names no CLI jar: for one model it sends the agent to the model's
+entry in the overview and to the graph's `usedBy`, and it says to regenerate from this menu. It sends the
+agent to the summary, the overview and the graph only when all three are ticked with it, and otherwise
+says which to tick first.
 Full detail: [The Atlas explorer](../explorer/).
 
 ### In and out parameter tracing
