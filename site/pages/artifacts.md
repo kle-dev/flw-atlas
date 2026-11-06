@@ -102,7 +102,7 @@ real project produces several megabytes. Query it.
 
 It is designed to make that easy:
 
-- A **`_schema`** key comes first and describes the file's own shape, including seven ready-made `jq`
+- A **`_schema`** key comes first and describes the file's own shape, including eight ready-made `jq`
   recipes. An agent that opens the file learns how to use it from the file.
 - A **`_generated`** key beside it says when the file was written and by which Atlas version, so a
   graph pasted into a ticket or kept as a pipeline artifact carries its own age.
@@ -158,8 +158,15 @@ It is designed to make that easy:
   `TODO`, `FIXME` or `HACK` it found in a model file, with file, line, the model it belongs to and — in a
   JSON model — the `path` of the element holding it; the raw material of two of the checks.
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph
-  node pointing there via `data.dataIn`. Together that roughly halves the file — 4.8 MB → 2.5 MB on a
+  node pointing there via `data.dataIn` — a Liquibase changelog's too, in **`liquibase`**
+  (`.liquibase[] | select(.key=="K")`). Together that roughly halves the file — 4.8 MB → 2.5 MB on a
   large real project. `--pretty` indents it when a human has to look.
+- **Java classes** are references. `javaByRole` lists the classes by role (`controller`, `service`,
+  `bot`, …) and `javaGlue` the delegates and listeners, each as `{fqn, file, line}`; what Atlas read from
+  a class — its roles, bean names, methods and endpoints — is on its node `java:<fqn>`. The parser's raw
+  record (imports, string literals, call sites) stays out of the file: on a project with a lot of Java it
+  was half of it. Every expression and binding is a node of type `expression` or `binding`, so there is no
+  separate list of them.
 
 Every node id is `<type>:<key>`, and every edge is `{s, t, rel}` plus the two honesty flags described
 under [uncertain links](#uncertain-links).

@@ -1,6 +1,7 @@
 package com.flowable.atlas.render
 
 import com.flowable.atlas.graph.Atlas
+import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.MiniJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,7 +14,8 @@ import java.time.Instant
 
 /**
  * The graph.json projection: a `_schema` and a `_generated` block up front, `dataIn` pointers instead
- * of a second copy of every model body, and a `usedBy` reverse index on referenced nodes.
+ * of a second copy of every model and changelog body, Java classes as references, and a `usedBy` reverse
+ * index on referenced nodes. `GraphSizeGuardTest` checks the file as a whole for copies.
  */
 class GraphJsonRendererTest {
 
@@ -81,5 +83,59 @@ class GraphJsonRendererTest {
         // The extract result itself is shared with the other renderers and is never changed.
         val sourceTotal = source["variable:total"]!!["data"] as Map<String, Any?>
         assertTrue("the projection must not mutate the result", sourceTotal.containsKey("usedBy"))
+    }
+
+    /**
+     * A changelog node's data is a slim copy of its `liquibase` entry rather than the entry itself, so the
+     * identity match that projects model nodes missed it and every changelog was written twice.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aChangelogNodePointsIntoTheLiquibaseBucket() {
+        val json = rendered()
+        val nodes = (json["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+        val changelogs = nodes.filter { it["type"] == "liquibase" }
+        assertTrue("the fixture has a changelog", changelogs.any { it["id"] == "liquibase:001-customer" })
+        val bucket = json["liquibase"] as List<Map<String, Any?>>
+        for (n in changelogs) {
+            assertEquals("${n["id"]} points at its body", mapOf("dataIn" to "liquibase"), n["data"])
+            val entry = bucket.single { it["key"] == n["key"] }
+            assertTrue("the body is in the bucket: ${entry.keys}", "columns" in entry && "tables" in entry)
+        }
+        // The explorer embeds node data, so the in-memory node keeps its copy.
+        val inMemory = Dyn.maps(Dyn.mapOrNull(result["graph"])!!["nodes"]).single { it["id"] == "liquibase:001-customer" }
+        assertTrue("the projection does not touch the shared result", "columns" in (inMemory["data"] as Map<String, Any?>))
+    }
+
+    /**
+     * The Java buckets hold references, not the parser's records: those carry imports, string literals and
+     * call sites — about thirty keys per class, once per role — and `java:<fqn>` already has what a reader
+     * uses. `javaControllers` is `javaByRole.controller`, and the expression and binding key lists are the
+     * keys of those nodes, so none of the three is written.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun rawJavaParseRecordsAndDuplicateKeyListsStayOutOfTheFile() {
+        val text = GraphJsonRenderer.render(result, generatedAt = Instant.EPOCH)
+        for (key in listOf("imports", "literalCalls", "strings", "keyedStrings", "literalFacts")) {
+            assertFalse("graph.json carries the parser's \"$key\"", text.contains("\"$key\":"))
+        }
+        val json = MiniJson.parse(text) as Map<String, Any?>
+        for (gone in listOf("javaControllers", "expressions", "placeholders")) {
+            assertFalse("graph.json still writes $gone", json.containsKey(gone))
+        }
+        val byRole = json["javaByRole"] as Map<String, List<Map<String, Any?>>>
+        assertTrue("the fixture has a controller", byRole["controller"].orEmpty().isNotEmpty())
+        for ((role, refs) in byRole) for (ref in refs) {
+            assertTrue("$role: $ref is a reference", ref.keys.isNotEmpty() && setOf("fqn", "file", "line").containsAll(ref.keys))
+        }
+        val nodeIds = ((json["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).map { it["id"] }.toSet()
+        for ((role, refs) in byRole) if (role != "other") for (ref in refs) {
+            assertTrue("${ref["fqn"]} has the node its details are on", "java:${ref["fqn"]}" in nodeIds)
+        }
+        // The overview reads the full records in the same run.
+        val raw = (result["javaByRole"] as Map<String, List<Map<String, Any?>>>).getValue("controller").first()
+        assertTrue("the projection does not touch the shared result", "imports" in raw)
+        assertNotNull(result["javaControllers"])
     }
 }

@@ -105,7 +105,7 @@ class CliTest {
         // for every such node, not only for those that happen to carry `dataIn`: a node that carries a
         // second copy of its body instead is exactly the growth this file must not have.
         val nodes = (written["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
-        val bucketTypes = ModelKinds.MODEL_KINDS.map { it.nodeType }.toSet()
+        val bucketTypes = ModelKinds.MODEL_KINDS.map { it.nodeType }.toSet() + "liquibase"
         var resolved = 0
         for (n in nodes.filter { it["type"] in bucketTypes }) {
             val data = n["data"] as? Map<String, Any?>

@@ -201,17 +201,10 @@ class WorkUiFactsTest {
      */
     @Test
     fun aGatedContainerIsRecordedOncePerFormNotOncePerField() {
-        val expr = "{{caseStatus == 'DEMO-OPEN' && userRole != 'DEMO-viewer' && !readonlyMode}}"
-        fun level(d: Int): String {
-            val fields = (0 until 40).joinToString(",") { """{"cols": [{"id": "f${d}_$it", "type": "text", "label": "F$it", "isRequired": true}]}""" }
-            val inner = if (d == 5) "" else
-                """,{"cols": [{"id": "panel$d", "type": "panel", "visible": "$expr", "extraSettings": {"layoutDefinition": {"rows": [${level(d + 1)}]}}}]}"""
-            return fields + inner
-        }
         val tmp = Files.createTempDirectory("atlas-gates-test").toFile()
         try {
             File(tmp, "forms").mkdirs()
-            File(tmp, "forms/deep.form").writeText("""{"metadata": {"key": "DEMO-deep", "name": "Deep"}, "rows": [${level(0)}]}""")
+            File(tmp, "forms/deep.form").writeText(NestedFormFixture.json(depth = 5))
             @Suppress("UNCHECKED_CAST")
             val form = (Atlas.extract(tmp)["forms"] as List<Map<String, Any?>>).single()
             assertEquals("one record per container", 5, (form["containers"] as Map<*, *>).size)

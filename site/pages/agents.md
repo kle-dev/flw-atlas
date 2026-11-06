@@ -37,7 +37,7 @@ it usually is. An agent that knows the model by its file rather than its key can
 relative or absolute; a target that matches nothing names the nearest ids.
 
 **4 · `--json`** — the full graph. **Never paste it whole**; query it with `jq`. The file documents
-itself: a `_schema` key at the top describes the shape and ships seven ready-made recipes.
+itself: a `_schema` key at the top describes the shape and ships eight ready-made recipes.
 
 `<project>.overview.md` sits between 2 and 4 for a human reader.
 
