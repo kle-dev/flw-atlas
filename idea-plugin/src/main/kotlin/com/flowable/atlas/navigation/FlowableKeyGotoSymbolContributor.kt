@@ -47,7 +47,7 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         // Model keys (actions, processes, cases, forms, agents, services, data objects, …).
         for (entry in index.allDistinct()) if (entry.key.isNotBlank()) processor.process(entry.key)
         // The elements inside them — a user task id, a variable, a message — searchable like the model.
-        for (entry in index.allDistinct()) for (element in ModelElements.of(entry)) processor.process(element.id)
+        for (id in elementsById(index).keys) processor.process(id)
         // Bot keys referenced by actions (covers platform bots with no project class too).
         for (entry in index.keysOfType(ModelType.ACTION)) entry.members.botKey
             ?.takeIf { it.isNotBlank() }?.let { processor.process(it) }
@@ -101,15 +101,16 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
     /**
      * Every element of every model, by id — once per index snapshot. Go to Symbol asks for each name that
      * matched the typed prefix, and each ask used to walk every element of every model again.
+     *
+     * Memoised on the snapshot, not here: this contributor is one instance for the whole IDE, and a field
+     * holding the last snapshot kept a closed project's index alive and swapped back and forth between two
+     * open projects.
      */
-    private fun elementsById(index: FlowableIndex): Map<String, List<ModelElements.Element>> {
-        elementsMemo?.let { (of, byId) -> if (of === index) return byId }
-        val byId = index.allDistinct().flatMap { ModelElements.of(it) }.groupBy { it.id }
-        elementsMemo = index to byId
-        return byId
-    }
+    private fun elementsById(index: FlowableIndex): Map<String, List<ModelElements.Element>> =
+        index.memo(ElementsById) { index.allDistinct().flatMap { ModelElements.of(it) }.groupBy { it.id } }
 
-    @Volatile private var elementsMemo: Pair<FlowableIndex, Map<String, List<ModelElements.Element>>>? = null
+    /** The [FlowableIndex.memo] key of [elementsById]. */
+    private object ElementsById
 
     /**
      * botKey → the project's `BotService` implementors declaring it, kept until PSI changes. An

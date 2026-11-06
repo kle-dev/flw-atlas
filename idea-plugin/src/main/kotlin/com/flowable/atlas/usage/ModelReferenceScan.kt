@@ -5,6 +5,7 @@ import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.parsing.ModelUsageLocator
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
@@ -88,19 +89,12 @@ object ModelReferenceScan {
     }
 
     /**
-     * Invokes [consumer] with every Flowable model file / archive entry in the project's content and
-     * its decoded UTF-8 text. Must be called inside a read action — for callers that go on to PSI
-     * (Find Usages); everything else takes [forEachModelTextUnlocked].
-     */
-    fun forEachModelText(project: Project, consumer: (VirtualFile, String) -> Unit) {
-        for (file in modelFiles(project)) scan(file, consumer)
-    }
-
-    /**
-     * [forEachModelText] without holding the read lock while reading: the files are listed under a short
-     * read action, then read and scanned outside it. One read action around every model and archive in
-     * the project — for a gutter click or the rename warning — blocked any write, so typing froze until
-     * the scan was done. Must be called off the EDT.
+     * Invokes [consumer] with every Flowable model file / archive entry in scope and its decoded UTF-8
+     * text, *without* holding the read lock while reading: the files are listed under a short read action,
+     * then read and scanned outside it, checking for cancellation between files. One read action around
+     * every model and archive in the project — for Find Usages, a gutter click or the rename warning —
+     * blocked any write, so typing froze until the scan was done and Cancel waited with it. A consumer
+     * that goes on to PSI takes its own short read action, for the few files with a hit. Off the EDT.
      */
     fun forEachModelTextUnlocked(project: Project, consumer: (VirtualFile, String) -> Unit) {
         val files = ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
@@ -109,9 +103,14 @@ object ModelReferenceScan {
         for (file in files) {
             ProgressManager.checkCanceled()
             if (project.isDisposed) return
+            onUnlockedFile?.invoke(file)
             if (file.isValid) scan(file, consumer)
         }
     }
+
+    /** Called per file just before it is read — where a test asks which lock the scan holds, or cancels it. */
+    @Volatile
+    internal var onUnlockedFile: ((VirtualFile) -> Unit)? = null
 
     /** The model files and archives in scope. Touches no content; must be called inside a read action. */
     private fun modelFiles(project: Project): List<VirtualFile> {
@@ -135,9 +134,12 @@ object ModelReferenceScan {
                 runCatching { String(file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
                     ?.let { consumer(file, it) }
             ArchiveModelScanner.isArchive(file) ->
-                // A caller may hold the read lock: a synchronous jar-FS refresh under it is the deadlock
-                // the scanner's own doc warns about.
-                ArchiveModelScanner.scan(file, allowRefresh = false) { _, bytes, _, entryFile ->
+                // The scan holds no lock of its own, so an archive the jar FS has not mounted yet may be
+                // refreshed in — unless the caller holds the read lock after all (a test on the EDT), where
+                // a synchronous refresh is the deadlock the scanner's own doc warns about.
+                ArchiveModelScanner.scan(
+                    file, allowRefresh = !ApplicationManager.getApplication().isReadAccessAllowed,
+                ) { _, bytes, _, entryFile ->
                     consumer(entryFile, String(bytes, Charsets.UTF_8))
                 }
         }

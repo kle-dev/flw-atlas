@@ -495,7 +495,9 @@ Explorer**, which opens that model's page in the generated explorer inside the I
 view, where Ctrl+click opens the file.
 
 The IDE and the generated explorer share one matching implementation, so Find Usages in the editor and
-the reference list in the report can never disagree.
+the reference list in the report can never disagree. The search reads every model file and archive entry
+without holding the editor's read lock — only a file with a hit takes it, briefly, for its usages — so
+typing never waits for the scan, and *Cancel* stops it at the next file.
 
 ---
 

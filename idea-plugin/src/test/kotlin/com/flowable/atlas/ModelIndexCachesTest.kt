@@ -50,4 +50,18 @@ class ModelIndexCachesTest : BasePlatformTestCase() {
         assertSame("the set is computed once per snapshot", keys, index.keySetOf(ModelType.SERVICE))
         assertTrue(index.keySetOf(ModelType.PROCESS).isEmpty())
     }
+
+    /** A value derived from a snapshot lives and dies with it — per project by construction. */
+    fun testASnapshotMemoIsKeptUntilTheSnapshotIsReplaced() {
+        addModels()
+        val service = project.service<FlowableModelIndexService>()
+        val index = service.refresh()
+        val first = index.memo("DEMO-memo") { Any() }
+        assertSame("a second ask reuses the value", first, index.memo("DEMO-memo") { Any() })
+
+        service.invalidate()
+        val rebuilt = service.refresh()
+        assertNotSame("a new snapshot", index, rebuilt)
+        assertNotSame("computes its own value", first, rebuilt.memo("DEMO-memo") { Any() })
+    }
 }

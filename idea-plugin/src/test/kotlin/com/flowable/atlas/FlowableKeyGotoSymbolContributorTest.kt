@@ -88,4 +88,14 @@ class FlowableKeyGotoSymbolContributorTest : BasePlatformTestCase() {
         assertTrue("the variable is offered project-wide", "customerName" in project.service<FlowableModelIndexService>().variables())
         assertFalse("the component id is no variable", "text1" in project.service<FlowableModelIndexService>().variables())
     }
+
+    /**
+     * One contributor serves every open project, so it holds no per-project state: a field caching the
+     * last index it saw kept a closed project's whole model index alive until the next search anywhere.
+     */
+    fun testTheApplicationWideContributorHoldsNoState() {
+        val instanceFields = FlowableKeyGotoSymbolContributor::class.java.declaredFields
+            .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+        assertTrue("instance fields: ${instanceFields.map { it.name }}", instanceFields.isEmpty())
+    }
 }

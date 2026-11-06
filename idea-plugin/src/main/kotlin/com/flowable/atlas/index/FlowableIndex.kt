@@ -67,6 +67,18 @@ class FlowableIndex(
         distinctByType.mapValues { (_, list) -> list.mapTo(LinkedHashSet()) { it.key } }
     }
 
+    private val memos = java.util.concurrent.ConcurrentHashMap<Any, Any>()
+
+    /**
+     * A value derived from this snapshot, computed once and dropped with it — for a consumer outside this
+     * package that would otherwise keep its own cache keyed by the snapshot. An application-level extension
+     * (Go to Symbol) that did so kept a closed project's whole index alive until its next search. [compute]
+     * must be pure: two threads racing may both run it, and the first value stored wins.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> memo(key: Any, compute: () -> T): T =
+        (memos[key] ?: memos.putIfAbsent(key, compute()) ?: memos.getValue(key)) as T
+
     /** The distinct keys of one model type, as a set — what a key inspection asks per literal, so it is
      *  computed once per snapshot rather than once per literal. */
     fun keySetOf(type: ModelType): Set<String> = keySetByType[type] ?: emptySet()

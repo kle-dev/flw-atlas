@@ -54,35 +54,44 @@ class ModelKeyFindUsagesHandlerFactory : FindUsagesHandlerFactory() {
         }
     }
 
+    /**
+     * The model files are read *outside* the read lock and only a file with a hit takes it, briefly, for its
+     * PSI: one read action around every model and archive in the project made each write — typing, an
+     * auto-save — wait for the whole scan, and Cancel took effect only after it.
+     */
     private fun report(decl: Declaration, processor: Processor<in UsageInfo>) {
         val project = decl.element.project
-        ReadAction.run<RuntimeException> {
-            if (project.isDisposed) return@run
-            val psiManager = PsiManager.getInstance(project)
-            val declFile = decl.element.containingFile?.virtualFile
-            val declOffset = decl.element.containingFile?.text?.let { ModelKeyDeclaration.offsetOf(it, decl.type, decl.key) }
-            ModelReferenceScan.forEachModelText(project) { vf, text ->
-                val ranges = keyReferenceRanges(text, decl.key)
-                if (ranges.isEmpty()) return@forEachModelText
-                val psiFile = psiManager.findFile(vf) ?: return@forEachModelText
+        if (project.isDisposed) return
+        val (declFile, declOffset) = ReadAction.computeBlocking<Pair<VirtualFile?, Int?>, RuntimeException> {
+            val file = decl.element.containingFile
+            file?.virtualFile to file?.text?.let { ModelKeyDeclaration.offsetOf(it, decl.type, decl.key) }
+        }
+        val psiManager = PsiManager.getInstance(project)
+        ModelReferenceScan.forEachModelTextUnlocked(project) { vf, text ->
+            val ranges = keyReferenceRanges(text, decl.key)
+            if (ranges.isEmpty()) return@forEachModelTextUnlocked
+            ReadAction.runBlocking<RuntimeException> {
+                if (project.isDisposed || !vf.isValid) return@runBlocking
+                val psiFile = psiManager.findFile(vf) ?: return@runBlocking
                 for (r in ranges) {
                     if (vf == declFile && declOffset != null && r.first == declOffset) continue   // the declaration itself
                     processor.process(UsageInfo(psiFile, r.first, r.last + 1, false))
                 }
             }
-            // Java: the literals at a Flowable API site naming this key — or any literal, when that is on.
-            PsiSearchHelper.getInstance(project).processElementsWithWord(
-                { el, _ ->
-                    val literal = el as? PsiLiteralExpression ?: return@processElementsWithWord true
-                    if (literal.value != decl.key) return@processElementsWithWord true
-                    val site = SiteMatching.keySiteForLiteral(literal)
-                    val hit = if (site != null) decl.type in site.targetTypes else ValueKeyMatching.enabled()
-                    if (hit) processor.process(UsageInfo(literal))
-                    true
-                },
-                GlobalSearchScope.projectScope(project), decl.key, UsageSearchContext.IN_STRINGS, true,
-            )
         }
+        // Java: the literals at a Flowable API site naming this key — or any literal, when that is on. The
+        // search takes its own read action per file and calls the processor inside it.
+        PsiSearchHelper.getInstance(project).processElementsWithWord(
+            { el, _ ->
+                val literal = el as? PsiLiteralExpression ?: return@processElementsWithWord true
+                if (literal.value != decl.key) return@processElementsWithWord true
+                val site = SiteMatching.keySiteForLiteral(literal)
+                val hit = if (site != null) decl.type in site.targetTypes else ValueKeyMatching.enabled()
+                if (hit) processor.process(UsageInfo(literal))
+                true
+            },
+            GlobalSearchScope.projectScope(project), decl.key, UsageSearchContext.IN_STRINGS, true,
+        )
     }
 
     companion object {

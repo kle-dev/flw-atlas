@@ -193,7 +193,7 @@ internal object ModelSearchUsages {
 
     /** One short read action per file — never one around the whole walk. */
     private fun <T> inReadAction(project: Project, body: () -> T?): T? =
-        ReadAction.compute<T?, RuntimeException> { if (project.isDisposed) null else body() }
+        ReadAction.computeBlocking<T?, RuntimeException> { if (project.isDisposed) null else body() }
 
     /**
      * What the Find window reruns when you press its refresh button, and the caption over the results.
