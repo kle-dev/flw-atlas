@@ -125,7 +125,9 @@ background tab. The categories are:
 
 However a node is reached — a link, the search, a chip on another page — its own category opens beside
 it with the node selected, an external one's bucket included: a reference to a model the project does
-not have opens in *Missing model refs* and is called a missing model reference, not a library.
+not have opens in *Missing model refs* and is called a missing model reference, not a library. One node
+is named in the singular — *Process · KEY* under its title, *Process* on its chips and copy buttons,
+*1 decision table* in a count — and its category in the plural, *Processes*.
 
 Every category carries a small icon for its type in the type's colour, and so does every node wherever it
 appears — the browse list, the chips, the detail tabs, the breadcrumb, the search results. A process, a

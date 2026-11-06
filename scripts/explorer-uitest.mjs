@@ -1216,6 +1216,29 @@ const probe = `<script>
     ok('and leaves no card behind', !document.querySelector('.dgcard'));
   });
 
+  // --- a node is named in the singular: "Process · KEY", not its category "Processes · KEY" ---
+  steps.push(()=>{
+    ok('every node type has a singular name', Object.keys(TM).every(t=>typeof TM[t][2]==='string' && TM[t][2]),
+       Object.keys(TM).filter(t=>!TM[t][2]).join(','));
+    ok('a process is a Process', nodeKind(byId.get('process:orderProcess'))==='Process', nodeKind(byId.get('process:orderProcess')));
+    ok('a group is a User group', nodeKind({type:'group', data:{}})==='User group');
+    ok('one model of a type is counted in the singular', elementModelCount(['decision:orderDecision'])==='1 decision table' &&
+       elementModelCount(['process:orderProcess','process:fulfilmentProcess'])==='2 processes',
+       elementModelCount(['decision:orderDecision'])+' / '+elementModelCount(['process:orderProcess','process:fulfilmentProcess']));
+    // a filter still finds a node by its category's word, as it did while that was its only name
+    const fp=FINDS.find(f=>(byId.get(f.node)||{}).type==='process');
+    ok('a finding is filtered by its model\\'s kind, singular or plural', !!fp && /\\bProcess\\b/.test(findingRow(fp).hay) && /\\bProcesses\\b/.test(findingRow(fp).hay),
+       fp&&findingRow(fp).hay);
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const kw=det.querySelector('.dident .dkindw');
+    ok('the identity line names the kind in the singular', !!kw && kw.textContent==='Process', kw&&kw.textContent);
+    const plural=[...document.querySelectorAll('.nc .cpy')].map(b=>b.getAttribute('aria-label')||'').filter(l=>/Processes|Forms|groups key/.test(l));
+    ok('a chip copies "Process key", not "Processes key"', !plural.length, plural.slice(0,3).join(' | '));
+  });
+
   // --- a bean the Flowable platform ships is not an external library ---
   steps.push(()=>{
     const bean={type:'external', data:{kind:'bean', platform:true}}, lib={type:'external', data:{kind:'class', platform:false}};

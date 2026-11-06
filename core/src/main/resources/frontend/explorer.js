@@ -121,28 +121,34 @@ const nodes = DATA.nodes, edges = DATA.edges;
 const byId = new Map(nodes.map(n => [n.id, n]));
 // Node-type labels. Wording follows Flowable Design's own `modelType.*` strings so a term you read here
 // is the term you look for in Design — "Decision tables", not "Decisions"; "AI agents", not "Agents".
+// [category (plural), sidebar section, one node (singular)]: a list is "Processes", the one thing on a page
+// is a "Process" — every node used to be named by its category, "Processes · KEY", "Copy Processes key".
 const TM = {
-  app:['Apps','Models'],process:['Processes','Models'],case:['Cases','Models'],
-  decision:['Decision tables','Models'],form:['Forms','Models'],page:['Pages','Models'],
-  dataObject:['Data objects','Models'],dataDictionary:['Data dictionaries','Models'],
-  masterData:['Master data','Models'],
-  service:['Services','Integration'],serviceOperation:['Service operations','Integration'],agent:['AI agents','Integration'],
-  channel:['Channels','Integration'],event:['Events','Integration'],knowledgeBase:['Knowledge bases','Integration'],
-  signal:['Signals','Integration'],message:['Messages','Integration'],error:['Errors','Integration'],
-  escalation:['Escalations','Integration'],topic:['External Worker topics','Integration'],
-  endpoint:['REST endpoints','Code'],java:['Java classes','Code'],method:['Java methods','Code'],liquibase:['Liquibase changelogs','Code'],
-  property:['Spring properties','Code'],
-  userDefinition:['User definitions','Other'],tenantSetup:['Tenant setups','Other'],
-  action:['Actions','Integration'],bot:['Bots','Integration'],
-  query:['Queries','Other'],template:['Templates','Other'],sequence:['Sequences','Other'],
-  document:['Content','Other'],variableExtractor:['Variable extractors','Other'],
-  sla:['SLAs','Other'],dashboardComponent:['Dashboard components','Other'],
-  palette:['Palettes','Other'],
-  securityPolicy:['Security policies','Access'],group:['User groups','Access'],
-  variable:['Variables','Variables'],
-  expression:['Backend expressions ${ }','Expressions'],binding:['Frontend bindings {{ }}','Expressions'],
-  string:['String literals','Expressions'],customFunction:['Custom functions 🧩','Expressions'],
-  external:['External / library','Other'],
+  app:['Apps','Models','App'],process:['Processes','Models','Process'],case:['Cases','Models','Case'],
+  decision:['Decision tables','Models','Decision table'],form:['Forms','Models','Form'],page:['Pages','Models','Page'],
+  dataObject:['Data objects','Models','Data object'],dataDictionary:['Data dictionaries','Models','Data dictionary'],
+  masterData:['Master data','Models','Master data'],
+  service:['Services','Integration','Service'],serviceOperation:['Service operations','Integration','Service operation'],
+  agent:['AI agents','Integration','AI agent'],
+  channel:['Channels','Integration','Channel'],event:['Events','Integration','Event'],
+  knowledgeBase:['Knowledge bases','Integration','Knowledge base'],
+  signal:['Signals','Integration','Signal'],message:['Messages','Integration','Message'],error:['Errors','Integration','Error'],
+  escalation:['Escalations','Integration','Escalation'],topic:['External Worker topics','Integration','External Worker topic'],
+  endpoint:['REST endpoints','Code','REST endpoint'],java:['Java classes','Code','Java class'],method:['Java methods','Code','Java method'],
+  liquibase:['Liquibase changelogs','Code','Liquibase changelog'],
+  property:['Spring properties','Code','Spring property'],
+  userDefinition:['User definitions','Other','User definition'],tenantSetup:['Tenant setups','Other','Tenant setup'],
+  action:['Actions','Integration','Action'],bot:['Bots','Integration','Bot'],
+  query:['Queries','Other','Query'],template:['Templates','Other','Template'],sequence:['Sequences','Other','Sequence'],
+  document:['Content','Other','Content model'],variableExtractor:['Variable extractors','Other','Variable extractor'],
+  sla:['SLAs','Other','SLA'],dashboardComponent:['Dashboard components','Other','Dashboard component'],
+  palette:['Palettes','Other','Palette'],
+  securityPolicy:['Security policies','Access','Security policy'],group:['User groups','Access','User group'],
+  variable:['Variables','Variables','Variable'],
+  expression:['Backend expressions ${ }','Expressions','Backend expression ${ }'],
+  binding:['Frontend bindings {{ }}','Expressions','Frontend binding {{ }}'],
+  string:['String literals','Expressions','String literal'],customFunction:['Custom functions 🧩','Expressions','Custom function 🧩'],
+  external:['External / library','Other','External / library'],
 };
 
 // ---------- node-type icons ----------
@@ -675,8 +681,11 @@ const EXTERNAL_KIND = {'external::api':'Flowable API', 'external::route':'Naviga
   'external::missing':'Missing model reference', 'external::platform':'Flowable platform',
   'external::dynamic':'Dynamic reference', 'external::lib':'External / library'};
 const nodeKind = n => (n.type!=='external')
-  ? (TM[n.type]?TM[n.type][0]:n.type)
+  ? (TM[n.type]?(TM[n.type][2]||TM[n.type][0]):n.type)
   : EXTERNAL_KIND[externalCatId(n.data||{})];
+// What a filter finds a node's kind by: the singular it is shown with, and its category as well, so a filter
+// typed as "processes" still finds the rows it found while every node was named by its category.
+const kindHay = n => nodeKind(n)+(n.type!=='external'&&TM[n.type]?' '+TM[n.type][0]:'');
 
 // adjacency — entries carry the edge's suspect/dynamic flags so chips, relation lists and the
 // ego graph can mark uncertain links; rebuilt when the uncertain-links toggle flips.
@@ -2477,7 +2486,7 @@ function findingRow(f, o){
     : o.onNode ? cpyCell(locateBtn(f.element, elLabel)+' '+esc(elLabel), f.element, 'element id')
     : '<span class="cellx">'+elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model')+copyBtn(f.element,'element id')+'</span>';
   const tone=findTone(f);
-  return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, tone, n?nodeKind(n):'', f.file),
+  return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, tone, n?kindHay(n):'', f.file),
     attrs:' data-sev="'+tone+'" data-fi="'+f.fi+'"', cls:rule?'wv-done':'',
     body:acceptFormHtml(f, rule), bodyCls:'wv-body',
     cells:{
@@ -3059,7 +3068,7 @@ function elementIndex(){
 function elementModelCount(ids){
   const by={};
   ids.forEach(id=>{ const n=byId.get(id); if(n) by[n.type]=(by[n.type]||0)+1; });
-  return Object.keys(by).map(t=>by[t]+' '+(by[t]===1?term('type',t).label||t:(TM[t]?TM[t][0]:t)).toLowerCase()).join(', ');
+  return Object.keys(by).map(t=>by[t]+' '+(TM[t]?TM[t][by[t]===1?2:0]:t).toLowerCase()).join(', ');
 }
 function elementPaletteHtml(ix, sel){
   let h='<div class="elpal">';
@@ -6584,7 +6593,7 @@ function relationsSection(n, c, R){
         const chips=es.slice().sort((a,b)=>byId.get(a.id).label.localeCompare(byId.get(b.id).label)).map((e,i)=>{
           const m=byId.get(e.id), x=relNbDetail(n, c, dir, e, seen), unc=!!(e.sus||e.dyn);
           body+=x.body; anyMap=anyMap||x.map; if(x.map) maps++;
-          return '<span class="rnb" data-hay="'+esc(elHay(m.label, m.key, nodeKind(m), t.label, x.hay).toLowerCase())+'" data-rdir="'+dir+
+          return '<span class="rnb" data-hay="'+esc(elHay(m.label, m.key, kindHay(m), t.label, x.hay).toLowerCase())+'" data-rdir="'+dir+
             '" data-rel="'+esc(rel)+'"'+(unc?' data-runc="1"':'')+(x.map?' data-rmap="1"':'')+(i>=REL_CHIPS_SHOWN?' data-over hidden':'')+'>'+
             nodeChip(e.id, e)+x.inline+'</span>';
         }).join('');

@@ -36,11 +36,20 @@ class DesignTermsSyncTest {
             .associate { it.groupValues[1] to it.groupValues[2] }
     }
 
-    /** `<type>:['<Plural label>','<Section>']` — the explorer's node-type labels (`TM`). */
+    private val tmBody: String by lazy { explorerJs.substringAfter("const TM = {").substringBefore("\n};") }
+
+    /** `<type>:['<Plural label>','<Section>','<Singular>']` — the explorer's node-type labels (`TM`). */
     private val jsTypeLabels: Map<String, String> by lazy {
-        val body = explorerJs.substringAfter("const TM = {").substringBefore("\n};")
         Regex("(\\w+)\\s*:\\s*\\[\\s*'((?:[^'\\\\]|\\\\.)*)'")
-            .findAll(body)
+            .findAll(tmBody)
+            .associate { it.groupValues[1] to it.groupValues[2] }
+    }
+
+    /** …and the third of them: what one node of the type is called ("Process", where its list is "Processes"). */
+    private val jsTypeSingulars: Map<String, String> by lazy {
+        val str = "'(?:[^'\\\\]|\\\\.)*'"
+        Regex("(\\w+)\\s*:\\s*\\[\\s*$str\\s*,\\s*$str\\s*,\\s*'((?:[^'\\\\]|\\\\.)*)'\\s*]")
+            .findAll(tmBody)
             .associate { it.groupValues[1] to it.groupValues[2] }
     }
 
@@ -76,6 +85,25 @@ class DesignTermsSyncTest {
                     "'${DesignTerms.pluralize(DesignTerms.label("type", type))}'",
                 sidebar.lowercase(),
                 DesignTerms.pluralize(DesignTerms.label("type", type)).lowercase(),
+            )
+        }
+    }
+
+    /**
+     * One node is named in the singular on its page, its chips and its copy buttons ("Process · KEY") — the
+     * same word the Markdown renderers count in ("1 process"). Every node type has one: the page used to name
+     * a node by its category, "Processes · KEY".
+     */
+    @Test
+    fun oneNodeIsNamedWithTheWordTheMarkdownCountsIn() {
+        val missing = jsTypeLabels.keys - jsTypeSingulars.keys
+        assertTrue("TM in explorer.js has no singular for: $missing", missing.isEmpty())
+        for (key in DesignTerms.keys.filter { it.startsWith("type:") }) {
+            val type = key.substringAfter(':')
+            assertEquals(
+                "'$type': one node is called '${jsTypeSingulars[type]}' in the explorer",
+                DesignTerms.label("type", type).lowercase(),
+                jsTypeSingulars[type]?.lowercase(),
             )
         }
     }
