@@ -2,6 +2,7 @@ package com.flowable.atlas.parsing
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,6 +22,20 @@ class ModelJsonReaderTest {
         assertEquals("ORDER_", st!!.tableName)
         assertTrue(st.isDatabase)
         assertEquals(listOf("ID_", "LABEL_"), st.columns.map { it.columnName })
+    }
+
+    @Test fun readServiceTable_reads_the_lookup_id_and_relations() {
+        val json = """
+            {"key":"DEMO-S011","type":"database","tableName":"ORDER_","lookupId":"id",
+             "columnMappings":[{"name":"id","columnName":"ID_","type":"STRING"},
+                               {"name":"customer","type":"object-relation",
+                                "relation":{"joinTableName":"ORDER_CUSTOMER_","owningColumnName":"ORDER_ID_",
+                                            "referenceColumnName":"CUSTOMER_ID_","eager":false}}]}
+        """.trimIndent()
+        val st = ModelJsonReader.readServiceTable(bytes(json))!!
+        assertEquals("id", st.lookupId)
+        assertNull("a plain column has no relation", st.columns[0].relation)
+        assertEquals(ColumnRelation("ORDER_CUSTOMER_", "ORDER_ID_", "CUSTOMER_ID_"), st.columns[1].relation)
     }
 
     @Test fun readDataObject_reads_type_and_fields() {

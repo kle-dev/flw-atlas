@@ -64,7 +64,35 @@ class DataObjectBeanGeneratorTest {
         assertEquals("String", DataObjectBeanGenerator.javaType("STRING"))
         assertEquals("Long", DataObjectBeanGenerator.javaType("LONG"))
         assertEquals("java.util.Date", DataObjectBeanGenerator.javaType("DATE"))
+        assertEquals("com.fasterxml.jackson.databind.JsonNode", DataObjectBeanGenerator.javaType("JSON"))
         assertEquals("Object", DataObjectBeanGenerator.javaType("DATA-OBJECT"))
         assertEquals("Object", DataObjectBeanGenerator.javaType(null))
+    }
+
+    /** The platform keeps a JSON field as a Jackson node; read as a String it threw a ClassCastException. */
+    @Test fun a_json_field_is_read_as_a_json_node() {
+        val src = DataObjectBeanGenerator.generate(null, "Order", "DEMO-D010", listOf(DataField("payload", "JSON")))
+        assertTrue(src, src.contains("private com.fasterxml.jackson.databind.JsonNode payload;"))
+        assertTrue(src, src.contains("bean.setPayload(container.getValue(\"payload\", com.fasterxml.jackson.databind.JsonNode.class));"))
+    }
+
+    /** A field called `default` keeps its key and its accessors; only the Java identifier is escaped. */
+    @Test fun a_keyword_field_gets_a_legal_identifier() {
+        val src = DataObjectBeanGenerator.generate(
+            null, "Order", "DEMO-D010",
+            listOf(DataField("default", "STRING"), DataField("class", "STRING"), DataField("name", "STRING"), DataField("Name", "STRING")),
+        )
+        assertTrue(src, src.contains("private String default_;"))
+        assertTrue(src, src.contains("public String getDefault() {"))
+        assertTrue(src, src.contains("bean.setDefault(container.getString(\"default\"));"))
+        assertTrue("getClass() is Object's: $src", src.contains("public String getClass_() {"))
+        assertEquals("two fields one getter apart keep one: $src", 1, Regex("public String getName\\(\\)").findAll(src).count())
+    }
+
+    /** The builder keeps its bean in a field called `bean`: a data-object field of that name must not shadow it. */
+    @Test fun a_field_named_bean_does_not_shadow_the_builders_bean() {
+        val src = DataObjectBeanGenerator.generate(null, "Order", "DEMO-D010", listOf(DataField("bean", "STRING")))
+        assertTrue(src, src.contains("public Builder bean(String bean) {"))
+        assertTrue(src, src.contains("this.bean.bean = bean;"))
     }
 }

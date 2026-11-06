@@ -27,7 +27,8 @@ enum class LiquibaseSource { DATA_OBJECTS, APPS }
 /**
  * "Generate Liquibase Changelogs" — the single, transparent entry point for both menu actions. Shows,
  * per source (data objects / app exports), a preview table of exactly what will be written: the model
- * key, an editable descriptive name, the origin (extracted from an app vs. synthesized from fields),
+ * key, an editable descriptive name, the origin (extracted from an app, built from the backing service,
+ * guessed from fields — or already created by one of the project's changelogs, which is never written),
  * the resulting file name (rendered live from the pattern + optional regex rename) and whether it is
  * new or overwrites an existing file. Output folder, name pattern and rename are seeded from — and, on
  * OK, saved back to — the project's Generation settings.
@@ -58,6 +59,7 @@ class GenerateLiquibaseDialog(
     class Row(val item: LiquibaseScaffoldService.ChangelogPlanItem) : GenerateTableDialog.Row() {
         var name: String = item.defaultName
         var fileName: String = ""
+        override val generatable: Boolean get() = item.generatable
     }
 
     private val settings = FlowableAtlasProjectSettings.getInstance(project)
@@ -151,6 +153,9 @@ class GenerateLiquibaseDialog(
         row.exists = outputDirVirtualFile()?.findChild(row.fileName) != null
     }
 
+    /** A table the project's own changelogs create is shown, with where, but never written again. */
+    override fun statusOf(row: Row): String = if (!row.item.generatable) "in project" else super.statusOf(row)
+
     override fun keyOf(row: Row): String = row.item.key
     override fun targetOf(row: Row): String = row.fileName
 
@@ -212,7 +217,8 @@ class GenerateLiquibaseDialog(
 
     private inner class NameColumn : ColumnInfo<Row, String>("Name") {
         override fun valueOf(row: Row): String = row.name
-        override fun isCellEditable(row: Row): Boolean = true
+        // A row with nothing to write (its table exists) names no file worth editing — as in the DTO dialog.
+        override fun isCellEditable(row: Row): Boolean = row.generatable
         override fun setValue(row: Row, value: String) {
             row.name = value
             recomputeAll()

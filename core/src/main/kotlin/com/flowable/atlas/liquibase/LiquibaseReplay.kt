@@ -60,6 +60,12 @@ object LiquibaseReplay {
         /** Upper-cased name → column. Not loosely: `CONTROL_TYPE` and `CONTROL_TYPE_` are two columns. */
         val columns = LinkedHashMap<String, Column>()
         val removed = ArrayList<Removed>()
+        /**
+         * Every `createTable` of it that ran, in order — a second one on a table that already existed among
+         * them. [createdBy] is whichever change touched the table first, which may be an `addColumn` to a
+         * table no changelog of the project creates; these are what say the project itself creates it.
+         */
+        val creators = ArrayList<Ref>()
     }
 
     class Schema {
@@ -300,7 +306,9 @@ object LiquibaseReplay {
                 is LbChange.CreateTable -> {
                     val name = sub(c.table)
                     if (schema.table(name) != null) notes.add("table $name already existed")
-                    add(ensure(name, ref), c.columns, ref)
+                    val t = ensure(name, ref)
+                    t.creators.add(ref)
+                    add(t, c.columns, ref)
                 }
                 is LbChange.AddColumn -> add(ensure(sub(c.table), ref), c.columns, ref)
                 is LbChange.DropColumn -> {
@@ -336,7 +344,10 @@ object LiquibaseReplay {
                         t.name = newName
                         t.columns.values.forEach { it.table = newName }
                         val into = schema.tables[new]
-                        if (into == null) schema.tables[new] = t else { t.columns.forEach { (k, v) -> into.columns.putIfAbsent(k, v) } }
+                        if (into == null) schema.tables[new] = t else {
+                            t.columns.forEach { (k, v) -> into.columns.putIfAbsent(k, v) }
+                            into.creators.addAll(t.creators)
+                        }
                     }
                     if (old != new) schema.alias[old] = new
                 }

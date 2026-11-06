@@ -153,15 +153,19 @@ object ModelJsonReader {
 
     /**
      * The physical-table mapping of a `.service` model (Service Registry). Shape:
-     * `{ "key", "type", "tableName", "referenceKey", "referencedLiquibaseModelKey",
-     *    "columnMappings": [ { "name", "columnName", "type" } ] }`.
+     * `{ "key", "type", "tableName", "referenceKey", "referencedLiquibaseModelKey", "lookupId",
+     *    "columnMappings": [ { "name", "columnName", "type",
+     *                         "relation": { "joinTableName", "owningColumnName", "referenceColumnName" } } ] }`.
      */
     fun readServiceTable(bytes: ByteArray): ServiceTable? {
         val root = parseMap(bytes) ?: return null
         val key = str(root, "key") ?: return null
         val columns = (root["columnMappings"] as? List<*>).orEmpty().mapNotNull { cAny ->
             val c = cAny as? Map<*, *> ?: return@mapNotNull null
-            ColumnMapping(c["name"] as? String, c["columnName"] as? String, c["type"] as? String)
+            val relation = (c["relation"] as? Map<*, *>)?.let { r ->
+                ColumnRelation(str(r, "joinTableName"), str(r, "owningColumnName"), str(r, "referenceColumnName"))
+            }
+            ColumnMapping(c["name"] as? String, c["columnName"] as? String, c["type"] as? String, relation)
         }
         return ServiceTable(
             key = key,
@@ -170,6 +174,7 @@ object ModelJsonReader {
             referenceKey = str(root, "referenceKey"),
             referencedLiquibaseModelKey = str(root, "referencedLiquibaseModelKey"),
             columns = columns,
+            lookupId = str(root, "lookupId"),
         )
     }
 

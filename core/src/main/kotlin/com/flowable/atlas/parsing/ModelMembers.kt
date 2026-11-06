@@ -73,15 +73,28 @@ data class ServiceTable(
     val referenceKey: String?,
     val referencedLiquibaseModelKey: String?,
     val columns: List<ColumnMapping>,
+    /** The logical name of the mapping that identifies a row — its column is the table's primary key. */
+    val lookupId: String? = null,
 ) {
     val isDatabase: Boolean get() = type.equals("database", ignoreCase = true)
 }
 
-/** One `columnMappings[]` entry of a `.service` model: logical [name] ↔ physical [columnName]. */
+/**
+ * One `columnMappings[]` entry of a `.service` model: logical [name] ↔ physical [columnName]. A mapping
+ * with a [relation] is not a column of the table: it is held in that relation's join table.
+ */
 data class ColumnMapping(
     val name: String?,
     val columnName: String?,
     val type: String?,
+    val relation: ColumnRelation? = null,
+)
+
+/** The join table of a related data object: [owningColumnName] holds this row's id, [referenceColumnName] the other's. */
+data class ColumnRelation(
+    val joinTableName: String?,
+    val owningColumnName: String?,
+    val referenceColumnName: String?,
 )
 
 /**

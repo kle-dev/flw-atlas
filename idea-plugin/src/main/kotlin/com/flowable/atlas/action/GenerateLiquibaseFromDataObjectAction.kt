@@ -10,7 +10,8 @@ import com.intellij.openapi.project.DumbAware
 /**
  * Tools → Flowable Atlas → Generate → Liquibase → "From Data Object…": open the "Generate Liquibase
  * Changelogs" dialog preselected on the data-object source — a preview of every data object's
- * changelog (extracted from the bundling app export, or synthesized from its fields) with the output
+ * changelog (extracted from the bundling app export, else built from its backing service's column mappings,
+ * else guessed from its fields) with the output
  * folder and file-name pattern configurable before anything is written.
  */
 class GenerateLiquibaseFromDataObjectAction : AnAction(), DumbAware {

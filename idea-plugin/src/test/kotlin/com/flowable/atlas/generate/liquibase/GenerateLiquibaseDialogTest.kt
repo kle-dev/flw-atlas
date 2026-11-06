@@ -85,6 +85,30 @@ class GenerateLiquibaseDialogTest : BasePlatformTestCase() {
         }
     }
 
+    /** A table the project's own changelogs already create is listed, but select-all does not tick it. */
+    fun testATableThatExistsIsListedButNeverTicked() {
+        addDataObjects()
+        myFixture.addFileToProject("models/DEMO-S012.service", """
+            {"key":"DEMO-S012","type":"database","tableName":"DEMO_ORDER","lookupId":"id",
+             "columnMappings":[{"name":"id","columnName":"ID_","type":"string"}]}
+        """.trimIndent())
+        myFixture.addFileToProject("models/DEMO-D012.data", """
+            {"key":"DEMO-D012","name":"Order","dataObjectType":"serviceRegistryDataObject",
+             "referencedServiceDefinitionModelKey":"DEMO-S012","fieldMappings":[{"name":"id","type":"STRING"}]}
+        """.trimIndent())
+        myFixture.addFileToProject("src/main/resources/db/DEMO-order.xml", """
+            <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+                <changeSet id="1" author="demo"><createTable tableName="DEMO_ORDER"><column name="ID_" type="varchar(64)"/></createTable></changeSet>
+            </databaseChangeLog>
+        """.trimIndent())
+        project.service<FlowableModelIndexService>().refresh()
+        withDialog(LiquibaseSource.DATA_OBJECTS) { dialog ->
+            assertTrue("listed", dialog.fileNamesForTesting().any { it.first == "DEMO-D012" })
+            dialog.selectAllForTesting()
+            assertEquals(listOf("DEMO-D010", "DEMO-D011"), dialog.includedKeysForTesting())
+        }
+    }
+
     /**
      * An absolute output folder is refused, like on the settings page. It used to pass: the check trimmed
      * the leading slash first, so "/Users/…" looked like a folder named "Users" inside the project.

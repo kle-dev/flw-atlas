@@ -3,6 +3,7 @@ package com.flowable.atlas.generate.liquibase
 import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.liquibase.LiquibaseChangelog
+import com.flowable.atlas.liquibase.LiquibaseProjectReplay
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ServiceTable
@@ -21,6 +22,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -31,10 +33,12 @@ import com.intellij.openapi.vfs.VirtualFile
 /**
  * Backs the "Generate → Liquibase" dialog ([GenerateLiquibaseDialog]). Splits into three concerns:
  *
- *  - **plan** ([computePlans]) — a read-only pass over the model index and the app-export zips that
- *    resolves, for every data object and every bundled changelog, what would be written and *how*
- *    (extracted verbatim from the bundling app, or synthesized from the data object's fields). No file
- *    is touched; the dialog renders this as a preview. Must run under a read action (the caller wraps).
+ *  - **plan** ([preparePlans], [computePlans]) — a read-only pass over the model index and the app-export
+ *    zips that resolves, for every data object and every bundled changelog, what would be written and
+ *    *how*: extracted verbatim from the bundling app; else built from the backing service's column
+ *    mappings, as Flowable Design builds it; else guessed from the data object's fields — or nothing,
+ *    when the project's own changelogs already create the table. No file is touched; the dialog renders
+ *    this as a preview. The index build and the archive reads happen before the read action, never in it.
  *  - **write** ([writeResolved]) — applies the user's confirmed selection in a single write command:
  *    each changelog under the configured output folder, the master `flowable-project-db-changelog.xml`
  *    created from a skeleton when absent, and each file registered via an idempotent `<include>`.
@@ -57,9 +61,24 @@ class LiquibaseScaffoldService(private val project: Project) {
             override val label get() = "Extracted from $fileName"
         }
 
-        /** No bundled changelog matched; a `createTable` is synthesized from [fieldCount] data-object fields. */
+        /** No bundled changelog matched; the table is built from the [columnCount] column mappings of the
+         *  backing service [serviceKey] — the names the service reads and writes — as Design builds it. */
+        data class FromService(val serviceKey: String, val columnCount: Int) : Origin {
+            override val label get() = "Built from $serviceKey ($columnCount column${if (columnCount == 1) "" else "s"})"
+        }
+
+        /** No database service behind the data object: the columns are its [fieldCount] field names — a guess. */
         data class Synthesized(val fieldCount: Int) : Origin {
-            override val label get() = "Synthesized ($fieldCount field${if (fieldCount == 1) "" else "s"})"
+            override val label get() = "No database service — column names guessed ($fieldCount field${if (fieldCount == 1) "" else "s"})"
+        }
+
+        /**
+         * The project's own changelog [file] already creates the table. The master changelog Flowable runs
+         * at startup and the project's own Liquibase share one database, so a second `createTable` fails
+         * whichever runs second: nothing is offered to write.
+         */
+        data class AlreadyCreated(val file: String) : Origin {
+            override val label get() = "Already created by $file"
         }
     }
 
@@ -75,7 +94,10 @@ class LiquibaseScaffoldService(private val project: Project) {
         val tableName: String?,
         val origin: Origin,
         val xml: String,
-    )
+    ) {
+        /** False when there is nothing to write — the table exists already. */
+        val generatable: Boolean get() = origin !is Origin.AlreadyCreated
+    }
 
     /** The full preview for both sources, computed in one pass so switching source is instant. */
     data class Plans(val dataObjects: List<ChangelogPlanItem>, val apps: List<ChangelogPlanItem>)
@@ -96,7 +118,7 @@ class LiquibaseScaffoldService(private val project: Project) {
         object : Task.Backgroundable(project, "Preparing Liquibase preview", true) {
             override fun run(indicator: ProgressIndicator) {
                 val plans = try {
-                    ReadAction.computeBlocking<Plans, RuntimeException> { computePlans(base) }
+                    preparePlans(base)
                 } catch (pce: ProcessCanceledException) {
                     throw pce
                 } catch (t: Throwable) {
@@ -128,12 +150,32 @@ class LiquibaseScaffoldService(private val project: Project) {
     }
 
     /**
-     * Resolve every data object (extract-if-bundled, else synthesize) and every bundled changelog under
-     * [base] into a [Plans] preview. Read access required — call inside a read action.
+     * [computePlans] from a background task: the slow parts first, each outside the read lock — the model
+     * index (cold after every model save, exactly when this is used), then the walk over the archives —
+     * and only the lookups inside it. Under one read action the whole index scan, the project walk and
+     * the archive decompression ran with the lock held, and every keystroke waited for them.
      */
-    fun computePlans(base: VirtualFile): Plans {
-        val index = project.service<FlowableModelIndexService>()
+    internal fun preparePlans(base: VirtualFile): Plans {
+        // Build the index (when cold) *before* taking the read action: the scan manages its own short read
+        // actions on purpose, and inside one it would run inline with the lock held throughout.
+        project.service<FlowableModelIndexService>().index()
         val candidates = bundledChangelogs(base)
+        val created = ReadAction.computeBlocking<Map<String, String>, RuntimeException> { projectTables(base) }
+        return ReadAction.computeBlocking<Plans, RuntimeException> { computePlans(base, candidates, created) }
+    }
+
+    /**
+     * Resolve every data object (extract-if-bundled, else build from its service, else guess from its
+     * fields; nothing when [created] already holds its table) and every bundled changelog under [base]
+     * into a [Plans] preview. Read access required — call inside a read action; [preparePlans] gathers
+     * [candidates] and [created] before taking it.
+     */
+    fun computePlans(
+        base: VirtualFile,
+        candidates: List<LiquibaseChangelogExtractor.Extracted> = bundledChangelogs(base),
+        created: Map<String, String> = projectTables(base),
+    ): Plans {
+        val index = project.service<FlowableModelIndexService>()
 
         // Resolve data objects first — reading keysOfType builds the index cache that dataObjectTables()
         // relies on, and lets us record the service/table metadata per bundled changelog so the
@@ -147,14 +189,18 @@ class LiquibaseScaffoldService(private val project: Project) {
             val service = info.referencedServiceDefinitionModelKey?.let { index.serviceTableOf(it) }
             val modelTable = service?.tableName ?: tables[entry.key]
             val bundled = matchBundled(entry.key, service, candidates)
-            val origin: Origin
-            val xml: String
-            if (bundled != null) {
-                origin = Origin.Extracted(bundled.fileName)
-                xml = bundled.xml
-            } else {
-                origin = Origin.Synthesized(info.fieldMappings.size)
-                xml = LiquibaseChangelogGenerator.synthesize(entry.key, modelTable.orEmpty(), info.fieldMappings)
+            val creator = modelTable?.takeIf { it.isNotBlank() }?.let { created[it.uppercase()] }
+            val fromService = if (bundled == null && creator == null) service?.let(LiquibaseChangelogGenerator::fromService) else null
+            val (origin, xml) = when {
+                bundled != null -> Origin.Extracted(bundled.fileName) to bundled.xml
+                creator != null -> Origin.AlreadyCreated(creator) to ""
+                // The service's columns, not the data object's fields: a field is the logical name and its
+                // column is named by the service — in practice they almost never agree — and a table built
+                // from field names had none of the columns the service reads, and no primary key.
+                fromService != null ->
+                    Origin.FromService(service!!.key, LiquibaseChangelogGenerator.tableColumns(service).size) to fromService
+                else -> Origin.Synthesized(info.fieldMappings.size) to
+                    LiquibaseChangelogGenerator.synthesize(entry.key, modelTable.orEmpty(), info.fieldMappings)
             }
             val tableName = tableNameOf(xml, modelTable)
             val serviceKey = info.referencedServiceDefinitionModelKey
@@ -185,7 +231,7 @@ class LiquibaseScaffoldService(private val project: Project) {
      * The bundled changelog backing a data object, matched (strongest first): the backing service's
      * `referencedLiquibaseModelKey` equals the changelog's key; else a changelog whose `tableName`
      * equals the service's; else the changelog whose key equals the data-object key. Null when none
-     * line up (→ synthesize).
+     * line up (→ built from the service, or guessed from the fields).
      */
     private fun matchBundled(
         dataObjectKey: String,
@@ -203,28 +249,64 @@ class LiquibaseScaffoldService(private val project: Project) {
     }
 
     /**
+     * The tables the project's own changelogs under [base] create (upper-cased name → the first creating
+     * file, relative to [base]) — the same replay the coverage inspection reads. A file in the configured
+     * output folder does not count: what Atlas generated there before is what this run may overwrite. Only
+     * that file is discounted, not the table — when the project's own changelog creates it too, that one is
+     * what a second `createTable` would collide with. Read access required.
+     */
+    private fun projectTables(base: VirtualFile): Map<String, String> {
+        val root = base.path.trimEnd('/') + "/"
+        val output = outputDir(base)?.path?.trimEnd('/')?.plus("/")
+        val out = HashMap<String, String>()
+        for ((table, files) in LiquibaseProjectReplay.createdTables(project)) {
+            files.firstOrNull { it.startsWith(root) && (output == null || !it.startsWith(output)) }
+                ?.let { out[table] = it.removePrefix(root) }
+        }
+        return out
+    }
+
+    private fun outputDir(base: VirtualFile): VirtualFile? =
+        base.findFileByRelativePath(FlowableAtlasProjectSettings.getInstance(project).liquibaseOutputDir)
+
+    /**
      * Every bundled changelog under [base] — extracted from each `.zip`/`.bar` app export and read from
      * any loose `*.data.changelog.xml` of an unpacked export. Build-output directories and the configured
      * Liquibase output folder are skipped, so the master and already-generated changelogs are never
      * re-surfaced as app exports.
+     *
+     * The files are listed under a short read action and read outside it: decompressing every archive with
+     * the lock held made each write wait, and a jar file system that has not mounted an archive yet may
+     * only be refreshed without it.
      */
     private fun bundledChangelogs(base: VirtualFile): List<LiquibaseChangelogExtractor.Extracted> {
-        val outputDir = base.findFileByRelativePath(FlowableAtlasProjectSettings.getInstance(project).liquibaseOutputDir)
+        val files = ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
+            val outputDir = outputDir(base)
+            val found = ArrayList<VirtualFile>()
+            VfsUtilCore.iterateChildrenRecursively(
+                base,
+                { vf -> !(vf.isDirectory && (vf.name in ModelPaths.EXCLUDE_DIRS || vf == outputDir)) },
+                { file ->
+                    if (LiquibaseChangelogExtractor.isArchive(file) || LiquibaseChangelogExtractor.isLooseChangelog(file)) found.add(file)
+                    true
+                },
+            )
+            found
+        }
         val out = ArrayList<LiquibaseChangelogExtractor.Extracted>()
-        VfsUtilCore.iterateChildrenRecursively(
-            base,
-            { vf -> !(vf.isDirectory && (vf.name in ModelPaths.EXCLUDE_DIRS || vf == outputDir)) },
-            { file ->
-                when {
-                    LiquibaseChangelogExtractor.isArchive(file) -> out.addAll(LiquibaseChangelogExtractor.extract(file))
-                    LiquibaseChangelogExtractor.isLooseChangelog(file) ->
-                        LiquibaseChangelogExtractor.readLoose(file)?.let { out.add(it) }
-                }
-                true
-            },
-        )
+        for (file in files) {
+            ProgressManager.checkCanceled()
+            if (!file.isValid) continue
+            onBundledFile?.invoke(file)
+            if (LiquibaseChangelogExtractor.isArchive(file)) out.addAll(LiquibaseChangelogExtractor.extract(file))
+            else LiquibaseChangelogExtractor.readLoose(file)?.let { out.add(it) }
+        }
         return out
     }
+
+    /** Called per archive or loose changelog just before it is read — where a test asks which lock that holds. */
+    @Volatile
+    internal var onBundledFile: ((VirtualFile) -> Unit)? = null
 
     // ---- write --------------------------------------------------------------------------------
 

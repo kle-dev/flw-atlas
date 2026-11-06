@@ -632,9 +632,18 @@ DTOs, and Liquibase changelogs.
 A constants class is what turns every key into a compile-time-checked symbol — after which renaming a
 model is a refactoring rather than a search-and-replace. It regenerates itself in place when the models
 change, so it cannot go stale. The DTO generator emits typed fields, a `fromContainer(…)` mapper and a
-fluent builder, either from one data object via Alt-Enter or in bulk for whole apps. The Liquibase
+fluent builder, either from one data object via Alt-Enter or in bulk for whole apps. A JSON field is a
+Jackson `JsonNode`, the type the platform keeps it as, and a field named after a Java keyword — `default`,
+`case` — becomes `default_` while its getter stays `getDefault()`. The Liquibase
 dialog exists because the alternative is unzipping app exports by hand to find out which changelogs are
 in there; here you see the plan — including which files already exist — before anything is written.
+Its *Origin* column says where each changelog comes from: extracted from the app export that ships it;
+else built from the data object's backing service the way Flowable Design builds it — a column per column
+mapping, named as the service reads it, the lookup id as the primary key and a join table per relation;
+else, with no database service behind the data object, guessed from its field names, and labelled so. A
+table your own Liquibase changelogs already create is listed as *Already created by* that file and cannot be
+ticked: the master changelog Flowable runs at startup shares the database with them, and a second
+`createTable` fails whichever runs second.
 Both table dialogs read top to bottom in one column of labels — *Source*, the table, *Output folder*,
 *File name pattern* or *Class name pattern*, the same words the settings pages use — and a problem with the
 selected rows is pointed at the table. A folder picked with *Browse* is written relative to the project,

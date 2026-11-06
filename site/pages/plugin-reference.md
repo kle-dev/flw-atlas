@@ -350,8 +350,8 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 | `.dmn`, `.dmn.xml` | XML | Decision variables for `variable(…)` completion; diagram from `dmndi`, else the decision table is painted; schema-backed at DMN 1.1, 1.2 and 1.3 |
 | `.form` | JSON | Frontend and backend expression injection; fields and outcomes feed completion |
 | `.action` | JSON | Script injection into the bot script; `botKey` ↔ `BotService` linking; action-name inlay hint |
-| `.data` | JSON | Field mappings drive DTO generation, `value(…)` validation, Liquibase synthesis and table hints |
-| `.service` | JSON | Operations drive cascade completion; columns and table drive the Liquibase inspection |
+| `.data` | JSON | Field mappings drive DTO generation, `value(…)` validation and table hints — and the guessed Liquibase changelog of a data object with no database service |
+| `.service` | JSON | Operations drive cascade completion; columns and table drive the Liquibase inspection, and its column mappings, lookup id and relations the changelog Generate → Liquibase builds |
 | `.masterdata` | JSON | Field names for master-data query completion |
 | `.event`, `.channel` | JSON | Payload names for event parameter completion |
 | `.page`, `.dictionary`, `.query`, `.sequence`, `.sla`, `.agent`, `.tpl`, `.policy`, `.extractor`, `.knowledgebase`, `.dashboardcomponent`, `.document`, `.palette`, `.app` | JSON | Indexed by key, completed, navigable, hoverable, searchable — and they open with their content instead of a "file type not associated" panel |

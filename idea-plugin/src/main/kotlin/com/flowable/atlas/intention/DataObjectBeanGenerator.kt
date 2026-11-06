@@ -14,13 +14,26 @@ object DataObjectBeanGenerator {
     private const val CONTAINER_FQN = "com.flowable.dataobject.api.runtime.DataObjectInstanceVariableContainer"
     private const val CONTAINER = "DataObjectInstanceVariableContainer"
 
-    private data class Prop(val property: String, val field: String, val type: String)
+    /** The JSON node type a JSON field holds at runtime — Jackson is on every Flowable classpath. */
+    private const val JSON_NODE = "com.fasterxml.jackson.databind.JsonNode"
+
+    /**
+     * One bean property: the data object's field name ([property], the container key), the Java [field]
+     * identifier, and the [accessor] stem of its getter and setter — `getDefault()` for a field the
+     * Java identifier has to call `default_`.
+     */
+    private data class Prop(val property: String, val field: String, val accessor: String, val type: String)
 
     fun generate(packageName: String?, className: String, dataObjectKey: String, fields: List<DataField>): String {
         val props = fields.mapNotNull { f ->
-            val ident = identifier(f.name) ?: return@mapNotNull null
-            Prop(f.name, ident, javaType(f.type))
-        }.distinctBy { it.field }
+            val plain = identifier(f.name) ?: return@mapNotNull null
+            val field = if (plain in RESERVED) "${plain}_" else plain
+            // getClass() is Object's, and final: a field called "class" takes the escaped name throughout.
+            val accessor = (if (plain == "class") field else plain).replaceFirstChar { it.uppercaseChar() }
+            Prop(f.name, field, accessor, javaType(f.type))
+        }
+            // Two fields one identifier apart from a clash still collide on their getter (name, Name).
+            .distinctBy { it.field }.distinctBy { it.accessor }
 
         return buildString {
             if (!packageName.isNullOrBlank()) append("package ").append(packageName).append(";\n\n")
@@ -39,13 +52,12 @@ object DataObjectBeanGenerator {
             append("    public static ").append(className).append(" fromContainer(").append(CONTAINER).append(" container) {\n")
             append("        ").append(className).append(" bean = new ").append(className).append("();\n")
             for (p in props) {
-                append("        bean.set").append(p.field.replaceFirstChar { it.uppercaseChar() })
-                    .append('(').append(accessor(p)).append(");\n")
+                append("        bean.set").append(p.accessor).append('(').append(accessor(p)).append(");\n")
             }
             append("        return bean;\n    }\n\n")
 
             for (p in props) {
-                val cap = p.field.replaceFirstChar { it.uppercaseChar() }
+                val cap = p.accessor
                 append("    public ").append(p.type).append(" get").append(cap).append("() {\n")
                 append("        return ").append(p.field).append(";\n    }\n\n")
                 append("    public void set").append(cap).append('(').append(p.type).append(' ').append(p.field).append(") {\n")
@@ -58,7 +70,9 @@ object DataObjectBeanGenerator {
             append("        private final ").append(className).append(" bean = new ").append(className).append("();\n\n")
             for (p in props) {
                 append("        public Builder ").append(p.field).append('(').append(p.type).append(' ').append(p.field).append(") {\n")
-                append("            bean.").append(p.field).append(" = ").append(p.field).append(";\n")
+                // `this.bean`, not `bean`: a data-object field called "bean" names the parameter, which would
+                // shadow the builder's own field and leave `bean.bean = bean` on a String.
+                append("            this.bean.").append(p.field).append(" = ").append(p.field).append(";\n")
                 append("            return this;\n        }\n\n")
             }
             append("        public ").append(className).append(" build() {\n            return bean;\n        }\n    }\n")
@@ -78,6 +92,7 @@ object DataObjectBeanGenerator {
             "Boolean" -> "container.getBoolean($key)"
             "java.util.Date" -> "container.getDate($key)"
             "java.time.LocalDate" -> "container.getLocalDate($key)"
+            JSON_NODE -> "container.getValue($key, $JSON_NODE.class)"
             else -> "container.getValue($key, Object.class)"
         }
     }
@@ -101,14 +116,31 @@ object DataObjectBeanGenerator {
         "BOOLEAN", "BOOL" -> "Boolean"
         "DATE" -> "java.util.Date"
         "LOCAL-DATE", "LOCALDATE" -> "java.time.LocalDate"
-        "JSON" -> "String"
+        // The platform keeps a JSON field as a Jackson node and its container casts to the type asked for:
+        // read as a String, every instance with that field set threw a ClassCastException.
+        "JSON" -> JSON_NODE
         else -> "Object" // DATA-OBJECT relations and unknown types
     }
 
-    /** A valid Java field identifier from a logical field name, or null if nothing usable remains. */
+    /**
+     * A valid Java identifier from a logical field name, or null if nothing usable remains. Not yet
+     * escaped for [RESERVED] — the caller suffixes those, so the accessor can keep the plain name.
+     */
     private fun identifier(raw: String?): String? {
         val cleaned = (raw ?: "").filterIndexed { i, c -> c.isLetterOrDigit() || c == '_' || (i > 0 && c == '$') }
         if (cleaned.isBlank()) return null
         return if (cleaned.first().isDigit()) "_$cleaned" else cleaned
     }
+
+    /**
+     * Java's reserved words, its literals and `_` — a data-object field may be called `default` or
+     * `case`, and `private String default;` does not compile.
+     */
+    private val RESERVED = setOf(
+        "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue",
+        "default", "do", "double", "else", "enum", "extends", "final", "finally", "float", "for", "goto", "if",
+        "implements", "import", "instanceof", "int", "interface", "long", "native", "new", "package", "private",
+        "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
+        "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false", "null", "_",
+    )
 }

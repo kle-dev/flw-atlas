@@ -172,6 +172,26 @@ class LiquibaseReplayTest {
         assertEquals(listOf("id_", "amount_", "due_"), r.columns("DEMO_INVOICE_"))
         assertEquals("NUMERIC(10,2)", r.table("DEMO_INVOICE_")!!.columns.getValue("AMOUNT_").type)
     }
+
+    @Test
+    fun aTableIsCreatedOnlyByACreateTable() {
+        // an addColumn to a table no changelog creates still puts it in the schema — and makes it its createdBy
+        val r = replay(
+            "src/main/resources/db/a.xml" to changelog("""
+                <changeSet id="1" author="demo"><addColumn tableName="DEMO_EXT_"><column name="X_" type="int"/></addColumn></changeSet>
+                <changeSet id="2" author="demo"><createTable tableName="DEMO_T_"><column name="ID_" type="int"/></createTable></changeSet>"""),
+            "src/main/resources/db/b.xml" to changelog("""
+                <changeSet id="3" author="demo"><createTable tableName="demo_t_"><column name="ID_" type="int"/></createTable></changeSet>
+                <changeSet id="4" author="demo"><renameTable oldTableName="DEMO_T_" newTableName="DEMO_T2_"/></changeSet>"""),
+        )
+        assertEquals("src/main/resources/db/a.xml", r.table("DEMO_EXT_")!!.createdBy.file)
+        assertTrue("altered, never created", r.table("DEMO_EXT_")!!.creators.isEmpty())
+        assertEquals(
+            "both createTables, carried over by the rename",
+            listOf("src/main/resources/db/a.xml", "src/main/resources/db/b.xml"),
+            r.table("DEMO_T2_")!!.creators.map { it.file },
+        )
+    }
 }
 
 /** The DDL a `<sql>` change, a `<sqlFile>` or a formatted-SQL changelog runs, read into schema changes. */
