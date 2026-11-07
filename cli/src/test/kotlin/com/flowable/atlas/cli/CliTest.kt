@@ -314,6 +314,28 @@ class CliTest {
                 "--waivers", File(out, "nowhere.json").path)))
     }
 
+    /**
+     * What is wrong with the waiver file reaches the log: a `--waivers` path that is not there (still not
+     * fatal — it is how a pipeline says "no waivers"), and a file in graph.json's shape, which waived nothing.
+     */
+    @Test
+    fun aWaiverFileThatWaivesNothingSaysWhy() {
+        val out = tempDir()
+        var code = -1
+        val missing = stderrOf {
+            code = run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "report.md").path, "--fail-on", "error",
+                "--waivers", File(out, "nowhere.json").path))
+        }
+        assertEquals("a missing file waives nothing, and fails nothing by itself", 1, code)
+        assertTrue(missing, missing.contains("nowhere.json") && missing.contains("not found"))
+        assertFalse("the default stays silent: most projects have no file",
+            stderrOf { run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "report.md").path)) }.contains("not found"))
+
+        File(out, "waivers.json").writeText("""{"version":1,"rules":[{"check":"unusedForms","node":"form:DEMO-NOPE","reason":"x"}]}""")
+        val shape = stderrOf { run(arrayOf(fixtureDir().path, "--all", "-o", out.path)) }
+        assertTrue(shape, shape.lines().any { it.contains("waiver") && it.contains("\"rules\"") })
+    }
+
     /** The status line counted parse issues from the raw diagnostics, which know nothing about waivers. */
     @Test
     fun aWaivedParseIssueLeavesTheStatusLine() {

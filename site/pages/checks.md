@@ -595,6 +595,14 @@ so on every surface, because a suppression that quietly stops applying is the on
 not have. `--fail-on-stale-waivers` turns that into a red build; `--no-waivers` reports everything, for
 when the question is what the file is hiding.
 
+A file that waives less than it seems to is reported the same way, on every run and never as a
+failure: a syntax error, with its line and column; a rule whose `check` this Atlas does not know — it
+can never match, so the nearest check id is suggested, and the rule is kept; a top-level key other
+than `version`, `createdWith`, `updatedWith`, `waivers` and `notes` — above all `rules`, which is what
+`graph.json` calls them — since nothing reads it and the explorer's *Save* and *Export* write the
+file without it; and a `waivers` or `notes` that is not a list. A `--waivers` path that does not exist
+is said on stderr, too.
+
 You do not have to write the file by hand: in the explorer every finding row — on the Checks page and
 on the model's own page — offers **accept…**, with the reason, an optional `until` and the author, and
 narrowed to the element by default. A bar on every view counts the unsaved decisions; **Save to

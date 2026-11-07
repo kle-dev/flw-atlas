@@ -195,6 +195,58 @@ class WaiversTest {
         assertTrue(set.waivers.isEmpty())
     }
 
+    /** A syntax error names its file and its place; it used to read "waivers.json is not a JSON object" whatever the file. */
+    @Test
+    fun aSyntaxErrorSaysWhereItIs() {
+        val p = Waivers.parse("{\"waivers\": [}", "bad.json").problems.single()
+        assertTrue(p, p.contains("bad.json") && p.contains("line 1 column"))
+        val dir = java.nio.file.Files.createTempDirectory("atlas-waivers").toFile()
+        val custom = java.io.File(dir, "custom.json").apply { writeText("{\"waivers\": [\n  {\"check\": \"unusedForms\" \"node\": \"form:a\"}\n]}") }
+        val q = Waivers.load(custom).problems.single()
+        assertTrue(q, q.startsWith("custom.json") && q.contains("line 2 column"))
+    }
+
+    /** A complete object followed by junk is read, and the junk is said: reading nothing would lose the rules on the next Save. */
+    @Test
+    fun trailingContentIsReportedAndTheRulesAreKept() {
+        val set = Waivers.parse("""{"waivers":[{"check":"unusedForms","node":"form:a","reason":"x"}]} xx""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.single(), set.problems.single().contains("Extra data"))
+    }
+
+    /** A misspelt check id can never match; it is said as such, and the rule is kept so a Save does not drop it. */
+    @Test
+    fun anUnknownCheckIsReportedAndKept() {
+        val set = Waivers.parse("""{"waivers":[{"check":"missingRef","node":"process:a","reason":"x"}]}""")
+        assertEquals(1, set.waivers.size)
+        val p = set.problems.single()
+        assertTrue(p, p.contains("\"missingRef\"") && p.contains("did you mean \"missingRefs\""))
+    }
+
+    /** `rules` is graph.json's name for them; a file written in that shape waived nothing and said nothing. */
+    @Test
+    fun aFileInTheWrongShapeSaysSo() {
+        val rules = Waivers.parse("""{"version":1,"rules":[{"check":"unusedForms","node":"form:DEMO-a","reason":"x"}]}""")
+        assertTrue(rules.waivers.isEmpty())
+        assertTrue(rules.problems.single(), rules.problems.single().contains("\"rules\"") && rules.problems.single().contains("\"waivers\""))
+
+        val notAList = Waivers.parse("""{"version":1,"waivers":{"check":"unusedForms","node":"form:DEMO-a"}}""")
+        assertTrue(notAList.problems.single(), notAList.problems.single().contains("not a list"))
+
+        // No key passes as a comment: the explorer's Save writes only the keys it reads, and would drop it.
+        val other = Waivers.parse("""{"version":1,"owner":"DEMO-team","_comment":"x","waivers":[]}""")
+        assertEquals(other.problems.toString(), listOf("\"owner\"", "\"_comment\""),
+            other.problems.map { Regex("\"[^\"]+\"").find(it)!!.value })
+        assertTrue(other.problems.first(), other.problems.first().contains("Save"))
+        // …which is exactly the five keys a file has.
+        val written = Waivers.serialize(Waivers.Set(listOf(Waivers.Waiver("unusedForms", "form:DEMO-a", reason = "x"))), "0.0.0")
+        assertTrue(Waivers.parse(written).problems.isEmpty())
+
+        // A newer file may carry keys of its own; the version line already says what is not understood.
+        val newer = Waivers.parse("""{"version":99,"extra":1,"waivers":[{"check":"unusedForms","node":"form:a","reason":"x"}]}""")
+        assertTrue(newer.problems.single(), newer.problems.single().contains("version 99"))
+    }
+
     @Test
     fun serializingIsStableAndRoundTrips() {
         val set = Waivers.Set(

@@ -320,6 +320,11 @@ private fun execute(o: Options): Int {
         ?: o.output?.let { File(it).absoluteFile.parentFile } ?: File(".")
     val waiverFile = o.waiversPath?.let { File(it) } ?: File(outputDir, Waivers.FILE_NAME)
     val waivers = if (o.noWaivers) Waivers.EMPTY else Waivers.load(waiverFile)
+    // A path the user named and that is not there: every finding it was meant to accept comes back into the
+    // gate, which used to happen without a word. Said, not fatal — an unreadable waiver file never fails a
+    // run (Waivers.Set), and a missing one is how a pipeline says "no waivers". The default stays silent:
+    // most projects have no file at all.
+    val waiverFileMissing = o.waiversPath != null && !o.noWaivers && !waiverFile.isFile
     val allow = o.exprAllowlist.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     val result = Atlas.extract(
         root,
@@ -408,6 +413,10 @@ private fun execute(o: Options): Int {
             // fatal: silence here is exactly how a suppression list rots.
             stale.forEach { errln("  $WARN_SIGN waiver $it") }
             waiverNotices(result).forEach { errln("  $WARN_SIGN waiver $it") }
+            if (waiverFileMissing) {
+                val why = if (waiverFile.isDirectory) "is a folder" else "not found"
+                errln("  $WARN_SIGN waiver file ${waiverFile.path} $why, so no finding is waived")
+            }
         }
         // Both gates are reported, then decided: a stale waiver used to return early and hide which findings
         // would have failed the run as well.

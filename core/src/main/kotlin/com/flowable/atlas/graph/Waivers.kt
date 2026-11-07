@@ -1,5 +1,6 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.inspection.Suggestions
 import com.flowable.atlas.model.MiniJson
 import java.io.File
 import java.time.LocalDate
@@ -164,21 +165,52 @@ object Waivers {
         return Set(page.waivers + keptW, page.notes + keptN, createdWith = page.createdWith ?: disk.createdWith)
     }
 
+    // The basename, never the path: problems are copied into graph.json and the explorer, which are handed
+    // around, and the CLI names the full path on stderr itself.
     fun load(file: File): Set =
         if (!file.isFile) EMPTY
-        else runCatching { parse(file.readText()) }
+        else runCatching { parse(file.readText(), file.name) }
             .getOrElse { Set(problems = listOf("could not read ${file.name}: ${it.message}")) }
 
+    /** What a file has at its top level. Anything else is reported: nothing reads it, so whatever it holds does nothing. */
+    private val TOP_LEVEL_KEYS = setOf("version", "createdWith", "updatedWith", "waivers", "notes")
+
+    /** Parse a waiver file's [text]; [name] is the file as its problems name it. */
     @Suppress("UNCHECKED_CAST")
-    fun parse(text: String): Set {
-        val root = MiniJson.parseOrNull(text) as? Map<String, Any?>
-            ?: return Set(problems = listOf("$FILE_NAME is not a JSON object"))
+    fun parse(text: String, name: String = FILE_NAME): Set {
         val problems = ArrayList<String>()
+        // Strict first. The tolerant reader alone answered a missing comma with "is not a JSON object" —
+        // no line to look at, and a syntax error called a type error.
+        val root: Map<String, Any?> = try {
+            MiniJson.parse(text) as? Map<String, Any?> ?: return Set(problems = listOf("$name is not a JSON object"))
+        } catch (e: MiniJson.JsonException) {
+            // A complete object followed by junk is still read, and said: reading nothing would also make the
+            // explorer's next Save write the file back without the rules it holds.
+            (MiniJson.parseOrNull(text) as? Map<String, Any?>)
+                ?.also { problems += "$name: ${e.message} — the rest of the file is ignored" }
+                ?: return Set(problems = listOf("$name is not valid JSON: ${e.message}"))
+        }
 
         val version = (root["version"] as? Number)?.toInt() ?: SCHEMA_VERSION
         if (version > SCHEMA_VERSION) {
-            problems += "$FILE_NAME says version $version, this Atlas understands $SCHEMA_VERSION — " +
+            problems += "$name says version $version, this Atlas understands $SCHEMA_VERSION — " +
                 "rules it does not recognise are ignored"
+        } else {
+            // A key nothing reads waives nothing, and used to say so nowhere: `{"rules": [...]}` — the shape
+            // graph.json reports them in — was a file that accepted no finding, without a word. A newer file
+            // may carry keys of its own, and is already reported above. No key is exempt as a "comment":
+            // both writers (serialize, the explorer's exporter) write only the keys above, so the next Save
+            // deletes whatever else the file holds; a remark worth keeping goes in a rule's reason or a note.
+            for (k in root.keys) {
+                if (k in TOP_LEVEL_KEYS) continue
+                problems += if (k == "rules") "$name keeps its rules under \"waivers\", not \"rules\" " +
+                    "(graph.json reports them as rules), so none of them were read — rename the key before the " +
+                    "explorer's Save writes the file without them"
+                else "$name has a key \"$k\" that nothing reads; it is ignored, and the explorer's Save drops it"
+            }
+        }
+        for ((k, what) in listOf("waivers" to "rule", "notes" to "note")) {
+            if (root[k] != null && root[k] !is List<*>) problems += "\"$k\" in $name is not a list, so no $what was read"
         }
 
         fun str(m: Map<String, Any?>, k: String): String? =
@@ -189,6 +221,14 @@ object Waivers {
             val m = any as? Map<String, Any?> ?: run { problems += "waivers[$i] is not an object"; continue }
             val check = str(m, "check") ?: run { problems += "waivers[$i] has no check"; continue }
             val node = str(m, "node") ?: run { problems += "waivers[$i] has no node"; continue }
+            // A misspelt check id matched nothing and was reported only as "matched nothing", which reads as
+            // a fixed finding. The rule is kept all the same: the explorer lists it, and a rule dropped here
+            // would be dropped from the file by the next Save, which merges with what was read.
+            if (check !in CheckCatalog.ORDER) {
+                val near = Suggestions.closest(check, CheckCatalog.ORDER)
+                problems += "waivers[$i] names check \"$check\", which this Atlas does not know, so it can never match" +
+                    (near?.let { " — did you mean \"$it\"?" } ?: "")
+            }
             // An unreadable date would otherwise keep the waiver open for good, without a word.
             str(m, "until")?.trim()?.takeIf { it.isNotEmpty() && runCatching { LocalDate.parse(it) }.isFailure }?.let {
                 problems += "waivers[$i] until \"$it\" is not a date (YYYY-MM-DD), so it never expires"
