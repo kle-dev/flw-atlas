@@ -172,8 +172,11 @@ finding with no file of its own, the first model it lives in and how many more �
 matters** and **what to do** — including when accepting it is the right answer — with *Read on the checks
 page*, *Open in Atlas Explorer* (the finding's model page, or the check on the Checks page) and
 *Accept…*. Accepting asks why, in a dialog that refuses an empty reason, and writes one rule per finding
-to the output folder's `waivers.json` — the file the explorer's Save writes, so a rule accepted here is
-accepted on the page and in the CLI's gate as well.
+to the `waivers.json` beside the explorer the analysis came from — the output folder's, unless the page
+was generated somewhere else — which is the file the explorer's Save writes. Then it regenerates the
+explorer pages in that folder, and an open one reloads on the page you were reading, so a rule accepted
+here is accepted on the page and in the CLI's gate as well, and the counts in the window, the Hub and the
+page agree; with no page there, the window analyses again.
 
 A **status line** over the tree says how current all this is — *17 defects · 24 advice · analyzed 2 min
 ago* — and, once a model changed since, *3 models changed since* with **Analyze Again**. The analysis is

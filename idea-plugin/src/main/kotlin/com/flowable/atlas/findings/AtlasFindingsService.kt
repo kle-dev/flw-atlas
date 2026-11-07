@@ -4,7 +4,10 @@ import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
+import com.flowable.atlas.explorer.AtlasArtifact
+import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerStaleness
+import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.explorer.AtlasGeneratorService
 import com.flowable.atlas.explorer.WaiverFileWriter
 import com.flowable.atlas.graph.CheckCatalog
@@ -152,9 +155,17 @@ class AtlasFindingsService(private val project: Project) : Disposable {
         }.queue()
     }
 
-    /** The analysis itself, on the calling thread — [refresh] runs it in a background task. */
+    /**
+     * The analysis itself, on the calling thread — [refresh] runs it in a background task.
+     *
+     * It reads the `waivers.json` of the folder the window last adopted or analysed for this [root] — after a
+     * generation, the folder the page was written to, which the Generate dialog lets anyone choose. Deriving
+     * it from the settings every time read a different file than [accept] had just written beside that page,
+     * and the finding accepted a second ago came back open.
+     */
     internal fun analyze(root: Path, indicator: ProgressIndicator): Analysis {
-        val outputDir = root.resolve(FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir)
+        val outputDir = last?.takeIf { it.root.normalize() == root.normalize() }?.outputDir
+            ?: root.resolve(FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir)
         val generator = project.service<AtlasGeneratorService>()
         val result = generator.extract(root.toFile(), indicator, generator.waiverFile(outputDir))
         @Suppress("UNCHECKED_CAST")
@@ -165,7 +176,7 @@ class AtlasFindingsService(private val project: Project) : Disposable {
     /**
      * Accept [findings] for [reason]: one rule per finding in `waivers.json`, narrowed to its element and
      * subject so it covers that finding and no other, by the git user, dated today, with no expiry. Then
-     * analyse again, so the list and the counts follow. Must be called on the EDT.
+     * the list and the counts follow ([followAccept]). Must be called on the EDT.
      */
     fun accept(findings: List<Map<String, Any?>>, reason: String) {
         val analysis = last ?: return
@@ -196,8 +207,50 @@ class AtlasFindingsService(private val project: Project) : Disposable {
                 .notify(project)
             return
         }
-        refresh()
+        followAccept(analysis)
     }
+
+    /**
+     * After an accept, the explorer pages beside the `waivers.json` just written are regenerated from one
+     * analysis, and the open tabs showing them reload where their reader is. A page embeds the waivers it
+     * was generated with and nothing marks it stale when they change, so it went on counting the accepted
+     * finding as open beside a window and a Hub that no longer did — the state the page's own Save
+     * regenerates to avoid. The generation hands its findings to this window ([adopt]): one analysis, not
+     * two. With no page there — or only pages made from another folder, which this analysis does not
+     * describe — the window analyses again by itself.
+     *
+     * The generation is this window's analysis, so it is [running] until it ends, however it ends: the
+     * window and the Hub say *analyzing*, and Accept is off. Otherwise the accepted rows sat there as open
+     * for as long as the generation took, with Accept offered on them again — a second rule for each.
+     */
+    private fun followAccept(analysis: Analysis) {
+        val pages = explorerPages(analysis.outputDir).filter { page ->
+            (AtlasExplorerFiles.rootOf(project, page) ?: analysis.root).normalize() == analysis.root.normalize()
+        }
+        val test = afterAcceptForTest
+        if (pages.isEmpty()) {
+            if (test != null) test(pages) {} else refresh()
+            return
+        }
+        running = true
+        changed()
+        val done = {
+            running = false
+            changed()
+        }
+        if (test != null) test(pages, done) else AtlasGenerationRunner.regeneratePages(project, analysis.root, pages, done)
+    }
+
+    /** The explorer pages directly in [dir] — the folder a page's Save writes `waivers.json` to. */
+    private fun explorerPages(dir: Path): List<Path> =
+        dir.toFile().listFiles { f -> f.isFile && f.name.endsWith(AtlasArtifact.EXPLORER_HTML.suffix, ignoreCase = true) }
+            .orEmpty().map { it.toPath() }.sorted()
+
+    /**
+     * For tests: stands in for what follows an accept — the pages to regenerate, empty for a new analysis —
+     * and is handed what the end of that regeneration runs.
+     */
+    @Volatile internal var afterAcceptForTest: ((pages: List<Path>, done: () -> Unit) -> Unit)? = null
 
     /** For tests: stand in for an analysis that ran, whatever folder it was of. */
     internal fun seedForTest(analysis: Analysis?) {

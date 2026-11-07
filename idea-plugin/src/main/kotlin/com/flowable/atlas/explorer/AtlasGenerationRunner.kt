@@ -7,6 +7,7 @@ import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -16,9 +17,9 @@ import java.nio.file.Path
 
 /**
  * Shared orchestration around [AtlasGeneratorService]: run generation as a background task, refresh
- * the written files in the VFS, publish [AtlasEvents] and report the outcome. Three callers — the
- * Tools-menu action, the Atlas Hub's Generate button and the explorer editor-toolbar's Regenerate —
- * so the flow lives once here instead of in each action.
+ * the written files in the VFS, publish [AtlasEvents] and report the outcome. Four callers — the
+ * Tools-menu action, the Atlas Hub's Generate button, the explorer editor-toolbar's Regenerate and an
+ * accept in Atlas Findings — so the flow lives once here instead of in each action.
  */
 object AtlasGenerationRunner {
 
@@ -35,7 +36,23 @@ object AtlasGenerationRunner {
     ) {
         // The folder this page was made from, not whichever sub-project is active now.
         val projectDir = AtlasExplorerFiles.rootOf(project, outputHtml) ?: projectDir(project) ?: return
-        generateExplorers(project, projectDir, listOf(outputHtml), quiet, onSuccess)
+        generateExplorers(project, projectDir, listOf(outputHtml), quiet, onSuccess = onSuccess)
+    }
+
+    /**
+     * The explorer [pages] — one folder of them, made from [projectDir] — regenerated from one analysis, and
+     * every open tab showing one of them reloaded where its reader is. What an accept in Atlas Findings runs:
+     * the pages beside the `waivers.json` it wrote still counted the finding as open. [onFinished] runs on
+     * the EDT once it is over, succeeded, failed or cancelled.
+     */
+    fun regeneratePages(project: Project, projectDir: Path, pages: List<Path>, onFinished: () -> Unit = {}) {
+        if (pages.isEmpty()) return onFinished()
+        generateExplorers(project, projectDir, pages, quiet = true, onFinished = onFinished) {
+            val shown = pages.map { it.toAbsolutePath().normalize() }.toSet()
+            FileEditorManager.getInstance(project).allEditors.filterIsInstance<AtlasFileEditor>()
+                .filter { runCatching { it.file.toNioPath().toAbsolutePath().normalize() in shown }.getOrDefault(false) }
+                .forEach { it.reloadInPlace() }
+        }
     }
 
     private fun generateExplorers(
@@ -43,9 +60,10 @@ object AtlasGenerationRunner {
         projectDir: Path,
         outputs: List<Path>,
         quiet: Boolean = false,
+        onFinished: (() -> Unit)? = null,
         onSuccess: ((explorerVf: VirtualFile?) -> Unit)? = null,
     ) {
-        run(project, projectDir, "Generating Flowable Atlas explorer", quiet, onSuccess) { indicator ->
+        run(project, projectDir, "Generating Flowable Atlas explorer", quiet, onSuccess, onFinished) { indicator ->
             AtlasGeneratorService.getInstance(project).generateExplorers(projectDir, outputs, indicator)
         }
     }
@@ -138,6 +156,7 @@ object AtlasGenerationRunner {
         title: String,
         quiet: Boolean,
         onSuccess: ((VirtualFile?) -> Unit)?,
+        finished: (() -> Unit)? = null,
         generate: (ProgressIndicator) -> AtlasGeneratorService.Outcome,
     ) {
         // Generation reads the files on disk: an edit still in an editor would be left out.
@@ -173,6 +192,12 @@ object AtlasGenerationRunner {
                             AtlasExplorerNotifier.notifyFailure(project, outcome.message, outcome.log)
                     }
                 }
+            }
+
+            // However the run ended — a cancel or a crash never reaches the outcome above. Queued, so it comes
+            // after that outcome, which was queued first: the Findings window adopts before it stops "analyzing".
+            override fun onFinished() {
+                finished?.let { ApplicationManager.getApplication().invokeLater { it() } }
             }
         }.queue()
     }

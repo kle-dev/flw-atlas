@@ -1,5 +1,6 @@
 package com.flowable.atlas.findings
 
+import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.findings.FindingsTree.CheckItem
 import com.flowable.atlas.findings.FindingsTree.FindingItem
 import com.flowable.atlas.findings.FindingsTree.Group
@@ -8,6 +9,8 @@ import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import javax.swing.tree.DefaultMutableTreeNode
 
 /**
@@ -67,6 +70,76 @@ class AtlasFindingsTest : BasePlatformTestCase() {
             val second = service.analyze(dir.toPath(), EmptyProgressIndicator())
             assertTrue(second.findings.filter { it["check"] == "missingRefs" }.all { it["waived"] != null })
         } finally {
+            FileUtil.delete(dir)
+        }
+    }
+
+    /**
+     * Accept writes beside the page the window's analysis came from — a generation's folder, which the
+     * Generate dialog lets anyone choose — and the next analysis reads that file back instead of the one in
+     * the settings' output folder, which brought the accepted finding back as open.
+     */
+    fun testAcceptWritesWhereTheAnalysisCameFromAndReadsItBack() {
+        val dir = FileUtil.createTempDirectory("atlas-findings-out", null)
+        val service = AtlasFindingsService.getInstance(project)
+        val followed = ArrayList<List<Path>>()
+        try {
+            File(dir, "models").mkdirs()
+            File(dir, "models/DEMO-P001.bpmn").writeText(
+                """<definitions><process id="DEMO-P001"><callActivity id="c" calledElement="DEMO-NOPE"/></process></definitions>""")
+            val first = service.analyze(dir.toPath(), EmptyProgressIndicator())
+            val custom = dir.toPath().resolve("DEMO-out")
+            service.seedForTest(AtlasFindingsService.Analysis(dir.toPath(), custom, first.findings))
+            service.afterAcceptForTest = { pages, _ -> followed.add(pages) }
+            service.accept(first.findings.filter { it["check"] == "missingRefs" }, "the callee lives in another app")
+
+            assertTrue(custom.resolve(Waivers.FILE_NAME).toFile().isFile)
+            assertFalse(File(dir, "atlas-output/${Waivers.FILE_NAME}").exists())
+            assertEquals("no page beside it: the window analyses again", listOf(emptyList<Path>()), followed)
+            val second = service.analyze(dir.toPath(), EmptyProgressIndicator())
+            assertEquals(custom, second.outputDir)
+            assertTrue(second.findings.filter { it["check"] == "missingRefs" }.all { it["waived"] != null })
+        } finally {
+            service.afterAcceptForTest = null
+            service.seedForTest(null)
+            FileUtil.delete(dir)
+        }
+    }
+
+    /**
+     * A page beside the waivers an accept wrote embeds the waivers it was made with: it is regenerated, so
+     * its counts follow — and only the pages of that folder, made from this project.
+     */
+    fun testAcceptRegeneratesThePageBesideTheWaivers() {
+        val dir = FileUtil.createTempDirectory("atlas-findings-page", null)
+        val service = AtlasFindingsService.getInstance(project)
+        val followed = ArrayList<List<Path>>()
+        try {
+            val custom = dir.toPath().resolve("DEMO-out")
+            val page = custom.resolve("DEMO.explorer.html")
+            Files.createDirectories(custom)
+            Files.writeString(page, "<html></html>")
+            Files.createDirectories(dir.toPath().resolve("atlas-output"))
+            Files.writeString(dir.toPath().resolve("atlas-output/DEMO-other.explorer.html"), "<html></html>")
+            // a page in the same folder that this IDE generated from another sub-project describes another analysis
+            val sub = Files.createDirectories(dir.toPath().resolve("DEMO-sub"))
+            val subPage = custom.resolve("DEMO-sub.explorer.html")
+            Files.writeString(subPage, "<html></html>")
+            AtlasExplorerFiles.rememberRoot(project, subPage, sub)
+            service.seedForTest(AtlasFindingsService.Analysis(dir.toPath(), custom, listOf(finding("missingRefs", "process:DEMO-P1"))))
+            var runningWhileRegenerating = false
+            service.afterAcceptForTest = { pages, done ->
+                followed.add(pages)
+                runningWhileRegenerating = service.running
+                done()
+            }
+            service.accept(service.last!!.findings, "the callee lives in another app")
+            assertEquals(listOf(listOf(page)), followed)
+            assertTrue("the window says it is analyzing, and offers no second Accept, until the page is made", runningWhileRegenerating)
+            assertFalse("and stops saying so when it is", service.running)
+        } finally {
+            service.afterAcceptForTest = null
+            service.seedForTest(null)
             FileUtil.delete(dir)
         }
     }

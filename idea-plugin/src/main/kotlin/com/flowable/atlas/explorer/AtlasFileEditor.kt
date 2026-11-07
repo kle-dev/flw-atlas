@@ -225,18 +225,21 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     /** Re-run the generator for this page and reload it — the toolbar's Regenerate, and the banner's. */
-    /**
-     * Regenerate the report and show the new page **where the reader was**: the fragment (a Checks block,
-     * a node) travels along, and the reload bypasses the CEF cache — `loadURL` on an unchanged URL could
-     * hand back the page as it was before the file was rewritten. Accepting three findings from the middle
-     * of `#/checks` and pressing Save used to land on the dashboard. (JCEF has no headless test seam; the
-     * Remote-Dev half is covered by [RemoteExplorerPageTest], this half by the sandbox.)
-     */
     internal fun regenerate() {
+        AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) { reloadInPlace() }
+    }
+
+    /**
+     * Show the page as it now is on disk **where the reader is**: the fragment (a Checks block, a node)
+     * travels along, and the reload bypasses the CEF cache — `loadURL` on an unchanged URL could hand back
+     * the page as it was before the file was rewritten. Accepting three findings from the middle of
+     * `#/checks` and pressing Save used to land on the dashboard. After this page's own [regenerate], and
+     * after an accept in Atlas Findings regenerated it. (JCEF has no headless test seam; the Remote-Dev half
+     * is covered by [RemoteExplorerPageTest], this half by the sandbox.)
+     */
+    internal fun reloadInPlace() {
         val hash = browser.cefBrowser.url?.substringAfter('#', "")?.takeIf { it.isNotEmpty() }
-        AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) {
-            if (remote) load(hash) else browser.cefBrowser.reloadIgnoreCache()
-        }
+        if (remote) load(hash) else browser.cefBrowser.reloadIgnoreCache()
     }
 
     /**
