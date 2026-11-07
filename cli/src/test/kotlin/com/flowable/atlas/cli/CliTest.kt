@@ -255,6 +255,31 @@ class CliTest {
         }
     }
 
+    /**
+     * `--junit` writes in every mode, for a red run as for a green one, and is red exactly where the exit code
+     * is; without a gate its split is `defects`.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun theJunitReportAgreesWithTheExitCode() {
+        val out = tempDir()
+        val report = File(out, "reports/atlas.junit.xml")
+        fun failures() = Regex("<testsuites [^>]*failures=\"(\\d+)\"").find(report.readText())!!.groupValues[1].toInt()
+        val golden = (MiniJson.parse(goldenFile("miniproject.graph.json").readText()) as Map<String, Any?>)["findings"] as List<Map<String, Any?>>
+
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "error", "--junit", report.path)))
+        assertEquals(golden.count { it["severity"] == "error" }, failures())
+        report.delete()
+        assertEquals("without a gate the run stays green", 0, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--junit", report.path)))
+        assertEquals("…and the report splits on defects", golden.count { com.flowable.atlas.graph.CheckCatalog.gates(listOf("defects"), it) }, failures())
+
+        val err = stderrOf { run(arrayOf(fixtureDir().path, "--all", "-o", File(out, "all").path, "--junit", report.path)) }
+        assertTrue("listed with the artifacts: $err", err.contains("✓ ${report.path}"))
+        assertEquals(2, run(arrayOf("--claude-template", "--junit", report.path, "-q")))
+        assertEquals("a report that cannot be written is refused before the analysis", 2,
+            run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--junit", out.path)))
+    }
+
     /** `--annotate github` turns the same findings into workflow commands on stdout, which GitHub shows on the PR. */
     @Test
     fun annotationsAreGithubWorkflowCommands() {

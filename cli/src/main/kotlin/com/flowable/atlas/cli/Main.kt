@@ -1,7 +1,7 @@
 package com.flowable.atlas.cli
 
-import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.AtlasBuildInfo
+import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Baseline
 import com.flowable.atlas.graph.CheckCatalog
@@ -14,6 +14,7 @@ import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.Fmt
 import com.flowable.atlas.render.GraphJsonRenderer
+import com.flowable.atlas.render.JUnitRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.PlaywrightRenderer
 import com.flowable.atlas.render.SliceRenderer
@@ -78,6 +79,7 @@ private class Options {
     var waiverAuthor: String? = null
     var annotate: String? = null
     var baseline: String? = null
+    var junit: String? = null
 }
 
 /** The flags that take no value: `--all=foo` or `--stdout=false` is a misuse, not a silent `--stdout`. */
@@ -202,6 +204,11 @@ private fun parse(args: Array<String>, o: Options): Int? {
                         if (v.isBlank()) { errln("error: argument --baseline: expected a graph.json, a project directory or an archive"); return EXIT_MISUSE }
                         o.baseline = v
                     }
+                    "--junit" -> {
+                        val v = value(name, inline) ?: return EXIT_MISUSE
+                        if (v.isBlank()) { errln("error: argument --junit: expected a file"); return EXIT_MISUSE }
+                        o.junit = v
+                    }
                     "--verbose" -> o.verbose++
                     "--quiet" -> o.quiet = true
                     "--help" -> return help()
@@ -257,8 +264,8 @@ private fun parse(args: Array<String>, o: Options): Int? {
             errln("error: argument --fail-on: expected at least one value — error, any, defects, advice or a check id")
             return EXIT_MISUSE
         }
-        val knownChecks = com.flowable.atlas.graph.CheckCatalog.ORDER
-        terms.firstOrNull { it !in com.flowable.atlas.graph.CheckCatalog.FAIL_ON_TERMS && it !in knownChecks }?.let { bad ->
+        val knownChecks = CheckCatalog.ORDER
+        terms.firstOrNull { it !in CheckCatalog.FAIL_ON_TERMS && it !in knownChecks }?.let { bad ->
             errln("error: argument --fail-on: unknown value '$bad' — expected error, any, defects, advice or one of ${knownChecks.joinToString(", ")}")
             return EXIT_MISUSE
         }
@@ -277,9 +284,10 @@ private fun parse(args: Array<String>, o: Options): Int? {
             return EXIT_MISUSE
         }
     }
-    // The primer is no project's: there is nothing to compare or annotate.
+    // The primer is no project's: there is nothing to compare, annotate or report.
     if (o.claudeTemplate) {
-        listOfNotNull("--baseline".takeIf { o.baseline != null }, "--annotate".takeIf { o.annotate != null }).firstOrNull()?.let {
+        listOfNotNull("--baseline".takeIf { o.baseline != null }, "--annotate".takeIf { o.annotate != null },
+            "--junit".takeIf { o.junit != null }).firstOrNull()?.let {
             errln("error: argument $it: not allowed with --claude-template")
             return EXIT_MISUSE
         }
@@ -341,6 +349,8 @@ private fun execute(o: Options): Int {
     // used to do all of that work, then die on its first write with a stack trace.
     allDir?.let { d -> dirTargetProblem(d)?.let { errln("error: $it"); return EXIT_MISUSE } }
     target?.let { t -> fileTargetProblem(t)?.let { errln("error: $it"); return EXIT_MISUSE } }
+    val junitFile = o.junit?.let { File(it) }
+    junitFile?.let { j -> fileTargetProblem(j)?.let { errln("error: argument --junit: $it"); return EXIT_MISUSE } }
     // `--claude` alone writes the project's CLAUDE.md: a drop-in. A CLAUDE.md the team wrote is theirs, and
     // replacing it silently is the one thing a drop-in must never do; only Atlas's own file is regenerated.
     if (o.claude && o.output == null && target != null && target.isFile &&
@@ -464,8 +474,12 @@ private fun execute(o: Options): Int {
     // What the run names on stderr (and annotates): what fails it — or, with a baseline and no gate, what is new.
     val named = if (fresh != null && o.failOnTerms.isEmpty()) findings.filter { it["waived"] == null && it in fresh } else failing
     // Where every finding can be read when the log stops listing them: the overview elides per check too.
-    val everyFinding = if (allDir != null) "all of them are under `findings` in ${File(allDir, "$name.graph.json").path}"
-        else "--json writes all of them, under `findings`"
+    val everyFinding = when {
+        junitFile != null -> "all of them are in ${junitFile.path}"
+        allDir != null -> "all of them are under `findings` in ${File(allDir, "$name.graph.json").path}"
+        o.json && o.slice == null && target != null -> "all of them are under `findings` in ${target.path}"
+        else -> "--json writes all of them, under `findings`"
+    }
     fun exitAfterOutput(): Int {
         val stale = staleWaivers(result)
         if (!o.quiet) {
@@ -517,6 +531,13 @@ private fun execute(o: Options): Int {
         }
         return if (staleFatal || failing.isNotEmpty()) EXIT_GATE else EXIT_OK
     }
+    // --junit: in every mode, after the artifacts it reports on, for a green run as for a red one. Its
+    // red/green split is the gate's, decided by the same predicate; without --fail-on it is `defects`, the
+    // split every surface leads with — a report that cannot say what is wrong is not one a CI view can show.
+    fun writeJunit(): File? = junitFile?.also {
+        writeFile(it, JUnitRenderer.render(result, o.failOnTerms.ifEmpty { listOf("defects") },
+            baselined = { f -> fresh != null && f !in fresh }, staleGate = o.failOnStaleWaivers))
+    }
 
     // ---- --all: write all six artifacts (the Playwright guide in two files) into the output folder ----
     if (allDir != null) {
@@ -548,7 +569,7 @@ private fun execute(o: Options): Int {
         } else if (erdPage.isFile) {
             erdPage.delete()
         }
-        val written = artifacts.map { (fn, content) -> File(outdir, fn).also { writeFile(it, content) } }
+        val written = artifacts.map { (fn, content) -> File(outdir, fn).also { writeFile(it, content) } } + listOfNotNull(writeJunit())
         // Diagrams: render each process/case/decision's DI layout to an SVG in `<name>.diagrams/`.
         // Additive post-pass over the finished result (never touches the graph); a project with no
         // BPMN/CMMN/DMN layout produces no files here — and loses the drawings of an earlier run.
@@ -591,7 +612,11 @@ private fun execute(o: Options): Int {
             System.out.flush()
         } else {
             writeFile(target, text + "\n")
-            if (!o.quiet) errln("Flowable Atlas $EM_DASH slice $CHECK ${target.path}")
+        }
+        val report = writeJunit()
+        if (!o.quiet) {
+            report?.let { errln("  $CHECK ${it.path}") }
+            if (target != null) errln("Flowable Atlas $EM_DASH slice $CHECK ${target.path}")
         }
         return exitAfterOutput()
     }
@@ -614,10 +639,15 @@ private fun execute(o: Options): Int {
         // sys.stdout.write(out + "\n")
         System.out.write((out + "\n").toByteArray(Charsets.UTF_8))
         System.out.flush()
+        writeJunit()?.let { if (!o.quiet) errln("  $CHECK ${it.path}") }
         return exitAfterOutput()
     }
     writeFile(target, out)
-    if (!o.quiet) errln("wrote ${target.path} $EM_DASH $status")
+    val report = writeJunit()
+    if (!o.quiet) {
+        report?.let { errln("  $CHECK ${it.path}") }
+        errln("wrote ${target.path} $EM_DASH $status")
+    }
     if (o.open && (o.html || o.erd)) openOrSay(target, o.quiet)
     return exitAfterOutput()
 }
@@ -707,14 +737,16 @@ options:
   --custom-functions <path>   where to look for frontend customisation sources
   --no-custom-functions       do not discover custom functions
   --fail-on <list>            exit 1 when findings match: error, any, defects, advice, and/or check ids
-                              (${com.flowable.atlas.graph.CheckCatalog.ORDER.joinToString(", ")})
+                              (${CheckCatalog.ORDER.joinToString(", ")})
                               (warning is an accepted spelling of any, kept for compatibility);
                               a failed run lists the first $GATE_LISTED matching findings on stderr
   --baseline <path>           gate only what is new since then: a graph.json Atlas wrote, or the base's
                               sources (a project directory, a model file or a .zip/.bar archive)
   --annotate github           also print the findings the run names as GitHub Actions annotations on
                               stdout (needs --fail-on or --baseline; not with an artifact on stdout)
-  --waivers <path>           the accepted-findings file (default: waivers.json beside the artifacts)
+  --junit <file>              also write the findings as a JUnit XML report for CI test views: one suite
+                              per check, a gated finding a failure, the rest skipped with the reason why
+  --waivers <path>            the accepted-findings file (default: waivers.json beside the artifacts)
   --waiver-author <name>      the `by` of a rule accepted from the explorer page
   --no-waivers                ignore it — report every finding, for an audit
   --fail-on-stale-waivers     exit 1 when a waiver matched nothing or has expired
