@@ -76,6 +76,23 @@ class CheckCatalogTest {
         assertEquals(1, CheckCatalog.countOpen(findings, CheckCatalog.ADVICE))
     }
 
+    /** The `--fail-on` vocabulary, as every surface that reports a red build reads it. */
+    @Test
+    fun gatesReadsTheFailOnVocabulary() {
+        val defectWarning = mapOf<String, Any?>("check" to "missingRefs", "severity" to "warning")
+        val adviceError = mapOf<String, Any?>("check" to "unguardedTasks", "severity" to "error")
+        val waived = mapOf<String, Any?>("check" to "missingRefs", "severity" to "error", "waived" to mapOf("reason" to "x"))
+        assertTrue(CheckCatalog.gates(listOf("defects"), defectWarning))
+        assertTrue(!CheckCatalog.gates(listOf("defects"), adviceError))
+        assertTrue(CheckCatalog.gates(listOf("advice"), adviceError))
+        assertTrue(CheckCatalog.gates(listOf("error"), adviceError))
+        assertTrue(!CheckCatalog.gates(listOf("error"), defectWarning))
+        assertTrue("`warning` has always meant any finding", CheckCatalog.gates(listOf("warning"), defectWarning))
+        assertTrue(CheckCatalog.gates(listOf("any"), adviceError))
+        assertTrue(CheckCatalog.gates(listOf("unusedForms", "missingRefs"), defectWarning))
+        assertTrue("a waived finding never gates", listOf("any", "error", "defects", "missingRefs").none { CheckCatalog.gates(listOf(it), waived) })
+    }
+
     @Test
     fun anUnknownIdKeepsItsName() {
         assertEquals("somethingNew", CheckCatalog.label("somethingNew"))

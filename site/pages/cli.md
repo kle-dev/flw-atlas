@@ -107,7 +107,8 @@ the folder it is in. See [Generated artifacts](../artifacts/) for what each one 
 | `--expr-allowlist <list>` | Comma-separated expression namespaces / functions your project registers itself, so they stop being reported as *suspect*. See [Expressions](../expressions/#the-allowlist). |
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
 | `--no-custom-functions` | Do not discover custom functions at all. |
-| `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any`, `defects`, `advice` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on defects`, `--fail-on missingRefs,invalidExpr`). `defects` matches every finding of a defect-kind check and stays green on advice. Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2), and so is an empty list, so an unset CI variable (`--fail-on "$ATLAS_FAIL_ON"`) cannot switch the gate off. `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. |
+| `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any`, `defects`, `advice` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on defects`, `--fail-on missingRefs,invalidExpr`). `defects` matches every finding of a defect-kind check and stays green on advice. Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2), and so is an empty list, so an unset CI variable (`--fail-on "$ATLAS_FAIL_ON"`) cannot switch the gate off. `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. A failed run lists the matching findings on stderr after its count line, worst first and one per line — severity, check, the file (or, for a finding with no file, its node id), the model and element, the message — the first 50 of them, then where to read all of them. |
+| `--annotate github` | Also print the findings that fail the run as GitHub Actions workflow commands, on stdout, so GitHub shows them as annotations on the run and on the pull request's files: `::error` or `::warning` by severity, with the file relative to the working directory (run the job from the checkout's root) and the line where the file has one of its own — not for a script finding, whose line counts from the start of the script, and not for a model inside an archive, where GitHub can only point at the archive. `github` is the only value. It needs `--fail-on`, and refuses an artifact on stdout (`--stdout`, or a `--slice` without `-o`), which the commands would cut into. |
 | `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts — the same folder the explorer's *Save* writes it to: the `--all` directory; the folder of the file `-o` names; without `-o`, the folder the single artifact is written to (the project directory, or the folder of the archive or model file); and the working directory for `--stdout` and a `--slice` without `-o`, which write no file. A path you name that does not exist is reported on stderr, and nothing is waived; the run goes on. A file that does not parse, a rule naming a check Atlas does not know and a key the file does not use are reported too — see [Accepting a finding](../checks/#accepting-a-finding). |
 | `--waiver-author <name>` | Prefills the `by` of a rule accepted from the generated explorer page. Left out, a rule written from a CLI-generated page carries no author; inside the IDE the plugin supplies the project's git identity. |
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
@@ -127,6 +128,10 @@ writes the six artifacts (keep them as build artifacts) and fails the job on any
 a model that would not parse, an expression with a syntax error, a reference to a model that does not
 exist. Tighten to `--fail-on any` once the project is clean, and record what you decide to live with in
 [`waivers.json`](../checks/#accepting-a-finding) rather than dropping the gate.
+
+A red run names what made it red: after the count line, the job log lists the matching findings, one
+per line, so the reason for the build is in the log and not only in the artifacts. On GitHub Actions,
+add `--annotate github` and the same findings appear as annotations on the pull request.
 
 Short flags cluster: `-vq`, `-qv` and `-oreport.md` all work, and `o` consumes the rest of its token
 or the next one. A flag that takes no value refuses one: `--all=foo` and `--stdout=false` are errors,
@@ -150,7 +155,7 @@ worth knowing because nothing warns you about the last three:
 |---|---|
 | `0` | Success. |
 | `1` | The run succeeded and wrote its artifacts, but a gate failed: a finding matched `--fail-on`, or `--fail-on-stale-waivers` found a stale waiver. Nothing else exits 1. |
-| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
+| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, an `--annotate` value other than `github`, `--annotate` without `--fail-on` or beside an artifact on stdout, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
 | `3` | The run failed once under way — an artifact could not be written (a disk that filled up, a name taken by a folder), or an unexpected error. Artifacts may be missing or partial. The reason is one line on stderr; `-v` adds the stack trace. |
 
 ## The status line
@@ -165,7 +170,7 @@ Flowable Atlas — order-management: 412 models (9 files · 3 archives) · 88 ja
 `--all` lists each file it wrote before it — the diagrams as one line for their folder,
 `✓ …/order-management.diagrams/ (249 SVGs)`, unless `-v` asks for each — and a single-artifact run
 prints it as `wrote <file> — …`. Only the detail you asked for follows it: the parse issues with `-v`,
-a stale or unexplained waiver, and the verdict of `--fail-on`. A `--stdout` run and a `--slice` keep
+a stale or unexplained waiver, and the verdict of `--fail-on` with the findings it names. A `--stdout` run and a `--slice` keep
 stderr for warnings and errors (a slice written with `-o` names its file): the summary carries the same
 scale line.
 

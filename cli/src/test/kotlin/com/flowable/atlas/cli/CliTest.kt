@@ -186,6 +186,45 @@ class CliTest {
         assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "nosuchcheck")))
     }
 
+    /** A red run names what made it red, one finding per line; it used to print only counts per check. */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aFailedGateNamesItsFindings() {
+        val golden = MiniJson.parse(goldenFile("miniproject.graph.json").readText()) as Map<String, Any?>
+        val missing = (golden["findings"] as List<Map<String, Any?>>).filter { it["check"] == "missingRefs" }
+        assertTrue("the fixture has a dangling reference", missing.isNotEmpty())
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(fixtureDir().path, "--summary", "--stdout", "--fail-on", "missingRefs")) }
+        assertEquals(1, code)
+        val rows = err.lines().filter { it.startsWith("  ") && "missingRefs" in it }
+        assertEquals(err, missing.size, rows.size)
+        for (f in missing) assertTrue(err, rows.any { it.contains(f["node"].toString()) && it.contains(f["message"].toString()) })
+        assertFalse("-q keeps stderr for errors", stderrOf {
+            run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "missingRefs"))
+        }.contains("missingRefs"))
+    }
+
+    /** `--annotate github` turns the same findings into workflow commands on stdout, which GitHub shows on the PR. */
+    @Test
+    fun annotationsAreGithubWorkflowCommands() {
+        val out = tempDir()
+        var code = -1
+        val stdout = stdoutOf {
+            code = run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "s.md").path, "-q", "--fail-on", "error", "--annotate", "github"))
+        }
+        assertEquals(1, code)
+        val commands = stdout.lines().filter { it.isNotBlank() }
+        assertTrue(stdout, commands.isNotEmpty() && commands.all { it.startsWith("::error ") })
+        // Relative to the working directory — the checkout — not to the project Atlas was pointed at.
+        val broken = File(".").absoluteFile.normalize().toPath()
+            .relativize(File(fixtureDir(), "broken.form").absoluteFile.normalize().toPath()).toString().replace(File.separatorChar, '/')
+        assertTrue(stdout, commands.any { it.contains("file=$broken,") && it.contains("title=Atlas parseIssues::") })
+        assertEquals("no misuse is silent", 2, run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "s.md").path, "-q", "--fail-on", "error", "--annotate", "gitlab")))
+        assertEquals("nothing to annotate without a gate", 2, run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "s.md").path, "-q", "--annotate", "github")))
+        assertEquals("stdout cannot hold the artifact and the commands", 2,
+            run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "error", "--annotate", "github")))
+    }
+
     /**
      * Run from inside a project as `.`, the files are named after the directory — and so are the siblings
      * they name: a CLAUDE.md pointing at `..playwright.md` points at nothing.

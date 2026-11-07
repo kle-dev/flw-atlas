@@ -72,6 +72,7 @@ private class Options {
     var failOnTerms: List<String> = emptyList()
     var waiversPath: String? = null; var noWaivers = false; var failOnStaleWaivers = false
     var waiverAuthor: String? = null
+    var annotate: String? = null
 }
 
 /** The flags that take no value: `--all=foo` or `--stdout=false` is a misuse, not a silent `--stdout`. */
@@ -183,6 +184,13 @@ private fun parse(args: Array<String>, o: Options): Int? {
                     "--no-waivers" -> o.noWaivers = true
                     "--fail-on-stale-waivers" -> o.failOnStaleWaivers = true
                     "--waiver-author" -> o.waiverAuthor = value(name, inline) ?: return EXIT_MISUSE
+                    "--annotate" -> {
+                        val v = value(name, inline) ?: return EXIT_MISUSE
+                        // One CI system, named rather than sniffed from GITHUB_ACTIONS: a run must not print
+                        // differently on a machine that happens to set a variable.
+                        if (v != ANNOTATE_GITHUB) { errln("error: argument --annotate: unknown value '$v' $EM_DASH expected $ANNOTATE_GITHUB"); return EXIT_MISUSE }
+                        o.annotate = v
+                    }
                     "--verbose" -> o.verbose++
                     "--quiet" -> o.quiet = true
                     "--help" -> return help()
@@ -239,11 +247,23 @@ private fun parse(args: Array<String>, o: Options): Int? {
             return EXIT_MISUSE
         }
         val knownChecks = com.flowable.atlas.graph.CheckCatalog.ORDER
-        terms.firstOrNull { it != "error" && it != "warning" && it != "any" && it != "defects" && it != "advice" && it !in knownChecks }?.let { bad ->
+        terms.firstOrNull { it !in com.flowable.atlas.graph.CheckCatalog.FAIL_ON_TERMS && it !in knownChecks }?.let { bad ->
             errln("error: argument --fail-on: unknown value '$bad' — expected error, any, defects, advice or one of ${knownChecks.joinToString(", ")}")
             return EXIT_MISUSE
         }
         o.failOnTerms = terms
+    }
+    if (o.annotate != null) {
+        // The commands go to stdout, so an artifact printed there would be cut into by them.
+        if (o.stdout || (o.slice != null && o.output == null)) {
+            errln("error: argument --annotate: not allowed with an artifact on stdout $EM_DASH write it to a file with -o")
+            return EXIT_MISUSE
+        }
+        // It annotates the findings that fail the run; without a gate there are none, and the flag would do nothing.
+        if (o.failOnTerms.isEmpty()) {
+            errln("error: argument --annotate: needs --fail-on $EM_DASH it annotates the findings that fail the run")
+            return EXIT_MISUSE
+        }
     }
     return null
 }
@@ -391,20 +411,10 @@ private fun execute(o: Options): Int {
     // wants the report AND the red build — and the exit code becomes 1 after the output.
     @Suppress("UNCHECKED_CAST")
     val findings = (result["findings"] as? List<Map<String, Any?>>).orEmpty()
-    val failing = findings.filter { f ->
-        if (f["waived"] != null) return@filter false
-        val sev = f["severity"] as? String
-        // `warning` has always meant "any finding at all", and pipelines were told to tighten to it —
-        // narrowing it now would make those stop failing on errors. `any` is the honest spelling.
-        // `defects` / `advice` name a class of checks (CheckCatalog.kind): a pipeline that wants to be
-        // red on what is wrong and stay green on what could be better says `--fail-on defects`.
-        val kind = com.flowable.atlas.graph.CheckCatalog.kind(f["check"]?.toString().orEmpty())
-        o.failOnTerms.any { t ->
-            (t == "error" && sev == "error") || t == "warning" || t == "any" || t == f["check"] ||
-                (t == "defects" && kind == com.flowable.atlas.graph.CheckCatalog.DEFECT) ||
-                (t == "advice" && kind == com.flowable.atlas.graph.CheckCatalog.ADVICE)
-        }
-    }
+    val failing = findings.filter { com.flowable.atlas.graph.CheckCatalog.gates(o.failOnTerms, it) }
+    // Where every finding can be read when the log stops listing them: the overview elides per check too.
+    val everyFinding = if (allDir != null) "all of them are under `findings` in ${File(allDir, "$name.graph.json").path}"
+        else "--json writes all of them, under `findings`"
     fun exitAfterOutput(): Int {
         val stale = staleWaivers(result)
         if (!o.quiet) {
@@ -427,6 +437,17 @@ private fun execute(o: Options): Int {
                 val byCheck = failing.groupingBy { it["check"].toString() }.eachCount()
                     .entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value} ${it.key}" }
                 errln("$WARN_SIGN --fail-on ${o.failOnTerms.joinToString(",")}: ${failing.size} finding(s) $EM_DASH $byCheck")
+                // Which ones: a red build that names only counts sends everyone to download the artifacts
+                // to learn what to fix.
+                failingLines(failing, more = everyFinding).forEach(::errln)
+            }
+        }
+        // stdout, where GitHub reads workflow commands — and not silenced by -q, which is about stderr.
+        if (o.annotate == ANNOTATE_GITHUB) {
+            val commands = githubAnnotations(failing, projectDir)
+            if (commands.isNotEmpty()) {
+                System.out.write(commands.joinToString("\n", postfix = "\n").toByteArray(Charsets.UTF_8))
+                System.out.flush()
             }
         }
         return if (staleFatal || failing.isNotEmpty()) EXIT_GATE else EXIT_OK
@@ -622,8 +643,11 @@ options:
   --no-custom-functions       do not discover custom functions
   --fail-on <list>            exit 1 when findings match: error, any, defects, advice, and/or check ids
                               (${com.flowable.atlas.graph.CheckCatalog.ORDER.joinToString(", ")})
-                              (warning is an accepted spelling of any, kept for compatibility)
-  --waivers <path>            the accepted-findings file (default: waivers.json beside the artifacts)
+                              (warning is an accepted spelling of any, kept for compatibility);
+                              a failed run lists the first $GATE_LISTED matching findings on stderr
+  --annotate github           also print them as GitHub Actions annotations on stdout (needs --fail-on;
+                              not with an artifact on stdout)
+  --waivers <path>           the accepted-findings file (default: waivers.json beside the artifacts)
   --waiver-author <name>      the `by` of a rule accepted from the explorer page
   --no-waivers                ignore it — report every finding, for an audit
   --fail-on-stale-waivers     exit 1 when a waiver matched nothing or has expired

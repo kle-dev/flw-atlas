@@ -354,6 +354,29 @@ object CheckCatalog {
     /** The kind of a check — [DEFECT], [ADVICE] — or null for an id the catalog does not know. */
     fun kind(id: String): String? = byId[id]?.kind
 
+    /**
+     * The `--fail-on` words besides check ids. `warning` has always meant "any finding at all", and pipelines
+     * were told to tighten to it — narrowing it now would make those stop failing on errors; `any` is the
+     * honest spelling. `defects` / `advice` name a [Check.kind]: a pipeline that wants to be red on what is
+     * wrong and stay green on what could be better says `--fail-on defects`.
+     */
+    val FAIL_ON_TERMS: List<String> = listOf("error", "any", "defects", "advice", "warning")
+
+    /**
+     * Whether [finding] fails a run gated on [terms] (`--fail-on`, already validated). Here and not in the
+     * CLI because the exit code is not the only thing that says so: everything that reports a red build must
+     * agree with it. A waived finding never gates.
+     */
+    fun gates(terms: List<String>, finding: Map<String, Any?>): Boolean {
+        if (finding["waived"] != null) return false
+        val check = finding["check"]?.toString().orEmpty()
+        val kind = kind(check)
+        return terms.any { t ->
+            (t == "error" && finding["severity"] == "error") || t == "warning" || t == "any" || t == check ||
+                (t == "defects" && kind == DEFECT) || (t == "advice" && kind == ADVICE)
+        }
+    }
+
     /** Open findings of [kind] in a findings list, ignoring waived ones. */
     fun countOpen(findings: List<Map<String, Any?>>, kind: String): Int =
         findings.count { it["waived"] == null && kind(it["check"]?.toString().orEmpty()) == kind }
