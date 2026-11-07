@@ -209,7 +209,7 @@ class SiteDocsCoverageTest {
     fun everyStatedCheckCountIsTheCatalogs() {
         val alternatives = (numberWords.keys - "one").sortedByDescending { it.length }.joinToString("|")
         val counts = Regex("\\b($alternatives|\\d+)\\s+\\[?(?:health\\s+)?checks\\b", RegexOption.IGNORE_CASE)
-        // README's documentation table states it as "All twenty-five, and what each one detects".
+        // README's documentation table states it with no "checks" after it: "All <count>, and what each one detects".
         val readmeRow = Regex("^\\|\\s*\\[Health checks]\\([^)]*\\)\\s*\\|\\s*All\\s+($alternatives|\\d+)\\b",
             setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
         val expected = CheckCatalog.CHECKS.size

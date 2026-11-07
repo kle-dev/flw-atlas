@@ -43,6 +43,9 @@ class ServiceOperationScriptTest {
         assertEquals(f.toString(), 1, f.size)
         assertEquals("service:DEMO-script-service", f[0]["node"])
         assertEquals("search", f[0]["element"])
+        // the script is a JSON string, so the finding opens on the operation, its line within the script beside it
+        assertEquals(2, f[0]["line"])
+        assertTrue(f.toString(), f[0]["scriptLine"] != null)
         assertEquals(1, ((result["stats"] as Map<*, *>)["scriptIssues"] as Number).toInt())
         val op = maps(maps(result["services"]).single()["operations"]).single()
         assertEquals("groovy", op["scriptLanguage"])

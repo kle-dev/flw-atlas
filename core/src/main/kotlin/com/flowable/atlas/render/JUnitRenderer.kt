@@ -94,9 +94,9 @@ object JUnitRenderer {
             val message = f["message"]?.toString().orEmpty()
             val waived = f["waived"] as? Map<*, *>
             val file = f["file"]?.toString()
-            // A script finding's line counts from the script, and an archive entry's from a file the viewer
-            // cannot open: a `line` would point into the wrong place.
-            val line = f["line"]?.takeIf { f["check"] != "scriptIssues" && file != null && '!' !in file }?.let(::number)
+            // An archive entry's line is in a file the viewer cannot open, so it would point into the wrong
+            // place; a script problem's `scriptLine` counts from the script and is never the case's line.
+            val line = f["line"]?.takeIf { file != null && '!' !in file }?.let(::number)
             when {
                 waived != null -> Case(name, file, line, skipped = "waived: " + waivedReason(waived))
                 !CheckCatalog.gates(gate, f) -> Case(name, file, line, skipped = "not gated by ${gate.joinToString(",")}: $message")
@@ -126,10 +126,11 @@ object JUnitRenderer {
         f["label"]?.let { lines += it.toString() }
         f["file"]?.let { file ->
             val line = f["line"]?.let(::number)
+            val scriptLine = f["scriptLine"]?.let(::number)
             lines += "file: $file" + when {
-                line == null -> ""
-                f["check"] == "scriptIssues" -> " (script line $line)"
-                else -> ":$line"
+                line != null -> ":$line"
+                scriptLine != null -> " (script line $scriptLine)"
+                else -> ""
             }
         }
         f["element"]?.let { lines += "element: $it" }

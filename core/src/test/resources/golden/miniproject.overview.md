@@ -444,28 +444,28 @@ _component (1):_
 
 **Also in the graph** (queryable in `miniproject.graph.json`, no section here): 2 serviceOperation · 1 masterData · 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 string · 1 method · 1 bot.
 
-## 14. Findings — 10 defects · 9 advice
+## 14. Findings — 12 defects · 9 advice
 
-Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · buttons that overwrite the payload: 1
+Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · choices with no way out: 2 · buttons that overwrite the payload: 1
 Advice — calls with no error path: 2 · async without retry: 1 · unused service operations: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 
 **unparseable files** (1)
 - ⚠ parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37) — in: `broken.form`
 
 **invalid expressions** (2)
-- · Unknown function 'vars:bogus' — in: `${vars:bogus(}`
+- · Unknown function 'vars:bogus' — in: `Order Process` · at: `${vars:bogus(}` · file: `processes/order.bpmn:23`
     `bogus`
-- ⚠ Unclosed '(' — in: `${vars:bogus(}`
+- ⚠ Unclosed '(' — in: `Order Process` · at: `${vars:bogus(}` · file: `processes/order.bpmn:23`
     `(`
 
 **script syntax** (2)
-- ⚠ '(' is never closed — in: `Order Process` · at: `badStamp` · file: `processes/order.bpmn:1`
+- ⚠ '(' is never closed — in: `Order Process` · at: `badStamp` · file: `processes/order.bpmn:70`
     `execution.setVariable('shippingStamp', "x-" + orderId`
-- · 'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'? — in: `Order Process` · at: `badApi` · file: `processes/order.bpmn:1`
+- · 'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'? — in: `Order Process` · at: `badApi` · file: `processes/order.bpmn:74`
     `execution.setTransientVariabel('meta', orderId)`
 
 **missing models** (1)
-- ⚠ referenced model does not exist in this project — in: `courierProcess`
+- ⚠ `Fulfilment Process` references process `courierProcess`, which does not exist in this project — in: `courierProcess` · file: `processes/fulfilment.bpmn:38`
 
 **crossed column mappings** (1)
 - ⚠ `deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped — in: `Customer Service` · file: `services/customer.service`
@@ -476,18 +476,22 @@ Advice — calls with no error path: 2 · async without retry: 1 · unused servi
 **schema gaps** (1)
 - · column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service — in: `Customer Service` · file: `services/customer.service`
 
+**choices with no way out** (2)
+- · `Approve order` leaves only through 1 conditional flow and has no default flow — when it is false the engine throws "no outgoing sequence flow" — in: `Order Process` · at: `approveTask` · file: `processes/order.bpmn:15`
+- · `Calculate total` leaves only through 1 conditional flow and has no default flow — when it is false the engine throws "no outgoing sequence flow" — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn:9`
+
 **buttons that overwrite the payload** (1)
-- · Expression button `resetTotal` stores its result in `{{}}`, which names no variable — pressing it replaces the whole payload — in: `Order Form` · at: `resetTotal` · file: `forms/order-form.form`
+- · Expression button `resetTotal` stores its result in `{{}}`, which names no variable — pressing it replaces the whole payload — in: `Order Form` · at: `resetTotal` · file: `forms/order-form.form:133`
     `{{}}`
 
 *Advice — nothing below is broken; each is a pattern worth a look.*
 
 **calls with no error path** (2)
-- · `Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn`
-- · `Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn`
+- · `Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn:9`
+- · `Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn:25`
 
 **async without retry** (1)
-- · `Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies — in: `Fulfilment Process` · at: `packTask` · file: `processes/fulfilment.bpmn`
+- · `Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies — in: `Fulfilment Process` · at: `packTask` · file: `processes/fulfilment.bpmn:24`
 
 **unused service operations** (1)
 - · no model or code calls this operation — in: `score`

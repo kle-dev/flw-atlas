@@ -114,8 +114,9 @@ It is designed to make that easy:
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
   check plus `open` and `waived`. A finding's `line` is a line of its `file`: the element's
   declaration, the line that names a missing model, or the line of the script a script problem sits on.
-  A script problem whose file line cannot be found — an action's script lives in a JSON string — carries
-  `scriptLine`, its line within the script, instead. An expression finding carries `models`, the models
+  A script problem whose file line cannot be found — the script of an action or of a service operation
+  is a JSON string — carries `scriptLine`, its line within the script; a service operation's also has the
+  `line` of the operation. An expression finding carries `models`, the models
   that hold the expression, and the `file` of the one model when there is one. **`waivers`** — present
   when the project carries a `waivers.json` — its rules with how many findings each matched, its notes,
   and what is wrong with the file. See [Health checks](../checks/) for the two kinds of check, `defect` and `advice`.

@@ -20,7 +20,7 @@ _Compared with `../miniproject`: models 1 added, 0 removed, 2 changed · referen
 ## Findings
 
 **New (1)**
-- ⚠ `missingRefs` referenced model does not exist in this project — in: `DEMO-nowhere`
+- ⚠ `missingRefs` `Order Process` references process `DEMO-nowhere`, which does not exist in this project — in: `DEMO-nowhere` · file: `processes/order.bpmn`
 
 **Resolved (1)**
 - ⚠ `scriptIssues` '(' is never closed — in: `Order Process` · at: `badStamp` · file: `processes/order.bpmn`

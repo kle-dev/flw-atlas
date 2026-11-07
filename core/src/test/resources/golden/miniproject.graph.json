@@ -362,11 +362,12 @@
   "checks": {
     "asyncWithoutRetry": 1,
     "crossedColumns": 1,
+    "gatewayNoDefault": 2,
     "guessedVars": 1,
     "hardcodedSecrets": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 19,
+    "open": 21,
     "parseIssues": 1,
     "payloadOverwrite": 1,
     "schemaGaps": 1,
@@ -605,6 +606,7 @@
       "element": "packTask",
       "file": "processes/fulfilment.bpmn",
       "label": "Fulfilment Process",
+      "line": 24,
       "message": "`Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies",
       "node": "process:fulfilmentProcess",
       "severity": "warning"
@@ -617,6 +619,26 @@
       "node": "service:customerService",
       "severity": "error",
       "subject": "deliveryCity"
+    },
+    {
+      "check": "gatewayNoDefault",
+      "element": "approveTask",
+      "file": "processes/order.bpmn",
+      "label": "Order Process",
+      "line": 15,
+      "message": "`Approve order` leaves only through 1 conditional flow and has no default flow — when it is false the engine throws \"no outgoing sequence flow\"",
+      "node": "process:orderProcess",
+      "severity": "warning"
+    },
+    {
+      "check": "gatewayNoDefault",
+      "element": "calcTask",
+      "file": "processes/order.bpmn",
+      "label": "Order Process",
+      "line": 9,
+      "message": "`Calculate total` leaves only through 1 conditional flow and has no default flow — when it is false the engine throws \"no outgoing sequence flow\"",
+      "node": "process:orderProcess",
+      "severity": "warning"
     },
     {
       "check": "guessedVars",
@@ -636,8 +658,13 @@
     },
     {
       "check": "invalidExpr",
+      "file": "processes/order.bpmn",
       "label": "${vars:bogus(}",
+      "line": 23,
       "message": "Unclosed '('",
+      "models": [
+        "process:orderProcess"
+      ],
       "node": "expression:${vars:bogus(}",
       "severity": "error",
       "snippet": "(",
@@ -645,8 +672,13 @@
     },
     {
       "check": "invalidExpr",
+      "file": "processes/order.bpmn",
       "label": "${vars:bogus(}",
+      "line": 23,
       "message": "Unknown function 'vars:bogus'",
+      "models": [
+        "process:orderProcess"
+      ],
       "node": "expression:${vars:bogus(}",
       "severity": "warning",
       "snippet": "bogus",
@@ -654,8 +686,10 @@
     },
     {
       "check": "missingRefs",
+      "file": "processes/fulfilment.bpmn",
       "label": "courierProcess",
-      "message": "referenced model does not exist in this project",
+      "line": 38,
+      "message": "`Fulfilment Process` references process `courierProcess`, which does not exist in this project",
       "node": "external:courierProcess",
       "severity": "error"
     },
@@ -672,6 +706,7 @@
       "element": "resetTotal",
       "file": "forms/order-form.form",
       "label": "Order Form",
+      "line": 133,
       "message": "Expression button `resetTotal` stores its result in `{{}}`, which names no variable — pressing it replaces the whole payload",
       "node": "form:orderForm",
       "severity": "warning",
@@ -692,7 +727,7 @@
       "element": "badApi",
       "file": "processes/order.bpmn",
       "label": "Order Process",
-      "line": 1,
+      "line": 74,
       "message": "'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'?",
       "node": "process:orderProcess",
       "severity": "warning",
@@ -703,7 +738,7 @@
       "element": "badStamp",
       "file": "processes/order.bpmn",
       "label": "Order Process",
-      "line": 1,
+      "line": 70,
       "message": "'(' is never closed",
       "node": "process:orderProcess",
       "severity": "error",
@@ -714,6 +749,7 @@
       "element": "calcTask",
       "file": "processes/order.bpmn",
       "label": "Order Process",
+      "line": 9,
       "message": "`Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException",
       "node": "process:orderProcess",
       "severity": "warning"
@@ -723,6 +759,7 @@
       "element": "notifyTask",
       "file": "processes/order.bpmn",
       "label": "Order Process",
+      "line": 25,
       "message": "`Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task maps the exception with flowable:mapException",
       "node": "process:orderProcess",
       "severity": "warning"
@@ -8266,7 +8303,7 @@
   "stats": {
     "advice": 9,
     "archives": 1,
-    "defects": 10,
+    "defects": 12,
     "dynamicEdges": 0,
     "edges": 67,
     "endpoints": 2,

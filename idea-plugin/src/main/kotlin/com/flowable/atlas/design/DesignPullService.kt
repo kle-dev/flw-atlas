@@ -11,13 +11,20 @@ import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.explorer.AtlasArtifactFiles
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasGenerationRunner
+import com.flowable.atlas.findings.AtlasFindingsService
+import com.flowable.atlas.findings.AtlasFindingsToolWindowFactory
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.project.AtlasScopedKeys
 import com.flowable.atlas.settings.EnvironmentsConfigurable
 import com.flowable.atlas.settings.connections.EnvironmentsTreePanel
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.analysis.AnalysisScope
+import com.intellij.codeInspection.InspectionManager
+import com.intellij.codeInspection.actions.RunInspectionIntention
+import com.intellij.codeInspection.ex.InspectionManagerEx
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationType
@@ -35,6 +42,10 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.profile.codeInspection.InspectionProjectProfileManager
+import com.intellij.psi.PsiDirectory
+import com.intellij.psi.PsiManager
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -49,6 +60,21 @@ import java.nio.file.StandardCopyOption
  */
 internal fun removedModelKeys(previous: Set<String>?, current: Set<String>): List<String> =
     previous?.minus(current)?.sorted() ?: emptyList()
+
+/** What the post-pull balloon offers. */
+internal enum class PullAction { FIND_BROKEN, REGENERATE, SIGN_OUT_RETRY }
+
+/**
+ * The post-pull balloon's actions, in order. Removed keys come first: they are what turns the balloon into
+ * a warning, and "code or models referencing them may now be broken" with no way to find them left the
+ * reader opening files at random. Pure, like [removedModelKeys], so the choice is tested without a pull.
+ */
+internal fun pullBalloonActions(removedKeys: List<String>, hasExplorer: Boolean, unauthorized: Boolean): List<PullAction> =
+    buildList {
+        if (removedKeys.isNotEmpty()) add(PullAction.FIND_BROKEN)
+        if (hasExplorer) add(PullAction.REGENERATE)
+        if (unauthorized) add(PullAction.SIGN_OUT_RETRY)
+    }
 
 /**
  * What one pull changed in one app's export, entry by entry: the model files that are new, gone, or
@@ -412,16 +438,42 @@ class DesignPullService(private val project: Project) {
         // artifacts (a CLAUDE.md an agent reads goes stale on a pull just the same).
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         val outputDir = settings.atlasOutputDir
-        if (AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty() ||
+        val hasArtifacts = AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty() ||
             AtlasArtifactFiles.present(projectDir, outputDir, settings.atlasArtifacts).isNotEmpty()
-        ) {
-            notification.addAction(NotificationAction.createSimple(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) {
+        for (action in pullBalloonActions(removedKeys, hasArtifacts, failed.any(::isUnauthorized))) when (action) {
+            PullAction.FIND_BROKEN -> notification.addAction(NotificationAction.createSimple("Find broken references") {
+                findBrokenReferences()
+            })
+            PullAction.REGENERATE -> notification.addAction(NotificationAction.createSimple(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) {
                 AtlasGenerationRunner.regenerate(project)
             })
+            PullAction.SIGN_OUT_RETRY -> addSignOutAndRetry(notification)
         }
-        if (failed.any(::isUnauthorized)) addSignOutAndRetry(notification)
         notification.notify(project)
         recordPullFinished(succeeded = true)
+    }
+
+    /**
+     * What still names a key the pull removed. The Java half: the *Unknown Flowable model key* inspection
+     * over the Flowable project, which otherwise only flags the files someone happens to open — run without
+     * the scope dialog *Run Inspection by Name* raises, into the Inspection Results window (a key behind a
+     * generated constant shows up as a compile error on its own). The model half, archives included: Atlas
+     * Findings analyses again, and its *Missing model refs* lists every model still naming a key nothing
+     * defines. EDT, from the balloon.
+     */
+    private fun findBrokenReferences() {
+        if (project.isDisposed) return
+        // null when the profile does not know it — a plugin that was not loaded; disabled is still run
+        val wrapper = InspectionProjectProfileManager.getInstance(project).currentProfile.getInspectionTool(BROKEN_KEY_INSPECTION, project)
+        if (wrapper != null) {
+            val dir = ReadAction.computeBlocking<PsiDirectory?, RuntimeException> {
+                ProjectModelScope.scopedRoot(project)?.let { PsiManager.getInstance(project).findDirectory(it) }
+            }
+            val scope = dir?.let(::AnalysisScope) ?: AnalysisScope(project)
+            RunInspectionIntention.rerunInspection(wrapper, InspectionManager.getInstance(project) as InspectionManagerEx, scope, null)
+        }
+        AtlasFindingsService.getInstance(project).refresh()
+        ToolWindowManager.getInstance(project).getToolWindow(AtlasFindingsToolWindowFactory.ID)?.activate(null)
     }
 
     private fun notifyFailure(message: String) {
@@ -447,6 +499,9 @@ class DesignPullService(private val project: Project) {
 
         /** Epoch millis of the last successful pull, in [PropertiesComponent] (workspace-local). */
         const val LAST_PULL_PROPERTY = "flowable.atlas.lastDesignPull"
+
+        /** The short name `FlowableBrokenKeyInspection` is registered under in plugin.xml. */
+        internal const val BROKEN_KEY_INSPECTION = "FlowableBrokenKey"
 
         /**
          * Scoped per sub-project **and per Design connection**: "last pull" is a statement about one

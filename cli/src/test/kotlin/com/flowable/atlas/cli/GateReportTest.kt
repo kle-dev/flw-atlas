@@ -35,16 +35,22 @@ class GateReportTest {
         assertTrue(lines[0], lines[0].endsWith("forms/DEMO-broken.form — something is wrong"))
     }
 
-    /** A script's line counts from the script, not from the model file: `file:3` would point at the wrong line. */
+    /**
+     * A script line that no file line was found for counts from the script, not from the model file: `file:3`
+     * would point at the wrong line. A script problem's `line` is the file's, like every other check's.
+     */
     @Test
     fun aScriptLineIsTheScriptsNotTheFiles() {
-        val f = finding("scriptIssues", "file" to "processes/DEMO.bpmn", "line" to 3.0, "element" to "DEMO-task")
+        val f = finding("scriptIssues", "file" to "actions/DEMO.action", "scriptLine" to 3.0)
         val row = failingLines(listOf(f), more = "x").single()
-        assertTrue(row, row.contains("processes/DEMO.bpmn (script line 3)  DEMO process @DEMO-task — something is wrong"))
+        assertTrue(row, row.contains("actions/DEMO.action (script line 3)  DEMO process — something is wrong"))
         assertFalse(row, row.contains(":3"))
         val gh = githubAnnotations(listOf(f), File("."), File(".")).single()
-        assertFalse("no line for a script finding: $gh", gh.contains("line="))
-        // Another check's line is the file's own.
+        assertFalse("no line for a line within the script: $gh", gh.contains("line="))
+        // A script problem located in its file, and another check, are at the file's own line.
+        val located = finding("scriptIssues", "file" to "processes/DEMO.bpmn", "line" to 70.0, "element" to "DEMO-task")
+        assertTrue(failingLines(listOf(located), more = "x").single().contains("processes/DEMO.bpmn:70  DEMO process @DEMO-task — something is wrong"))
+        assertTrue(githubAnnotations(listOf(located), File("."), File(".")).single().contains(",line=70,"))
         val leftover = finding("parseIssues", "file" to "forms/DEMO.form", "line" to 7)
         assertTrue(failingLines(listOf(leftover), more = "x").single().contains("forms/DEMO.form:7"))
         assertTrue(githubAnnotations(listOf(leftover), File("."), File(".")).single().contains(",line=7,"))

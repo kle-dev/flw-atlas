@@ -719,7 +719,11 @@ Pull the app export straight from a Design server into the repository, and get t
 
 A modeller renames or deletes a model in Design; a developer pulls; the code that referenced the old key
 still compiles and now points at nothing. Atlas names the keys that vanished since the last pull, and
-offers to regenerate the explorer. The same balloon says what the pull *brought*, per app — how many
+offers **Find broken references**: the *Unknown Flowable model key* inspection runs over the Flowable
+project into the Inspection Results window — the Java still naming a removed key, which the inspection
+otherwise flags only in the files you open — and [Atlas Findings](#atlas-findings) analyses again, its
+*Missing model refs* listing every model that does, inside archives too. It also offers to regenerate the
+explorer. The same balloon says what the pull *brought*, per app — how many
 models changed, were added or removed against the export that was on disk before, and which ones when
 there are few — so "what did I just pull?" is answered where you are standing. The progress bar moves
 per app, and a pull refused with HTTP 401 offers **Sign out & retry**: it clears the stored credential

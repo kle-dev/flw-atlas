@@ -129,4 +129,19 @@ class FindingLinesTest {
         assertEquals(line(caller, "calledElement"), missing["line"])
         assertTrue("the node is the identity, not the file the finding now carries", missing["waived"] != null)
     }
+
+    /** A file Atlas chose not to read — above the size cap, a link out of the project — is not read for a line either. */
+    @Test
+    fun aParseIssueDoesNotReadTheFileItNames() {
+        val read = ArrayList<String>()
+        val skipped = linkedMapOf<String, Any?>("check" to "parseIssues", "file" to "DEMO-huge.bpmn", "message" to "skip: too large")
+        val missing = linkedMapOf<String, Any?>("check" to "missingRefs", "node" to "external:DEMO-x", "file" to "DEMO-caller.bpmn")
+        FindingLines.locate(listOf(skipped, missing), emptyMap(), { it.substringAfter(':') }) { file ->
+            read += file
+            "<definitions>\n  <callActivity id=\"c\" calledElement=\"DEMO-x\"/>\n</definitions>"
+        }
+        assertEquals(listOf("DEMO-caller.bpmn"), read)
+        assertNull(skipped["line"])
+        assertEquals(2, missing["line"])
+    }
 }

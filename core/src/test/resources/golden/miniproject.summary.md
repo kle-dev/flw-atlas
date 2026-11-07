@@ -50,8 +50,8 @@ Agents: orderAssistant
 - External REST URLs called: 3
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:courierProcess
 
-## Health — 10 defects · 9 advice
-Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · buttons that overwrite the payload: 1
+## Health — 12 defects · 9 advice
+Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · choices with no way out: 2 · buttons that overwrite the payload: 1
 Advice — calls with no error path: 2 · async without retry: 1 · unused service operations: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 - ⚠ parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37) — `broken.form`
 - ⚠ Unclosed '(' — `${vars:bogus(}` in `Order Process`

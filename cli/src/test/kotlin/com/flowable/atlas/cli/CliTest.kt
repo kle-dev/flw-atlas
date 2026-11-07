@@ -198,7 +198,10 @@ class CliTest {
         assertEquals(1, code)
         val rows = err.lines().filter { it.startsWith("  ") && "missingRefs" in it }
         assertEquals(err, missing.size, rows.size)
-        for (f in missing) assertTrue(err, rows.any { it.contains(f["node"].toString()) && it.contains(f["message"].toString()) })
+        // each row says where the finding is — its file and line, else its node id — and its message
+        fun where(f: Map<String, Any?>) =
+            f["file"]?.let { file -> f["line"]?.let { "$file:${(it as Number).toInt()}" } ?: file.toString() } ?: f["node"].toString()
+        for (f in missing) assertTrue(err, rows.any { it.contains(where(f)) && it.contains(f["message"].toString()) })
         assertFalse("-q keeps stderr for errors", stderrOf {
             run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "missingRefs"))
         }.contains("missingRefs"))
@@ -224,8 +227,9 @@ class CliTest {
         var code = -1
         val err = stderrOf { code = run(arrayOf(head.path, "--summary", "--stdout", "--baseline", base.path, "--fail-on", "missingRefs")) }
         assertEquals(err, 1, code)
-        assertTrue(err, err.contains("--fail-on missingRefs: 1 new finding(s)") && err.contains("external:DEMO-nowhere"))
-        assertFalse("what the base had is not listed: $err", err.contains("external:courierProcess"))
+        assertTrue(err, err.contains("--fail-on missingRefs: 1 new finding(s)") &&
+            err.contains("processes/demo-extra.bpmn20.xml:5") && err.contains("`DEMO-nowhere`"))
+        assertFalse("what the base had is not listed: $err", err.contains("courierProcess"))
 
         assertEquals("the fixture fails a plain gate on its own errors", 1, run(arrayOf(base.path, "--summary", "--stdout", "-q", "--fail-on", "error")))
         val same = stderrOf { code = run(arrayOf(base.path, "--summary", "--stdout", "--baseline", base.path, "--fail-on", "error")) }
@@ -241,7 +245,7 @@ class CliTest {
         assertEquals(0, run(arrayOf(base.path, "--all", "-o", out.path, "-q", "--baseline", graph, "--fail-on", "any")))
         val info = stderrOf { code = run(arrayOf(head.path, "--summary", "--stdout", "--baseline", graph)) }
         assertEquals("without a gate it only says what is new", 0, code)
-        assertTrue(info, Regex("--baseline: \\d+ new finding\\(s\\)").containsMatchIn(info) && info.contains("external:DEMO-nowhere"))
+        assertTrue(info, Regex("--baseline: \\d+ new finding\\(s\\)").containsMatchIn(info) && info.contains("processes/demo-extra.bpmn20.xml:5"))
 
         File(out, "old.json").writeText("""{"_generated":{"atlas":"0.0.1"},"findings":[]}""")
         val old = stderrOf { run(arrayOf(base.path, "--summary", "--stdout", "--baseline", File(out, "old.json").path, "--fail-on", "missingRefs")) }

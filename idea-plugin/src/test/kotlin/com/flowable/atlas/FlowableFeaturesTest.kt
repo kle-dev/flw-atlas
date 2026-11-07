@@ -115,6 +115,13 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         assertTrue("expected unknown-key warning", infos.any { (it.description ?: "").contains("is not a known") })
     }
 
+    /** A pull's *Find broken references* runs this inspection by the short name plugin.xml registers. */
+    fun testThePullBalloonNamesTheBrokenKeyInspectionAsRegistered() {
+        val ep = com.intellij.codeInspection.LocalInspectionEP.LOCAL_INSPECTION.extensionList
+            .singleOrNull { it.shortName == com.flowable.atlas.design.DesignPullService.BROKEN_KEY_INSPECTION }
+        assertEquals(FlowableBrokenKeyInspection::class.java.name, ep?.implementationClass)
+    }
+
     fun testBrokenKeyInspectionAcceptsKnown() {
         addStubs()
         myFixture.addFileToProject("models/DEMO-C001.cmmn", """<definitions><case id="DEMO-C001" name="C"/></definitions>""")

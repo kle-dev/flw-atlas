@@ -43,13 +43,18 @@ internal object FindingLines {
                 f.remove("scriptLine")
                 continue
             }
-            val t = text(file) ?: continue
-            val off = when {
-                f["element"] != null -> ModelElementDeclaration.offsetOf(t, f["element"].toString())
-                f["check"] == "missingRefs" -> (f["node"] as? String)?.let(keyOf)?.let { referenceOffset(t, it) }
-                f["check"] == "invalidExpr" || f["check"] == "suspectExpr" -> f["label"]?.toString()?.let { expressionOffset(t, it) }
+            // What to look for decides whether the file is read at all. A parse issue names a file Atlas chose
+            // not to read — above the size cap, a link out of the project — and reading it here for a line
+            // there is nothing to find for would undo that choice.
+            val find: ((String) -> Int?)? = when {
+                f["element"] != null -> f["element"].toString().let { el -> { t: String -> ModelElementDeclaration.offsetOf(t, el) } }
+                f["check"] == "missingRefs" -> (f["node"] as? String)?.let(keyOf)?.let { key -> { t: String -> referenceOffset(t, key) } }
+                f["check"] == "invalidExpr" || f["check"] == "suspectExpr" -> f["label"]?.toString()?.let { expr -> { t: String -> expressionOffset(t, expr) } }
                 else -> null
-            } ?: continue
+            }
+            if (find == null) continue
+            val t = text(file) ?: continue
+            val off = find(t) ?: continue
             f["line"] = lineAt(t, off)
         }
     }

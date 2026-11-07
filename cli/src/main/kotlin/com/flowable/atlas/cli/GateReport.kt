@@ -21,14 +21,15 @@ private fun gateOrder(findings: List<Map<String, Any?>>): List<Map<String, Any?>
 )
 
 /**
- * Where a finding is. A script finding's `line` counts from the start of the script, not of the model file,
- * so `file:line` would point at the wrong line of a BPMN file; it is said as the script's line instead. A
- * finding with no file — a missing model, an expression — is where its node id says.
+ * Where a finding is: `file:line`, a line of the file for every check. A script problem whose file line
+ * could not be found — an action's script lives in a JSON string — carries `scriptLine` instead, which
+ * counts from the start of the script, so it is said as the script's line and never as `file:N`. A finding
+ * with no file — a variable, an expression several models hold — is where its node id says.
  */
 private fun where(f: Map<String, Any?>): String {
     val file = f["file"] as? String ?: return f["node"]?.toString() ?: "-"
-    val line = f["line"]?.let(::lineOf) ?: return file
-    return if (f["check"] == "scriptIssues") "$file (script line $line)" else "$file:$line"
+    f["line"]?.let { return "$file:${lineOf(it)}" }
+    return f["scriptLine"]?.let { "$file (script line ${lineOf(it)})" } ?: file
 }
 
 /**
@@ -48,7 +49,7 @@ private fun message(f: Map<String, Any?>): String = f["message"]?.toString().orE
 /**
  * The rows a failed gate prints on stderr, one per finding, the first [cap] of them, then a line saying how
  * many more there are and where [more] they all are:
- * `  error   missingRefs  external:DEMO-x — referenced model does not exist in this project`.
+ * `  error   scriptIssues  processes/DEMO-p.bpmn:12  DEMO p @DEMO-task — '(' is never closed`.
  */
 internal fun failingLines(failing: List<Map<String, Any?>>, more: String, cap: Int = GATE_LISTED): List<String> {
     val sorted = gateOrder(failing)
@@ -69,7 +70,8 @@ internal fun failingLines(failing: List<Map<String, Any?>>, more: String, cap: I
  * The findings as GitHub Actions workflow commands, which GitHub shows as annotations on the run and on the
  * pull request's files. A file is given relative to [cwd] — the checkout, where the job runs — because the
  * project Atlas analysed need not be the repository root. No `line` for a file inside an archive (GitHub can
- * only point at the archive) or for a script finding (its line is the script's, not the file's).
+ * only point at the archive), and a script problem's `scriptLine` is the script's, not the file's, so it
+ * is never given as one.
  */
 internal fun githubAnnotations(
     failing: List<Map<String, Any?>>, projectDir: File, cwd: File = File("."), cap: Int = GATE_LISTED,
@@ -80,7 +82,7 @@ internal fun githubAnnotations(
     if (file != null) {
         props += "file=" + ghProperty(repoPath(File(projectDir, file.substringBefore('!')), cwd))
         val line = f["line"]
-        if (line != null && '!' !in file && f["check"] != "scriptIssues") props += "line=" + ghProperty(lineOf(line))
+        if (line != null && '!' !in file) props += "line=" + ghProperty(lineOf(line))
     }
     props += "title=" + ghProperty("Atlas ${f["check"]}")
     // Beside a file the annotation sits on it; without one it shows on the run, and has to say what it is about.
