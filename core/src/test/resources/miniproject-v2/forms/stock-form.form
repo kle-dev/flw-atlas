@@ -1,0 +1,11 @@
+{
+  "metadata": {"key": "stockForm", "name": "Stock check", "modelType": "form"},
+  "rows": [
+    [
+      {"id": "inStock", "type": "boolean", "label": "All items in stock"}
+    ]
+  ],
+  "outcomes": [
+    {"value": "confirm", "label": "Confirm"}
+  ]
+}

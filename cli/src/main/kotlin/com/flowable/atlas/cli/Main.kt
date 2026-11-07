@@ -6,9 +6,11 @@ import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Baseline
 import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.graph.Findings
+import com.flowable.atlas.graph.GraphDelta
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.parsing.ModelKinds
+import com.flowable.atlas.render.ChangesRenderer
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
@@ -66,7 +68,7 @@ private class Options {
     var path: String? = null
     var output: String? = null
     var all = false; var json = false; var html = false; var erd = false; var summary = false; var claude = false
-    var playwright = false
+    var playwright = false; var changes = false
     var claudeTemplate = false
     var stdout = false; var open = false; var noCustom = false; var quiet = false
     var pretty = false
@@ -84,7 +86,7 @@ private class Options {
 
 /** The flags that take no value: `--all=foo` or `--stdout=false` is a misuse, not a silent `--stdout`. */
 private val BOOLEAN_FLAGS = setOf(
-    "--all", "--json", "--html", "--erd", "--summary", "--claude", "--playwright", "--claude-template", "--pretty",
+    "--all", "--json", "--html", "--erd", "--summary", "--claude", "--playwright", "--changes", "--claude-template", "--pretty",
     "--stdout", "--open", "--no-custom-functions", "--no-waivers", "--fail-on-stale-waivers", "--verbose", "--quiet",
     "--help",
 )
@@ -172,6 +174,7 @@ private fun parse(args: Array<String>, o: Options): Int? {
                     "--summary" -> o.summary = true
                     "--claude" -> o.claude = true
                     "--playwright" -> o.playwright = true
+                    "--changes" -> o.changes = true
                     "--claude-template" -> o.claudeTemplate = true
                     "--pretty" -> o.pretty = true
                     "--slice" -> {
@@ -240,9 +243,19 @@ private fun parse(args: Array<String>, o: Options): Int? {
     }
 
     // Mutually-exclusive format group (argparse errors with exit code 2).
-    if (listOf(o.all, o.json, o.html, o.erd, o.summary, o.claude, o.playwright, o.claudeTemplate).count { it } > 1) {
-        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--playwright/--claude-template: " +
+    if (listOf(o.all, o.json, o.html, o.erd, o.summary, o.claude, o.playwright, o.changes, o.claudeTemplate).count { it } > 1) {
+        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--playwright/--changes/--claude-template: " +
             "not allowed with one another")
+        return EXIT_MISUSE
+    }
+    // A report of what changed since a state the run was not given would be a report about nothing — and a
+    // slice is one node, where the changes are the project's: there is nothing to make of the two together.
+    if (o.changes && o.baseline == null) {
+        errln("error: argument --changes: needs --baseline $EM_DASH the earlier state to compare with")
+        return EXIT_MISUSE
+    }
+    if (o.changes && o.slice != null) {
+        errln("error: argument --slice: not allowed with --changes")
         return EXIT_MISUSE
     }
     // Two requests `--all` cannot honour: it is the mode that writes a folder of files, so it can neither
@@ -395,16 +408,19 @@ private fun execute(o: Options): Int {
     // The baseline first: a graph.json that is not one is a misuse, said before the long part — and read
     // before anything is written, so `--all` can regenerate the very graph.json it is compared against. A
     // source tree is analysed with this run's options, so an allowlist or a function file does not make old
-    // findings new.
+    // findings new. All of it is kept only for a changes report — `--changes`, or `--all`, which writes one
+    // beside the rest: on a large project it is a second copy of everything this run holds.
     val baseline = baselineFile?.let { b ->
         try {
-            Baseline.load(b) { analyse(it, Waivers.EMPTY) }
+            Baseline.load(b, head = root, whole = o.changes || o.all) { analyse(it, Waivers.EMPTY) }
         } catch (e: Baseline.Unreadable) {
             errln("error: argument --baseline: ${e.message}")
             return EXIT_MISUSE
         }
     }
     val result = analyse(root, waivers)
+    val delta = baseline?.result?.let { GraphDelta.of(it, result) }
+    fun changesReport(d: GraphDelta) = ChangesRenderer.render(d, name, against = o.baseline!!, baselineAtlas = baseline?.writtenBy)
 
     val stats = result["stats"] as? Map<*, *> ?: emptyMap<String, Any?>()
     fun stat(key: String): Int = (stats[key] as? Number)?.toInt() ?: 0
@@ -569,6 +585,11 @@ private fun execute(o: Options): Int {
         } else if (erdPage.isFile) {
             erdPage.delete()
         }
+        // What changed since the baseline, when there is one — and for the same reason as the ER page, no
+        // report left from an earlier run's comparison beside a run that made none.
+        val changesFile = File(outdir, "$name.changes.md")
+        if (delta != null) artifacts.add(changesFile.name to changesReport(delta))
+        else if (changesFile.isFile) changesFile.delete()
         val written = artifacts.map { (fn, content) -> File(outdir, fn).also { writeFile(it, content) } } + listOfNotNull(writeJunit())
         // Diagrams: render each process/case/decision's DI layout to an SVG in `<name>.diagrams/`.
         // Additive post-pass over the finished result (never touches the graph); a project with no
@@ -628,6 +649,8 @@ private fun execute(o: Options): Int {
         // Alone, it has no graph.json beside it either (its lookups section says how to make one), and it
         // keeps the project map inline: one artifact, one file.
         o.playwright -> PlaywrightRenderer.render(result, root, PlaywrightRenderer.Layout(graph = false))
+        // parse() refused --changes without --baseline, and the baseline was kept whole for it.
+        o.changes -> changesReport(delta!!)
         o.summary -> SummaryRenderer.render(result, root)
         o.html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = o.waiverAuthor)
         o.erd -> ErdHtmlRenderer.render(result, root)
@@ -656,6 +679,7 @@ private fun execute(o: Options): Int {
 private fun defaultFileName(o: Options): String = when {
     o.claude -> "CLAUDE.md"
     o.playwright -> "APP_OVERVIEW.playwright.md"
+    o.changes -> "APP_OVERVIEW.changes.md"
     o.summary -> "APP_OVERVIEW.summary.md"
     o.html -> "APP_OVERVIEW.html"
     o.erd -> "APP_OVERVIEW.erd.html"
@@ -714,7 +738,8 @@ output (mutually exclusive):
   (none)              the full Markdown report (APP_OVERVIEW.md)
   --all               all six artifacts into a directory (-o, default $DEFAULT_ALL_DIR/<name>) — the Playwright
                       guide as <name>.playwright.md plus its project map <name>.playwright-map.md — plus
-                      <name>.diagrams/ and, when the project has tables, <name>.erd.html
+                      <name>.diagrams/, <name>.erd.html when the project has tables, and <name>.changes.md
+                      with --baseline
   --summary           the compact LLM-first overview
   --html              the interactive explorer
   --erd               the ER diagram designer (the project's tables and their relations)
@@ -723,13 +748,16 @@ output (mutually exclusive):
   --playwright        the agent's guide to driving Flowable Work in a browser, with this project's
                       stages, tasks, required fields and button conditions (also a Claude Code skill);
                       one file, the project map inline
+  --changes           what changed since --baseline (needed): models and their elements added, removed or
+                      changed, references, and findings new and resolved — for a pull request's review
   --claude-template   the project-independent Flowable primer (needs no path)
   Without -o, a single artifact is written into the project directory (an archive's or model file's folder).
 
 options:
   -o, --output <path>         output file — or, with --all, the output directory (missing folders are created)
-  --slice <target>            render one node with its full context (not with --all): a <type>:<key> id, a key,
-                              a model's file path, a Java class name or a label; a miss names the nearest ids
+  --slice <target>            render one node with its full context (not with --all or --changes): a <type>:<key>
+                              id, a key, a model's file path, a Java class name or a label; a miss names the
+                              nearest ids
   --stdout                    write the single artifact to stdout and touch no files (not with --all)
   --open                      open the result in a browser (--all, --html, --erd)
   --pretty                    indent graph.json
@@ -740,8 +768,9 @@ options:
                               (${CheckCatalog.ORDER.joinToString(", ")})
                               (warning is an accepted spelling of any, kept for compatibility);
                               a failed run lists the first $GATE_LISTED matching findings on stderr
-  --baseline <path>           gate only what is new since then: a graph.json Atlas wrote, or the base's
-                              sources (a project directory, a model file or a .zip/.bar archive)
+  --baseline <path>           an earlier state — a graph.json Atlas wrote, or the base's sources (a project
+                              directory, a model file or a .zip/.bar archive): --fail-on gates only what is
+                              new since then, and --changes reports what changed
   --annotate github           also print the findings the run names as GitHub Actions annotations on
                               stdout (needs --fail-on or --baseline; not with an artifact on stdout)
   --junit <file>              also write the findings as a JUnit XML report for CI test views: one suite

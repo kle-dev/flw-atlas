@@ -327,7 +327,7 @@ object Waivers {
      */
     val ARTIFACT_SUFFIXES = listOf(
         ".summary.md", ".overview.md", ".graph.json", ".explorer.html", ".erd.html", ".CLAUDE.md",
-        ".playwright.md", ".playwright-map.md", ".diagrams",
+        ".playwright.md", ".playwright-map.md", ".changes.md", ".diagrams",
     )
 
     /**

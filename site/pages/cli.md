@@ -76,18 +76,19 @@ Build the jar with `./gradlew :cli:shadowJar`, or download `cli-<version>-all.ja
 
 ### Output format
 
-These eight are mutually exclusive — passing two is an error, not a silent preference.
+These nine are mutually exclusive — passing two is an error, not a silent preference.
 
 | Flag | Writes | Default file name |
 |---|---|---|
 | *(none)* | The full Markdown report | `APP_OVERVIEW.md` |
-| `--all` | All six artifacts into a **directory** — the Playwright guide as `<name>.playwright.md` and its project map `<name>.playwright-map.md` — plus `<name>.diagrams/` when any model has a layout and `<name>.erd.html` when the project has a table | `<name>.*` in `-o`, default `./atlas-output/<name>/` |
+| `--all` | All six artifacts into a **directory** — the Playwright guide as `<name>.playwright.md` and its project map `<name>.playwright-map.md` — plus `<name>.diagrams/` when any model has a layout, `<name>.erd.html` when the project has a table and `<name>.changes.md` with `--baseline` | `<name>.*` in `-o`, default `./atlas-output/<name>/` |
 | `--summary` | The compact LLM-first overview | `APP_OVERVIEW.summary.md` |
 | `--html` | The interactive explorer | `APP_OVERVIEW.html` |
 | `--erd` | The [ER diagram designer](../erd/): the project's tables and their relations, on a page of its own | `APP_OVERVIEW.erd.html` |
 | `--json` | The traversable graph | `APP_OVERVIEW.json` |
 | `--claude` | Drop-in agent context. Never replaces a `CLAUDE.md` Atlas did not write: if the project has its own, the run stops (exit 2) and asks for `-o` or `--stdout` | `CLAUDE.md` |
 | `--playwright` | The [agent's guide to driving Flowable Work](../artifacts/#playwrightmd-driving-flowable-work-in-a-browser) in a browser, with this project's stages, tasks, required fields and button conditions; also a Claude Code skill. One file: the project map `--all` writes beside it is inline here, and with no `graph.json` beside it, its lookups say how to make one | `APP_OVERVIEW.playwright.md` |
+| `--changes` | [What changed](../artifacts/#changesmd-what-a-change-changed) since `--baseline`, which it needs (exit 2 without): the models added, removed and changed, with the ids of the elements that came, went or changed in each; the references added and removed; the findings the change brought and the ones it resolved. Short enough for a pull-request comment — see [Review a pull request](#review-a-pull-request) | `APP_OVERVIEW.changes.md` |
 | `--claude-template` | The project-independent Flowable primer. Needs **no** path | stdout |
 
 Only `--all` derives file names from the project (`<name>.summary.md`, `<name>.explorer.html`, …). A
@@ -108,7 +109,7 @@ the folder it is in. See [Generated artifacts](../artifacts/) for what each one 
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
 | `--no-custom-functions` | Do not discover custom functions at all. |
 | `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any`, `defects`, `advice` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on defects`, `--fail-on missingRefs,invalidExpr`). `defects` matches every finding of a defect-kind check and stays green on advice. Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2), and so is an empty list, so an unset CI variable (`--fail-on "$ATLAS_FAIL_ON"`) cannot switch the gate off. `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. A failed run lists the matching findings on stderr after its count line, worst first and one per line — severity, check, the file (or, for a finding with no file, its node id), the model and element, the message — the first 50 of them, then where to read all of them. |
-| `--baseline <path>` | Gate only what is new: `--fail-on` then matches only findings the baseline does not have — see [Gate the change, not the backlog](#gate-the-change-not-the-backlog). The baseline is a `graph.json` Atlas wrote (`--all`'s `<name>.graph.json`, or `--json`'s output), or the base's sources — a project directory, a model file or a `.zip`/`.bar` archive — which are analysed in the same run with the same `--expr-allowlist` and custom functions, and without waivers. A finding is the same finding when its check, model (the file, for a parse issue), element and subject are — the key a waiver uses — so a reworded message does not make it new. Nothing else changes: the artifacts, the counts and the status line still report every finding. The verdict says what it set aside, `✓ --fail-on defects: no new finding (41 in the baseline, not gating)`, and a red run lists only the new ones. Without `--fail-on` it only lists what is new and exits 0. A path that does not exist, or a `.json` that is not a `graph.json`, is a misuse (exit 2); a `graph.json` written by another Atlas version gets a warning, because a check that changed reads as new findings. |
+| `--baseline <path>` | Gate only what is new: `--fail-on` then matches only findings the baseline does not have — see [Gate the change, not the backlog](#gate-the-change-not-the-backlog). It is also what `--changes` compares with, and with it `--all` writes `<name>.changes.md` beside the rest. The baseline is a `graph.json` Atlas wrote (`--all`'s `<name>.graph.json`, or `--json`'s output), or the base's sources — a project directory, a model file or a `.zip`/`.bar` archive — which are analysed in the same run with the same `--expr-allowlist` and custom functions, and without waivers. A finding is the same finding when its check, model (the file, for a parse issue), element and subject are — the key a waiver uses — so a reworded message does not make it new. An archive names the files in it after itself (`base.zip!broken.form`), so when the baseline and the analysed path are both archives under different names, the baseline's file names are read as the analysed archive's. Nothing else changes: the artifacts, the counts and the status line still report every finding. The verdict says what it set aside, `✓ --fail-on defects: no new finding (41 in the baseline, not gating)`, and a red run lists only the new ones. Without `--fail-on` it only lists what is new and exits 0. A path that does not exist, or a `.json` that is not a `graph.json`, is a misuse (exit 2); a `graph.json` written by another Atlas version gets a warning, because a check that changed reads as new findings. |
 | `--annotate github` | Also print the findings that fail the run as GitHub Actions workflow commands, on stdout, so GitHub shows them as annotations on the run and on the pull request's files: `::error` or `::warning` by severity, with the file relative to the working directory (run the job from the checkout's root) and the line where the file has one of its own — not for a script finding, whose line counts from the start of the script, and not for a model inside an archive, where GitHub can only point at the archive. `github` is the only value. It needs `--fail-on` or `--baseline` — it annotates the findings they name — and refuses an artifact on stdout (`--stdout`, or a `--slice` without `-o`), which the commands would cut into. |
 | `--junit <file>` | Also write the findings as a JUnit XML report, the format CI test views read — GitLab's merge-request widget, Jenkins, Azure DevOps, a JUnit test-reporter action on GitHub. One suite per check (`atlas.missingRefs`, …) in the [checks page](../checks/)'s order; one testcase per finding, named by its model, element and subject, never by its message, so a view that compares runs sees the same finding under the same name; a check with nothing to report is one passing testcase, so the view shows it ran. A finding the gate matches is a failure carrying the message, the file, why it matters, what to do and a link to its check; a waived finding is skipped as `waived: <reason>`, one the gate does not match as `not gated by …`, one a `--baseline` already had as `in the baseline`. Without `--fail-on` the report is red on `defects`, though the run still exits 0. With a waiver file, a suite `atlas.waivers` lists the stale rules — failures under `--fail-on-stale-waivers`. Written in every mode, for a green run and a red one; missing folders are created, and a path that cannot be written is refused before the analysis (exit 2). |
 | `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts — the same folder the explorer's *Save* writes it to: the `--all` directory; the folder of the file `-o` names; without `-o`, the folder the single artifact is written to (the project directory, or the folder of the archive or model file); and the working directory for `--stdout` and a `--slice` without `-o`, which write no file. A path you name that does not exist is reported on stderr, and nothing is waived; the run goes on. A file that does not parse, a rule naming a check Atlas does not know and a key the file does not use are reported too — see [Accepting a finding](../checks/#accepting-a-finding). |
@@ -189,6 +190,44 @@ Locally — or for an agent that has just edited a model — the `graph.json` of
 baseline enough: `--baseline atlas-output/<name>/<name>.graph.json --fail-on defects` lists what the
 edit added since then. The generated `CLAUDE.md` tells an agent to do exactly that.
 
+### Review a pull request
+
+A Flowable project keeps its models in app archives, and git shows a commit to a `.zip` as a binary
+change: the pull request's diff says nothing about what it does to a process. `--changes` says it. With
+the same baseline as the gate, it writes [what changed](../artifacts/#changesmd-what-a-change-changed)
+since the target branch — every model added, removed or changed, with the ids of the tasks, flows, fields
+and rules that came, went or changed in it, the references added and removed, and the findings the change
+brought and the ones it fixed:
+
+```yaml
+- name: What changed
+  run: |
+    git worktree add ../atlas-base "${{ github.event.pull_request.base.sha }}"
+    java -jar cli-<version>-all.jar . --changes --stdout -q --baseline ../atlas-base >> "$GITHUB_STEP_SUMMARY"
+```
+
+That puts the report on the run's page; post the same output as a comment to put it on the pull request.
+`--all` with `--baseline` writes it as `<name>.changes.md` beside the other artifacts, so the gate of the
+section above gets it for nothing.
+
+One archive is enough, too. Take the base's copy out of git and compare the two:
+
+```bash
+git show "$BASE:apps/order-app.zip" > /tmp/order-app-base.zip
+java -jar cli-<version>-all.jar apps/order-app.zip --changes --stdout --baseline /tmp/order-app-base.zip
+```
+
+The two archives need not have the same name. A model is the same model when its type and key are, and
+an element when its `id` is: a renamed form field is one field removed and one added. A model is changed
+only by its own content — where it is written (its file, its line numbers) and what the analysis derived
+from it (the variables it uses, the problems in a script) are left out, because those change when another
+file does; what they mean for the project's health is under *Findings*.
+
+A model the project holds twice — a Design export committed beside the app's `-bar.zip`, a loose file
+beside an archive — is one model in Atlas, shown from its first copy. The others are compared by what they
+say, so an export changed beside an unchanged deployment is not missed: its line says *changed in another
+file* and names that file, and comparing that archive on its own, as above, lists what changed in it.
+
 ### Flag precedence
 
 `--slice` and `--pretty` sit outside the mutually-exclusive format group, which has consequences
@@ -196,6 +235,7 @@ worth knowing because nothing warns you about the last three:
 
 - `--all --slice X` is an error (exit 2), like any other conflict between two output requests.
 - `--all --stdout` is an error too (exit 2): `--all` writes a folder of files, which stdout cannot hold.
+- `--changes --slice X` is an error (exit 2): what changed is the project's, not one node's.
 - `--slice X --json` writes the slice and **ignores `--json`**.
 - `--slice X --stdout -o file` prints the slice and writes no file: `--stdout` touches no files.
 - `--claude-template` returns before the path is even checked, and ignores `--stdout` (it prints to
@@ -207,7 +247,7 @@ worth knowing because nothing warns you about the last three:
 |---|---|
 | `0` | Success. |
 | `1` | The run succeeded and wrote its artifacts, but a gate failed: a finding matched `--fail-on`, or `--fail-on-stale-waivers` found a stale waiver. Nothing else exits 1. |
-| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, an `--annotate` value other than `github`, `--annotate` without `--fail-on` or `--baseline` or beside an artifact on stdout, a `--baseline` that is empty, does not exist or is not a `graph.json`, project directory, model file or archive, `--baseline`, `--annotate` or `--junit` with `--claude-template`, an empty `--junit` or one that cannot be written, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
+| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, an `--annotate` value other than `github`, `--annotate` without `--fail-on` or `--baseline` or beside an artifact on stdout, a `--baseline` that is empty, does not exist or is not a `graph.json`, project directory, model file or archive, `--changes` without `--baseline` or with `--slice`, `--baseline`, `--annotate` or `--junit` with `--claude-template`, an empty `--junit` or one that cannot be written, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
 | `3` | The run failed once under way — an artifact could not be written (a disk that filled up, a name taken by a folder), or an unexpected error. Artifacts may be missing or partial. The reason is one line on stderr; `-v` adds the stack trace. |
 
 ## The status line

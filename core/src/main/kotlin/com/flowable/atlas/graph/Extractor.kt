@@ -163,16 +163,28 @@ object Atlas {
         // model twice — loose and inside a `.bar`, a Design export beside the deployed one — is one node.
         val copies = HashMap<Pair<String, String>, Pair<String, Any?>>()
         val copyRefs = HashMap<Pair<String, String>, Pair<String, String>>()   // (type, key|format) → (first file, refs)
+        // A model held in more than one file, file by file, with a fingerprint of what each copy says. The
+        // graph keeps the first copy only, so without this the changes report could not see a change made to
+        // another one alone — a Design export committed again beside an unchanged `-bar.zip` is a common
+        // commit. The first copy is fingerprinted when the second turns up, which is before the analysis adds
+        // anything to it but `otherCopies` — and that the fingerprint leaves out.
+        val copyPrints = LinkedHashMap<Pair<String, String>, LinkedHashMap<String, String>>()
         fun index(mtype: String, obj: Any?, label: String) {
             val key = (obj as? Map<*, *>)?.get("key") as? String ?: return
             val norm = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             copies.putIfAbsent(norm to key, label to obj)
+            val (firstLabel, firstObj) = copies.getValue(norm to key)
             // One winner for every reader: the copy the node, the bucket dedupe and `copies` keep — the first
             // deployed one, since test sources are read last (see the dispatch order below) — is the file the
             // index names. The index used to let every later copy replace the earlier one, so with a `.bar`
             // and a Design export side by side a reference and the overview's model listing named the export
             // while the model's own entry named the deployed archive.
-            modelIndex[norm to key] = copies.getValue(norm to key).first
+            modelIndex[norm to key] = firstLabel
+            // Only from the second copy on: a model in one file — almost all of them — costs nothing.
+            if (firstLabel != label) {
+                copyPrints.getOrPut(norm to key) { linkedMapOf(firstLabel to GraphDelta.fingerprint(firstObj)) }
+                    .putIfAbsent(label, GraphDelta.fingerprint(obj))
+            }
             val known = byKey.getOrPut(key) { ArrayList() }
             // Two models of different types sharing one key is legal in Flowable and common in practice
             // — a case and its start form, a data object and its generated service. Everything a parser
@@ -637,6 +649,10 @@ object Atlas {
         readArchives(mainArchives)
         readLoose(testModels)
         readArchives(testArchives)
+        // Absent when every model is in one file, so the graph.json of most projects does not change.
+        if (copyPrints.isNotEmpty()) {
+            result["modelCopies"] = copyPrints.entries.associateTo(sortedMapOf()) { (k, files) -> "${k.first}:${k.second}" to files.toSortedMap() }
+        }
 
         for (f in discovered.templateParts) {
             if (tooLarge(relOf(f), f.length()) || !retain(relOf(f), f.length())) continue

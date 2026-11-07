@@ -3,7 +3,8 @@
 One run produces six artifacts. Five of them are not five formats of the same thing — they are five
 *sizes*, meant for five different readers, and picking the right one is most of the value. The sixth
 is a different kind: a guide, in two files, for an agent that drives Flowable Work in a browser. A
-project with database tables also gets the ER diagram designer.
+project with database tables also gets the ER diagram designer, and a run given a `--baseline` the
+report of what changed since then.
 
 ```
 atlas-output/order-management/
@@ -16,6 +17,7 @@ atlas-output/order-management/
   order-management.playwright-map.md   …and the project map behind that index: stages, tasks, forms
   order-management.diagrams/       one SVG per model that can be drawn
   order-management.erd.html        the ER diagram designer — when the project has tables
+  order-management.changes.md      what changed since the --baseline — when there is one
 ```
 
 Only `--all` names files after the project — after the directory's real name, so a project analysed
@@ -120,7 +122,10 @@ It is designed to make that easy:
   which keys two model types share (`conflict`) and which models are defined twice by files that reference
   different models (`copy` — a test stub or an older version with a production key; the model's node names
   the other file under *Other copies*, and shows the references of both). The last two are information,
-  not findings. **`markers`** lists every
+  not findings. **`modelCopies`** — present when a model is in more than one file — gives each such
+  model's files, each with a fingerprint of what that copy says: how the
+  [changes report](#changesmd-what-a-change-changed) sees a change made to a copy the graph does not
+  show. **`markers`** lists every
   `TODO`, `FIXME` or `HACK` it found in a model file, with file, line, the model it belongs to and — in a
   JSON model — the `path` of the element holding it; the raw material of two of the checks.
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph
@@ -236,6 +241,36 @@ this run's drawings and no others: a model that is gone loses its drawing on the
 it that is not an SVG is left alone.
 
 Nothing is downloaded and no Design instance is contacted: the geometry is already in your models.
+
+## `<project>.changes.md` — what a change changed
+
+Written by `--all` when it is given a `--baseline`, and on its own by `--changes`: the difference
+between the baseline and the project now, for the review of a change whose models sit in archives git
+shows as binary. A header line counts what follows; then three sections, each only when it has something
+to say:
+
+```markdown
+**Changed (2)**
+- `process:orderProcess` Order Process — added: `checkStock`, `bookCourier`, `f9`, `f10` · changed: `badStamp` (script), `f7` (to)
+- `form:orderForm` Order Form — added: `backofficeNote` · removed: `internalNote`
+```
+
+- **Models** added, removed and changed, by node id. A changed model's line names its elements — whatever
+  in it carries an `id`: a task, a flow, a form field, a decision rule, a plan item, a changeset — that were
+  added or removed, the ones that changed with the properties that did, and the model's own properties
+  that changed. A renamed field is one removed and one added. Where a model is written and what the
+  analysis derived from it — the variables it uses, the problems found in a script — are not compared:
+  they change when another file does. A model the project holds in more than one file — a Design export
+  committed beside the app's `-bar.zip` — is compared in the copy the graph shows, and its other copies
+  by what they say: when only another copy changed, the line says `changed in another file` and names it.
+- **References** added and removed — `process:orderProcess` → `external:DEMO-nowhere` (callActivity) —
+  without app membership, which the app's own line says.
+- **Findings** the change brought and the ones it resolved, worst first, by the identity a waiver uses —
+  the same findings the `--baseline` gate of the same run calls new.
+
+Every list is capped, so a change to hundreds of models still fits in a pull-request comment. A project
+that did not change says so in one line. The [CLI reference](../cli/#review-a-pull-request) has the
+recipe for a pull request.
 
 ## `--slice <type:key>` — one model in context
 

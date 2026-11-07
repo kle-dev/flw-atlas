@@ -20,6 +20,7 @@ That writes six artifacts to `atlas-output/<project>/` beside the launcher — s
 | `<project>.graph.json` | The traversable model↔code graph, for agents to **query** rather than read: every node carries `usedBy`, and a `_schema` key documents the shape and ships `jq` recipes. |
 | `<project>.CLAUDE.md` | Context for AI agents: a Flowable primer, this project's conventions, wiring examples and known issues, and the complete expression/script catalogs. Copy it to your repo root as `CLAUDE.md`, or write the output into the project (`./atlas <project> <project>/atlas-output`, or the IDE's default output folder) and import it from your own `CLAUDE.md` with the `@atlas-output/<project>.CLAUDE.md` line its header prints. |
 | `<project>.playwright.md` + `<project>.playwright-map.md` | The agent's guide to driving **Flowable Work** in a browser (Playwright MCP or a script): how Work's UI behaves, from 3.x to 2026.x, how to read a case's state over REST, and an index of this project's cases and processes with their start links. The project map beside it holds the details — each case's stage bar in Work's order, what starts each stage, the tasks, required fields, outcomes and button conditions. Doubles as a Claude Code skill; `--playwright` writes it alone, as one file. |
+| `<project>.changes.md` | With `--baseline <base checkout or archive>`: what a change did — the models added, removed and changed, with the tasks, flows and fields that came, went or changed in each, the references, and the findings it brought and resolved. For reviewing a pull request whose models sit in a binary `.zip`; `--changes` writes it alone. |
 
 It resolves the relationships a Flowable repository does not state: app → models, process → the case,
 decision or form it calls, `${bean.method()}` → the **Java or Kotlin class and method** with `file:line` (a `@Bean` factory method included), form →
@@ -43,8 +44,9 @@ Both artifacts are attached to every
   `./atlas-output/<project>/` as well (`-o <dir>` for another folder). Needs only a JRE 21+. See
   [`lib/README.md`](lib/README.md). In CI, add `--fail-on error` and the job fails on any error-level
   finding while the artifacts are still written — or `--fail-on defects` to fail on everything that is
-  wrong now and stay green on advice; `--baseline <base checkout>` narrows the gate to what a change adds,
-  and `--junit <file>` writes the findings as a JUnit report for the CI system's test view.
+  wrong now and stay green on advice; `--baseline <base checkout>` narrows the gate to what a change adds
+  and writes what it changed beside the artifacts, and `--junit <file>` writes the findings as a JUnit
+  report for the CI system's test view.
 
 `SHA256SUMS.txt` in each release carries the checksums; releases are signed when a signing key is
 configured. Building from source instead: `./gradlew :idea-plugin:buildPlugin :cli:shadowJar`.
@@ -63,7 +65,7 @@ explorer you can click through:
 | [Generated artifacts](https://kle-dev.github.io/flw-atlas/artifacts/) | What each file is for, and `jq` recipes for the graph |
 | [CLI reference](https://kle-dev.github.io/flw-atlas/cli/) | Every flag, the launcher, exit codes |
 | [Health checks](https://kle-dev.github.io/flw-atlas/checks/) | All twenty-five, and what each one detects |
-| [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, which to use when, and the guide for driving Flowable Work |
+| [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, which to use when, the guide for driving Flowable Work, and what a change did to the models for reviewing it |
 | [Development](https://kle-dev.github.io/flw-atlas/develop/) | Build, tests, goldens, the compatibility gate, CI |
 
 ## Development

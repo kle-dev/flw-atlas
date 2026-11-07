@@ -122,6 +122,9 @@ object GraphJsonRenderer {
             "createdWith?, notes?: [{node, check?, element?, subject?, text, importance, by?, at?}], " +
             "stale?, unexplained?, problems?} — present when a waivers.json was read: what it covered, " +
             "and what is wrong with the file.",
+        "modelCopies" to "{'<type>:<key>': {<file>: <fingerprint>}} — present when a model is held in " +
+            "more than one file (a Design export beside its -bar.zip): every file of it, with a fingerprint " +
+            "of what that copy says. The node and the bucket show the first copy only.",
         "recipes" to listOf(
             "who references X:            jq '.graph.nodes[] | select(.id==\"process:X\") | .usedBy'",
             "what X references:           jq '.graph.edges[] | select(.s==\"process:X\")'",

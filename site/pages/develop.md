@@ -26,8 +26,10 @@ the installable plugin ZIP.
 
 ### The goldens
 
-`core/src/test/resources/golden/` pins the generated artifacts byte-for-byte. When a change to them is
-intended:
+`core/src/test/resources/golden/` pins the generated artifacts byte-for-byte. The changes report is
+pinned over two versions of the fixture: `core/src/test/resources/miniproject-v2/` holds only the files
+the second version changes, laid over a copy of `miniproject` — so a change to one of those files belongs
+in both folders. When a change to the goldens is intended:
 
 ```bash
 ./gradlew :core:updateGoldens

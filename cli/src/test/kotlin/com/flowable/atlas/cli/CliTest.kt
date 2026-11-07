@@ -256,6 +256,60 @@ class CliTest {
     }
 
     /**
+     * `--changes` says what a change did — here archive against archive, the base under another name as
+     * `git show "$BASE:app.zip" > base.zip` writes it: the task and the dangling call the change added, the
+     * field it renamed, and nothing about what both versions have.
+     */
+    @Test
+    fun theChangesReportSaysWhatAChangeDid() {
+        val out = tempDir()
+        val base = zip(fixtureDir(), File(out, "base.zip"))
+        val head = zip(projectV2(), File(tempDir(), "app.zip"))
+        var code = -1
+        val text = stdoutOf { code = run(arrayOf(head.path, "--changes", "--stdout", "-q", "--baseline", base.path)) }
+        assertEquals(text, 0, code)
+        assertTrue(text, text.startsWith("# What changed — `app`"))
+        assertTrue(text, text.contains("`checkStock`") && text.contains("removed: `internalNote`") && text.contains("`external:DEMO-nowhere`"))
+        assertFalse("an archive's own name does not make its unparseable file new: $text", text.contains("parseIssues"))
+        assertTrue(stdoutOf { run(arrayOf(base.path, "--changes", "--stdout", "-q", "--baseline", base.path)) }
+            .contains("No model, reference or finding changed"))
+
+        // The gate of the same run fails on what the report calls new — and the report is written first.
+        val report = File(out, "changes.md")
+        assertEquals(1, run(arrayOf(head.path, "--changes", "-o", report.path, "-q", "--baseline", base.path, "--fail-on", "missingRefs")))
+        assertTrue(report.readText().contains("**New (1)**"))
+
+        // Without -o, into the project, as every single artifact.
+        val project = projectV2()
+        assertEquals(0, run(arrayOf(project.path, "--changes", "-q", "--baseline", fixtureDir().path)))
+        assertTrue(File(project, "APP_OVERVIEW.changes.md").readText().contains("`form:stockForm`"))
+    }
+
+    /** `--all` writes the report beside the rest when it has a baseline, and leaves no older one behind when not. */
+    @Test
+    fun allWritesTheChangesReportWithABaseline() {
+        val out = tempDir()
+        val head = projectV2()
+        assertEquals(0, run(arrayOf(head.path, "--all", "-o", out.path, "-q", "--baseline", fixtureDir().path)))
+        val changes = File(out, "miniproject.changes.md")
+        assertTrue(changes.readText().contains("`process:orderProcess`"))
+        assertTrue("the output .gitignore keeps it out of git", ignored(ignorePatterns(out), changes.name))
+        assertEquals(0, run(arrayOf(head.path, "--all", "-o", out.path, "-q")))
+        assertFalse("a comparison this run did not make", changes.exists())
+    }
+
+    @Test
+    fun theChangesReportNeedsABaselineAndTheWholeProject() {
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(fixtureDir().path, "--changes", "--stdout")) }
+        assertEquals(2, code)
+        assertTrue(err, err.startsWith("error: argument --changes: needs --baseline"))
+        val base = arrayOf("--baseline", fixtureDir().path, "-q")
+        assertEquals("one node is not what changed", 2, run(arrayOf(fixtureDir().path, "--changes", "--slice", "orderProcess", *base)))
+        assertEquals("a format of its own", 2, run(arrayOf(fixtureDir().path, "--changes", "--summary", *base)))
+    }
+
+    /**
      * `--junit` writes in every mode, for a red run as for a green one, and is red exactly where the exit code
      * is; without a gate its split is `defects`.
      */
@@ -795,6 +849,23 @@ class CliTest {
 
     /** The fixture copied to a folder of its own, for a test that writes into the project. */
     private fun projectCopy(): File = File(tempDir(), "miniproject").also { fixtureDir().copyRecursively(it) }
+
+    /** The fixture's second version: `miniproject-v2` holds the files its change touches, laid over a copy. */
+    private fun projectV2(): File = projectCopy().also {
+        File(repoRoot(), "core/src/test/resources/miniproject-v2").copyRecursively(it, overwrite = true)
+    }
+
+    /** [dir]'s files as the archive [zip], as Design exports an app. */
+    private fun zip(dir: File, zip: File): File {
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { z ->
+            dir.walkTopDown().filter { it.isFile }.forEach { f ->
+                z.putNextEntry(java.util.zip.ZipEntry(f.relativeTo(dir).invariantSeparatorsPath))
+                f.inputStream().use { it.copyTo(z) }
+                z.closeEntry()
+            }
+        }
+        return zip
+    }
 
     /** The pattern lines of the `.gitignore` in [dir]. */
     private fun ignorePatterns(dir: File): List<String> =
