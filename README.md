@@ -43,7 +43,7 @@ Both artifacts are attached to every
   `./atlas-output/<project>/` as well (`-o <dir>` for another folder). Needs only a JRE 21+. See
   [`lib/README.md`](lib/README.md). In CI, add `--fail-on error` and the job fails on any error-level
   finding while the artifacts are still written — or `--fail-on defects` to fail on everything that is
-  wrong now and stay green on advice.
+  wrong now and stay green on advice; `--baseline <base checkout>` narrows the gate to what a change adds.
 
 `SHA256SUMS.txt` in each release carries the checksums; releases are signed when a signing key is
 configured. Building from source instead: `./gradlew :idea-plugin:buildPlugin :cli:shadowJar`.

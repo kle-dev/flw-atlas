@@ -79,6 +79,10 @@ jq '.findings[] | select(.severity=="error") | {check, label, message, file}' gr
 4. **Answering a structural question:** `jq` over `graph.json`.
 5. **Before believing the result:** check the [findings](../checks/). Atlas already knows which
    references are broken; an agent should not spend its context rediscovering that.
+6. **After changing a model:** run Atlas again with `--baseline <project>.graph.json --fail-on defects`
+   (the [CLI reference](../cli/#gate-the-change-not-the-backlog) has the details). It exits 1 and lists each
+   defect the graph does not have yet — what the edit added — so the agent can fix it before it reports
+   done. The generated `CLAUDE.md` gives the agent the exact command as the last step of its procedure.
 
 ## Working in Flowable Work itself
 

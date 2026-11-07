@@ -235,6 +235,16 @@ class ClaudeFactsTest {
         assertFalse(out, out.contains("`atlas <project-dir> --slice"))
     }
 
+    /** An agent that edits a model is told how to see that it broke nothing: the run against the graph beside it. */
+    @Test
+    fun anAgentIsToldHowToCheckItsModelEdit() {
+        val beside = render(layout = ClaudeRenderer.Layout(outDir = java.io.File(tmp.root, "atlas-output")))
+        assertTrue(beside, beside.contains("--summary --stdout --baseline atlas-output/$name.graph.json --fail-on defects > /dev/null`"))
+        val alone = render(layout = ClaudeRenderer.Layout(siblings = false))
+        assertTrue("alone, the graph is the one step 1 generates", alone.contains("--baseline <out-dir>/$name.graph.json"))
+        assertFalse("the generic primer knows no project's graph", ClaudeRenderer.renderGeneric().contains("--baseline"))
+    }
+
     @Test
     fun aSingleModelIsNotPresentedAsANamingConvention() {
         // One process cannot establish a convention: the line used to read

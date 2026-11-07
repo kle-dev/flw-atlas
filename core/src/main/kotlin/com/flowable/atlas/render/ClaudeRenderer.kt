@@ -177,6 +177,13 @@ object ClaudeRenderer {
                 "traversable in both directions.")
         steps.add("Open **`${art("explorer.html")}`** for the clickable view (for humans).")
         steps.add("Read the actual source to verify, then implement.")
+        // An agent that edits a model has no way to see that it broke a reference; this is the check that
+        // does, phrased as a command because a named tool is what agents demonstrably use. Against the graph
+        // as generated — what is new since then is what the change added, unless the file is stale.
+        val base = if (layout.siblings) g else "<out-dir>/$name.graph.json"
+        steps.add("After changing models, check that you added no defect: `java -jar <atlas-cli>.jar <project-dir> " +
+                "--summary --stdout --baseline $base --fail-on defects > /dev/null`. Exit 1 lists on stderr each " +
+                "defect that file does not have; fix what your change introduced before you finish.")
         steps.forEachIndexed { i, step -> L.add("${i + 1}. $step") }
         // The browser guide is a few hundred lines that a coding task never needs, so it is not in this
         // file — one instruction says when to read it, which is the kind of line agents demonstrably follow.

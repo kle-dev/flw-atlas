@@ -108,7 +108,8 @@ the folder it is in. See [Generated artifacts](../artifacts/) for what each one 
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
 | `--no-custom-functions` | Do not discover custom functions at all. |
 | `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any`, `defects`, `advice` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on defects`, `--fail-on missingRefs,invalidExpr`). `defects` matches every finding of a defect-kind check and stays green on advice. Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2), and so is an empty list, so an unset CI variable (`--fail-on "$ATLAS_FAIL_ON"`) cannot switch the gate off. `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. A failed run lists the matching findings on stderr after its count line, worst first and one per line — severity, check, the file (or, for a finding with no file, its node id), the model and element, the message — the first 50 of them, then where to read all of them. |
-| `--annotate github` | Also print the findings that fail the run as GitHub Actions workflow commands, on stdout, so GitHub shows them as annotations on the run and on the pull request's files: `::error` or `::warning` by severity, with the file relative to the working directory (run the job from the checkout's root) and the line where the file has one of its own — not for a script finding, whose line counts from the start of the script, and not for a model inside an archive, where GitHub can only point at the archive. `github` is the only value. It needs `--fail-on`, and refuses an artifact on stdout (`--stdout`, or a `--slice` without `-o`), which the commands would cut into. |
+| `--baseline <path>` | Gate only what is new: `--fail-on` then matches only findings the baseline does not have — see [Gate the change, not the backlog](#gate-the-change-not-the-backlog). The baseline is a `graph.json` Atlas wrote (`--all`'s `<name>.graph.json`, or `--json`'s output), or the base's sources — a project directory, a model file or a `.zip`/`.bar` archive — which are analysed in the same run with the same `--expr-allowlist` and custom functions, and without waivers. A finding is the same finding when its check, model (the file, for a parse issue), element and subject are — the key a waiver uses — so a reworded message does not make it new. Nothing else changes: the artifacts, the counts and the status line still report every finding. The verdict says what it set aside, `✓ --fail-on defects: no new finding (41 in the baseline, not gating)`, and a red run lists only the new ones. Without `--fail-on` it only lists what is new and exits 0. A path that does not exist, or a `.json` that is not a `graph.json`, is a misuse (exit 2); a `graph.json` written by another Atlas version gets a warning, because a check that changed reads as new findings. |
+| `--annotate github` | Also print the findings that fail the run as GitHub Actions workflow commands, on stdout, so GitHub shows them as annotations on the run and on the pull request's files: `::error` or `::warning` by severity, with the file relative to the working directory (run the job from the checkout's root) and the line where the file has one of its own — not for a script finding, whose line counts from the start of the script, and not for a model inside an archive, where GitHub can only point at the archive. `github` is the only value. It needs `--fail-on` or `--baseline` — it annotates the findings they name — and refuses an artifact on stdout (`--stdout`, or a `--slice` without `-o`), which the commands would cut into. |
 | `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts — the same folder the explorer's *Save* writes it to: the `--all` directory; the folder of the file `-o` names; without `-o`, the folder the single artifact is written to (the project directory, or the folder of the archive or model file); and the working directory for `--stdout` and a `--slice` without `-o`, which write no file. A path you name that does not exist is reported on stderr, and nothing is waived; the run goes on. A file that does not parse, a rule naming a check Atlas does not know and a key the file does not use are reported too — see [Accepting a finding](../checks/#accepting-a-finding). |
 | `--waiver-author <name>` | Prefills the `by` of a rule accepted from the generated explorer page. Left out, a rule written from a CLI-generated page carries no author; inside the IDE the plugin supplies the project's git identity. |
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
@@ -137,6 +138,37 @@ Short flags cluster: `-vq`, `-qv` and `-oreport.md` all work, and `o` consumes t
 or the next one. A flag that takes no value refuses one: `--all=foo` and `--stdout=false` are errors,
 not a silent `--all` or `--stdout`.
 
+### Gate the change, not the backlog
+
+Most projects are not clean on their first run, so `--fail-on defects` is red from the start, and the
+two ways out are both bad: a reasoned waiver for every finding the project already had, or no gate at
+all. `--baseline` is the third: compare against the state the change started from, and fail only on
+what it adds. The backlog stays visible in every artifact; it just does not decide the build.
+
+In a pull request the baseline is the target branch. Check it out beside the project and point Atlas at
+it — a checkout of sources, not a `graph.json` kept from earlier, because then both sides are analysed
+by the same Atlas and a check that changed between versions cannot read as new findings:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- name: Atlas
+  run: |
+    git worktree add ../atlas-base "${{ github.event.pull_request.base.sha }}"
+    java -jar cli-<version>-all.jar . --all -o atlas-output \
+      --baseline ../atlas-base --fail-on defects --annotate github
+```
+
+The run fails on the defects the change introduced, names them in the log and as annotations on the
+pull request, and says how many it left to the baseline. What the team decides to live with still
+belongs in [`waivers.json`](../checks/#accepting-a-finding): a baseline moves with every merge, a waiver
+records a decision.
+
+Locally — or for an agent that has just edited a model — the `graph.json` of the last generation is
+baseline enough: `--baseline atlas-output/<name>/<name>.graph.json --fail-on defects` lists what the
+edit added since then. The generated `CLAUDE.md` tells an agent to do exactly that.
+
 ### Flag precedence
 
 `--slice` and `--pretty` sit outside the mutually-exclusive format group, which has consequences
@@ -155,7 +187,7 @@ worth knowing because nothing warns you about the last three:
 |---|---|
 | `0` | Success. |
 | `1` | The run succeeded and wrote its artifacts, but a gate failed: a finding matched `--fail-on`, or `--fail-on-stale-waivers` found a stale waiver. Nothing else exits 1. |
-| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, an `--annotate` value other than `github`, `--annotate` without `--fail-on` or beside an artifact on stdout, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
+| `2` | Misuse, found before anything is written: an unknown flag, two format flags, `--all` with `--slice` or `--stdout`, an unknown or empty `--fail-on` value, an `--annotate` value other than `github`, `--annotate` without `--fail-on` or `--baseline` or beside an artifact on stdout, a `--baseline` that is empty, does not exist or is not a `graph.json`, project directory, model file or archive, `--baseline` or `--annotate` with `--claude-template`, a missing option value (or one that is the next option), a value given to a flag that takes none, a second positional, a path that does not exist, a missing path, a file that is not a model or archive, a path with no Flowable models, archives or Java sources, an output that cannot be written, a hand-written `CLAUDE.md` that `--claude` would replace, or a `--slice` that is empty or matches no node. |
 | `3` | The run failed once under way — an artifact could not be written (a disk that filled up, a name taken by a folder), or an unexpected error. Artifacts may be missing or partial. The reason is one line on stderr; `-v` adds the stack trace. |
 
 ## The status line

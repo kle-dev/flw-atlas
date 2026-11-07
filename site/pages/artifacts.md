@@ -145,11 +145,12 @@ jq '.findings[] | select(.severity=="error")' graph.json
 
 A Flowable primer *plus* this project's discovered facts, written to be dropped into a repository root
 as `CLAUDE.md` (or `AGENTS.md`), or imported from one with `@<path>`. It contains a starting procedure
-that names the project's real files by their path from the root, the platform mental model an LLM usually
-gets wrong, how custom code attaches to models, where this project's custom Java goes and which model
-files are Design exports not to be edited, its key conventions and wiring examples, its open findings, and
-the complete list of the expression namespaces, script bindings and platform beans that **actually
-exist** — which is the part that stops an agent inventing APIs.
+that names the project's real files by their path from the root (and ends with the command that checks
+a model edit added no defect, `--baseline` against the generated `graph.json`), the platform mental model
+an LLM usually gets wrong, how custom code attaches to models, where this project's custom Java goes and
+which model files are Design exports not to be edited, its key conventions and wiring examples, its open
+findings, and the complete list of the expression namespaces, script bindings and platform beans that
+**actually exist** — which is the part that stops an agent inventing APIs.
 
 Not in it: the inventory, the counts, the directory layout. They are the summary's, and an overview an
 agent could derive itself is the one kind of context-file content measured not to help

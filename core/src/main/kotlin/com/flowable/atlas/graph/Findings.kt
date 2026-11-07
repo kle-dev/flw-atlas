@@ -366,6 +366,31 @@ object Findings {
     }
 
     /**
+     * Which finding [f] is, from one run to the next: check, node (the file, for a parse finding, which has
+     * no node), element and subject — the key a [Waivers.Waiver] narrows on, so "the same finding" means one
+     * thing to a waiver and to a baseline. The message is deliberately not part of it: it is prose that
+     * rewords ("… (+3 more)") when something unrelated on the same node changes.
+     */
+    fun identity(f: Map<String, Any?>): String =
+        listOf(f["check"], f["node"] ?: f["file"], f["element"] ?: "", f["subject"] ?: "").joinToString("\u0000")
+
+    /**
+     * The findings of [head] that [base] does not have, in [head]'s order — the instances themselves, so a
+     * caller can tell two equal findings apart. Counted, not set-wise: one check can fire twice on one node
+     * with one subject, and a second occurrence against one in the base is new.
+     */
+    fun newSince(base: List<Map<String, Any?>>, head: List<Map<String, Any?>>): List<Map<String, Any?>> {
+        val left = HashMap<String, Int>()
+        for (f in base) left.merge(identity(f), 1, Int::plus)
+        return head.filter { f ->
+            val k = identity(f)
+            val n = left[k] ?: 0
+            if (n > 0) left[k] = n - 1
+            n == 0
+        }
+    }
+
+    /**
      * What the waiver file did, for every surface that has to say so. Absent when there is no file: an
      * empty block in every report would read as a feature nobody is using rather than as one nobody
      * needed here.

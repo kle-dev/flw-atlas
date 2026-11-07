@@ -204,6 +204,57 @@ class CliTest {
         }.contains("missingRefs"))
     }
 
+    /**
+     * `--baseline` gates the change, not the backlog: the fixture's own errors are in the base, so only the
+     * dangling call a change adds fails the run — from the base's sources or from the graph.json it wrote.
+     */
+    @Test
+    fun aBaselineGatesOnlyWhatIsNew() {
+        val base = projectCopy()
+        val head = projectCopy()
+        File(head, "processes/demo-extra.bpmn20.xml").writeText("""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="http://www.example.com/demo">
+              <process id="DEMO-extra" name="DEMO extra">
+                <startEvent id="s"/>
+                <callActivity id="c" calledElement="DEMO-nowhere"/>
+              </process>
+            </definitions>
+        """.trimIndent())
+        var code = -1
+        val err = stderrOf { code = run(arrayOf(head.path, "--summary", "--stdout", "--baseline", base.path, "--fail-on", "missingRefs")) }
+        assertEquals(err, 1, code)
+        assertTrue(err, err.contains("--fail-on missingRefs: 1 new finding(s)") && err.contains("external:DEMO-nowhere"))
+        assertFalse("what the base had is not listed: $err", err.contains("external:courierProcess"))
+
+        assertEquals("the fixture fails a plain gate on its own errors", 1, run(arrayOf(base.path, "--summary", "--stdout", "-q", "--fail-on", "error")))
+        val same = stderrOf { code = run(arrayOf(base.path, "--summary", "--stdout", "--baseline", base.path, "--fail-on", "error")) }
+        assertEquals("…and passes against itself", 0, code)
+        assertTrue(same, same.contains("no new finding") && same.contains("in the baseline, not gating"))
+
+        val out = tempDir()
+        assertEquals(0, run(arrayOf(base.path, "--all", "-o", out.path, "-q")))
+        val graph = File(out, "miniproject.graph.json").path
+        assertEquals("the graph.json the base wrote is a baseline too", 1,
+            run(arrayOf(head.path, "--summary", "--stdout", "-q", "--baseline", graph, "--fail-on", "missingRefs")))
+        // Read before the run writes anything: regenerating the graph.json it compares against is the local loop.
+        assertEquals(0, run(arrayOf(base.path, "--all", "-o", out.path, "-q", "--baseline", graph, "--fail-on", "any")))
+        val info = stderrOf { code = run(arrayOf(head.path, "--summary", "--stdout", "--baseline", graph)) }
+        assertEquals("without a gate it only says what is new", 0, code)
+        assertTrue(info, Regex("--baseline: \\d+ new finding\\(s\\)").containsMatchIn(info) && info.contains("external:DEMO-nowhere"))
+
+        File(out, "old.json").writeText("""{"_generated":{"atlas":"0.0.1"},"findings":[]}""")
+        val old = stderrOf { run(arrayOf(base.path, "--summary", "--stdout", "--baseline", File(out, "old.json").path, "--fail-on", "missingRefs")) }
+        assertTrue(old, old.contains("baseline written by Atlas 0.0.1"))
+
+        File(out, "not-ours.json").writeText("""{"nodes":[]}""")
+        for (bad in listOf(File(out, "nowhere").path, File(out, ".gitignore").path, File(out, "not-ours.json").path, "")) {
+            val e = stderrOf { code = run(arrayOf(head.path, "--summary", "--stdout", "--baseline", bad, "--fail-on", "error")) }
+            assertEquals("$bad: $e", 2, code)
+            assertTrue(e, e.startsWith("error: argument --baseline"))
+        }
+    }
+
     /** `--annotate github` turns the same findings into workflow commands on stdout, which GitHub shows on the PR. */
     @Test
     fun annotationsAreGithubWorkflowCommands() {

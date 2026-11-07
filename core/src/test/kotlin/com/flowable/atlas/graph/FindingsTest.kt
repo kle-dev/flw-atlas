@@ -455,6 +455,36 @@ class FindingsTest {
         assertEquals("rows[2].cols[0].label", hack["subject"])
     }
 
+    /** A baseline compares findings by the key a waiver uses; a message that rewords is the same finding. */
+    @Test
+    fun aFindingKeepsItsIdentityWhenItsMessageRewords() {
+        val a = mapOf<String, Any?>("check" to "unusedVars", "node" to "variable:DEMO-x", "message" to "written by `a` (+2 more)")
+        assertEquals(Findings.identity(a), Findings.identity(a + ("message" to "written by `a` (+3 more)")))
+        assertTrue(Findings.identity(a) != Findings.identity(a + ("subject" to "process:DEMO-p")))
+        assertTrue(Findings.identity(a) != Findings.identity(a + ("element" to "DEMO-task")))
+        // A parse finding has no node; its file is what it is about.
+        val p = mapOf<String, Any?>("check" to "parseIssues", "node" to null, "file" to "forms/a.form")
+        assertTrue(Findings.identity(p) != Findings.identity(p + ("file" to "forms/b.form")))
+        // …which is the key a waiver narrows on: a rule built from the parts covers the finding.
+        for (f in listOf(a + ("element" to "DEMO-task"), p)) {
+            val w = Waivers.Waiver(check = f["check"].toString(), node = (f["node"] ?: f["file"]).toString(),
+                element = f["element"] as? String, subject = f["subject"] as? String)
+            assertTrue("$f", w.covers(f))
+        }
+    }
+
+    /** Counted, not set-wise: the same finding twice against once in the base is one new finding. */
+    @Test
+    fun newSinceCountsOccurrences() {
+        val x = mapOf<String, Any?>("check" to "unsafeQueries", "node" to "query:DEMO-q", "subject" to "templateContent")
+        val y = mapOf<String, Any?>("check" to "missingRefs", "node" to "external:DEMO-y")
+        val head = listOf(LinkedHashMap(x), LinkedHashMap(x), LinkedHashMap(y))
+        val new = Findings.newSince(listOf(x), head)
+        assertEquals(2, new.size)
+        assertTrue("the instances of head, in its order", new[0] === head[1] && new[1] === head[2])
+        assertTrue(Findings.newSince(head, head).isEmpty())
+    }
+
     @Test
     fun aCleanProjectReportsNoFindingsAtAll() {
         val r = run(listOf(node("process:p", "process")))

@@ -1,7 +1,11 @@
 package com.flowable.atlas.cli
 
 import com.flowable.atlas.diagram.DiagramArtifacts
+import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.graph.Atlas
+import com.flowable.atlas.graph.Baseline
+import com.flowable.atlas.graph.CheckCatalog
+import com.flowable.atlas.graph.Findings
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.parsing.ModelKinds
@@ -73,6 +77,7 @@ private class Options {
     var waiversPath: String? = null; var noWaivers = false; var failOnStaleWaivers = false
     var waiverAuthor: String? = null
     var annotate: String? = null
+    var baseline: String? = null
 }
 
 /** The flags that take no value: `--all=foo` or `--stdout=false` is a misuse, not a silent `--stdout`. */
@@ -191,6 +196,12 @@ private fun parse(args: Array<String>, o: Options): Int? {
                         if (v != ANNOTATE_GITHUB) { errln("error: argument --annotate: unknown value '$v' $EM_DASH expected $ANNOTATE_GITHUB"); return EXIT_MISUSE }
                         o.annotate = v
                     }
+                    "--baseline" -> {
+                        val v = value(name, inline) ?: return EXIT_MISUSE
+                        // `--baseline "$BASE_DIR"` with the variable unset would compare against the working directory.
+                        if (v.isBlank()) { errln("error: argument --baseline: expected a graph.json, a project directory or an archive"); return EXIT_MISUSE }
+                        o.baseline = v
+                    }
                     "--verbose" -> o.verbose++
                     "--quiet" -> o.quiet = true
                     "--help" -> return help()
@@ -259,9 +270,17 @@ private fun parse(args: Array<String>, o: Options): Int? {
             errln("error: argument --annotate: not allowed with an artifact on stdout $EM_DASH write it to a file with -o")
             return EXIT_MISUSE
         }
-        // It annotates the findings that fail the run; without a gate there are none, and the flag would do nothing.
-        if (o.failOnTerms.isEmpty()) {
-            errln("error: argument --annotate: needs --fail-on $EM_DASH it annotates the findings that fail the run")
+        // It annotates the findings the run names — those that fail it, or the new ones of a baseline; with
+        // neither there are none, and the flag would do nothing.
+        if (o.failOnTerms.isEmpty() && o.baseline == null) {
+            errln("error: argument --annotate: needs --fail-on or --baseline $EM_DASH it annotates the findings they name")
+            return EXIT_MISUSE
+        }
+    }
+    // The primer is no project's: there is nothing to compare or annotate.
+    if (o.claudeTemplate) {
+        listOfNotNull("--baseline".takeIf { o.baseline != null }, "--annotate".takeIf { o.annotate != null }).firstOrNull()?.let {
+            errln("error: argument $it: not allowed with --claude-template")
             return EXIT_MISUSE
         }
     }
@@ -329,6 +348,16 @@ private fun execute(o: Options): Int {
         errln("error: ${target.path} exists and was not written by Atlas $EM_DASH name another file with -o <file>, or use --stdout")
         return EXIT_MISUSE
     }
+    val baselineFile = o.baseline?.let { File(it) }
+    if (baselineFile != null) {
+        val problem = when {
+            !baselineFile.exists() -> "${baselineFile.path} not found"
+            baselineFile.isFile && !baselineFile.name.lowercase().endsWith(".json") && !ModelPaths.isArchive(baselineFile.name) &&
+                ModelKinds.modelTypeFor(baselineFile.name) == null -> "${baselineFile.path} is not a graph.json, a project directory, a model file or a .zip/.bar archive"
+            else -> null
+        }
+        problem?.let { errln("error: argument --baseline: $it"); return EXIT_MISUSE }
+    }
 
     // ---- extract ----
     // The waiver file lives with the artifacts, because that is the folder a reviewer is handed and the one
@@ -346,13 +375,26 @@ private fun execute(o: Options): Int {
     // most projects have no file at all.
     val waiverFileMissing = o.waiversPath != null && !o.noWaivers && !waiverFile.isFile
     val allow = o.exprAllowlist.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-    val result = Atlas.extract(
-        root,
+    fun analyse(path: File, with: Waivers.Set) = Atlas.extract(
+        path,
         exprAllowlist = allow.ifEmpty { null },
         discoverCustom = !o.noCustom,
         customPath = o.customFunctions?.let { File(it) },
-        waivers = waivers,
+        waivers = with,
     )
+    // The baseline first: a graph.json that is not one is a misuse, said before the long part — and read
+    // before anything is written, so `--all` can regenerate the very graph.json it is compared against. A
+    // source tree is analysed with this run's options, so an allowlist or a function file does not make old
+    // findings new.
+    val baseline = baselineFile?.let { b ->
+        try {
+            Baseline.load(b) { analyse(it, Waivers.EMPTY) }
+        } catch (e: Baseline.Unreadable) {
+            errln("error: argument --baseline: ${e.message}")
+            return EXIT_MISUSE
+        }
+    }
+    val result = analyse(root, waivers)
 
     val stats = result["stats"] as? Map<*, *> ?: emptyMap<String, Any?>()
     fun stat(key: String): Int = (stats[key] as? Number)?.toInt() ?: 0
@@ -411,7 +453,16 @@ private fun execute(o: Options): Int {
     // wants the report AND the red build — and the exit code becomes 1 after the output.
     @Suppress("UNCHECKED_CAST")
     val findings = (result["findings"] as? List<Map<String, Any?>>).orEmpty()
-    val failing = findings.filter { com.flowable.atlas.graph.CheckCatalog.gates(o.failOnTerms, it) }
+    val gated = findings.filter { CheckCatalog.gates(o.failOnTerms, it) }
+    // --baseline: what the base already had does not gate. The instances, by identity — two findings can be
+    // equal maps, and one of them can be new.
+    val fresh: Set<Map<String, Any?>>? = baseline?.let { b ->
+        java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Map<String, Any?>, Boolean>())
+            .apply { addAll(Findings.newSince(b.findings, findings)) }
+    }
+    val failing = if (fresh == null) gated else gated.filter { it in fresh }
+    // What the run names on stderr (and annotates): what fails it — or, with a baseline and no gate, what is new.
+    val named = if (fresh != null && o.failOnTerms.isEmpty()) findings.filter { it["waived"] == null && it in fresh } else failing
     // Where every finding can be read when the log stops listing them: the overview elides per check too.
     val everyFinding = if (allDir != null) "all of them are under `findings` in ${File(allDir, "$name.graph.json").path}"
         else "--json writes all of them, under `findings`"
@@ -433,18 +484,32 @@ private fun execute(o: Options): Int {
         val staleFatal = o.failOnStaleWaivers && stale.isNotEmpty()
         if (!o.quiet) {
             if (staleFatal) errln("$WARN_SIGN --fail-on-stale-waivers: ${stale.size} stale waiver(s)")
-            if (failing.isNotEmpty()) {
-                val byCheck = failing.groupingBy { it["check"].toString() }.eachCount()
-                    .entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value} ${it.key}" }
-                errln("$WARN_SIGN --fail-on ${o.failOnTerms.joinToString(",")}: ${failing.size} finding(s) $EM_DASH $byCheck")
-                // Which ones: a red build that names only counts sends everyone to download the artifacts
-                // to learn what to fix.
-                failingLines(failing, more = everyFinding).forEach(::errln)
+            // Identities are Atlas's own, and a check that changed between versions reads as new findings.
+            baseline?.writtenBy?.takeIf { it != AtlasBuildInfo.VERSION }?.let {
+                errln("$WARN_SIGN baseline written by Atlas $it, this is ${AtlasBuildInfo.VERSION} $EM_DASH regenerate it, " +
+                    "or give the base's sources (a directory or archive), if unchanged findings show as new")
             }
+            val byCheck = named.groupingBy { it["check"].toString() }.eachCount()
+                .entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value} ${it.key}" }
+            val gate = "--fail-on ${o.failOnTerms.joinToString(",")}"
+            when {
+                // A baseline says what it set aside, so a gate that passes on it is not mistaken for a clean project.
+                fresh != null && o.failOnTerms.isNotEmpty() -> {
+                    val known = "${gated.size - failing.size} in the baseline, not gating"
+                    if (failing.isEmpty()) errln("$CHECK $gate: no new finding ($known)")
+                    else errln("$WARN_SIGN $gate: ${failing.size} new finding(s) ($known) $EM_DASH $byCheck")
+                }
+                fresh != null ->
+                    errln("--baseline: " + if (named.isEmpty()) "no new finding" else "${named.size} new finding(s) $EM_DASH $byCheck")
+                failing.isNotEmpty() -> errln("$WARN_SIGN $gate: ${failing.size} finding(s) $EM_DASH $byCheck")
+            }
+            // Which ones: a red build that names only counts sends everyone to download the artifacts to learn
+            // what to fix.
+            failingLines(named, more = everyFinding).forEach(::errln)
         }
         // stdout, where GitHub reads workflow commands — and not silenced by -q, which is about stderr.
         if (o.annotate == ANNOTATE_GITHUB) {
-            val commands = githubAnnotations(failing, projectDir)
+            val commands = githubAnnotations(named, projectDir)
             if (commands.isNotEmpty()) {
                 System.out.write(commands.joinToString("\n", postfix = "\n").toByteArray(Charsets.UTF_8))
                 System.out.flush()
@@ -645,8 +710,10 @@ options:
                               (${com.flowable.atlas.graph.CheckCatalog.ORDER.joinToString(", ")})
                               (warning is an accepted spelling of any, kept for compatibility);
                               a failed run lists the first $GATE_LISTED matching findings on stderr
-  --annotate github           also print them as GitHub Actions annotations on stdout (needs --fail-on;
-                              not with an artifact on stdout)
+  --baseline <path>           gate only what is new since then: a graph.json Atlas wrote, or the base's
+                              sources (a project directory, a model file or a .zip/.bar archive)
+  --annotate github           also print the findings the run names as GitHub Actions annotations on
+                              stdout (needs --fail-on or --baseline; not with an artifact on stdout)
   --waivers <path>           the accepted-findings file (default: waivers.json beside the artifacts)
   --waiver-author <name>      the `by` of a rule accepted from the explorer page
   --no-waivers                ignore it — report every finding, for an audit
