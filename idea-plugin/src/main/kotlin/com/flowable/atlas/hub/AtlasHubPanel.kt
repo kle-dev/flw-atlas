@@ -183,6 +183,9 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
     /** Pick a Flowable project the way the combo does — for tests, which have no combo. */
     internal fun chooseProjectForTest(relPath: String?) = header.chooseSubProject(relPath)
 
+    /** Click the health row the way a reader does — for tests, which have no mouse. */
+    internal fun clickHealthForTest() = header.clickHealthForTest()
+
     /** What the panel currently shows, as a reader would read it. */
     internal fun viewForTest(): HubView = HubView(
         projectItems = header.projectItems,

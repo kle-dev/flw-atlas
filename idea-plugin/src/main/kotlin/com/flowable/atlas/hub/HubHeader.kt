@@ -64,13 +64,15 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     private val healthIcon = JBLabel()
     // Stretches and gives way first: four-digit counts beside *Analyze Again* are wider than the stripe,
     // and the counts end in "…" before the action does — the tooltip has them whole.
-    private val health = ActionLink("") { host.invokeAction(FlowableActionIds.OPEN_ATLAS_FINDINGS) }.apply {
+    private val health = ActionLink("") { onHealthClicked() }.apply {
         autoHideOnDisable = false
         horizontalAlignment = javax.swing.SwingConstants.LEFT
     }
     private val analyzeAgain = ActionLink(message("findings.analyzeAgain")) {
         AtlasFindingsService.getInstance(host.project).refresh()
     }
+    /** What the health row last said — which decides what a click on it does. */
+    private var lastHealth: FindingsHealth? = null
     private val attentionIcon = JBLabel()
     private val attentionText = HubText(comment = false)
     private var current: HubAttention? = null
@@ -184,10 +186,11 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
 
     /**
      * `3 defects · 41 advice` — a link into Atlas Findings, with *Analyze Again* beside it once a model
-     * changed since. Before any analysis the link says *Analyze findings*: opening the window runs one.
-     * The Hub never starts the analysis on its own; it is a full extract.
+     * changed since. Before any analysis the link says *Analyze findings*, and a click runs one and opens
+     * the window on it. The Hub never starts the analysis on its own; it is a full extract.
      */
     private fun applyHealth(f: FindingsHealth) {
+        lastHealth = f
         health.isEnabled = !f.running
         analyzeAgain.isVisible = !f.running && f.defects != null && f.stale
         when {
@@ -204,7 +207,19 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
                 health.text = message("findings.status.counts", f.defects, f.advice ?: 0)
             }
         }
-        health.toolTipText = message("hub.health.tooltip", health.text, FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_FINDINGS))
+        health.toolTipText = if (healthStartsAnalysis(f)) message("hub.health.tooltip.analyze")
+            else message("hub.health.tooltip", health.text, FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_FINDINGS))
+    }
+
+    /**
+     * The health row's click. Before any analysis it is an offer to run one, and the window only ran it the
+     * first time it was built: after a sub-project switch or a failed run the click raised a window reading
+     * *No analysis yet*, with a second link to click. Started here, before the window opens, so a window
+     * built by that open finds it running instead of starting a second one.
+     */
+    private fun onHealthClicked() {
+        if (lastHealth?.let(::healthStartsAnalysis) == true) AtlasFindingsService.getInstance(host.project).refresh()
+        host.invokeAction(FlowableActionIds.OPEN_ATLAS_FINDINGS)
     }
 
     /** For tests: the health row as it reads. */
@@ -228,9 +243,15 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
          *  Gradle version, so any mismatch would itself signal drift. */
         fun atlasVersion(): String =
             PluginManagerCore.getPlugin(PluginId.getId("com.flowable.atlas"))?.version ?: AtlasBuildInfo.VERSION
+
+        /** Whether a click on the health row runs the analysis: there is none yet, and none is running. */
+        internal fun healthStartsAnalysis(f: FindingsHealth): Boolean = !f.running && f.defects == null
     }
 
     // -- for tests -------------------------------------------------------------------------------
+
+    /** Click the health row the way a reader does — for tests, which have no mouse. */
+    internal fun clickHealthForTest() = onHealthClicked()
 
     val projectItems: List<String> get() = (0 until projectCombo.itemCount).map { projectCombo.getItemAt(it).orEmpty() }
     val attention: String? get() = if (current != null) attentionText.text else null

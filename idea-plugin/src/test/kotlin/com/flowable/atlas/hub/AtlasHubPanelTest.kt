@@ -427,4 +427,30 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
             panel.dispose()
         }
     }
+
+    /**
+     * *Analyze findings* is an offer, and a click takes it: it runs the analysis and opens the window on it.
+     * Raising a Findings window that was already built — after a sub-project switch dropped its analysis —
+     * used to leave it reading *No analysis yet*, with a second link to click.
+     */
+    fun testAnalyzeFindingsRunsTheAnalysis() {
+        assertTrue(HubHeader.healthStartsAnalysis(FindingsHealth(running = false, defects = null, advice = null, stale = false)))
+        assertFalse("one is running", HubHeader.healthStartsAnalysis(FindingsHealth(running = true, defects = null, advice = null, stale = false)))
+        assertFalse("the link opens the window on it", HubHeader.healthStartsAnalysis(FindingsHealth(running = false, defects = 1, advice = 0, stale = true)))
+
+        val service = com.flowable.atlas.findings.AtlasFindingsService.getInstance(project)
+        val panel = AtlasHubPanel(project)
+        try {
+            service.seedForTest(null)
+            panel.refreshForTest()
+            assertEquals("Analyze findings", panel.viewForTest().health)
+            panel.clickHealthForTest()
+            assertNotNull("the click ran the analysis", service.last)
+            panel.refreshForTest()
+            assertFalse(panel.viewForTest().health, panel.viewForTest().health.startsWith("Analyze findings"))
+        } finally {
+            service.seedForTest(null)
+            panel.dispose()
+        }
+    }
 }

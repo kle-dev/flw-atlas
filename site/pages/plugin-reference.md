@@ -45,7 +45,7 @@ is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opene
 | Action | Also in |
 |---|---|
 | Open Atlas Hub | — |
-| Open Atlas Findings | — |
+| Open Atlas Findings | The Atlas Hub's health row, *3 defects · 41 advice*; before any analysis it reads *Analyze findings* and runs one first |
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
 | Open Atlas ER Diagram Designer | The Atlas Hub's ⋮. Only while the project generates the [ER diagram page](../../erd/); opens the newest `*.erd.html`, and generates one into the output folder first when there is none |
 | Open Atlas Playground | Atlas Hub toolbar and its *Playground* block |

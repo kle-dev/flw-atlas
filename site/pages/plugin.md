@@ -46,7 +46,8 @@ sits at the end of that row — the two things one does with the index, where th
 While there is no index yet the row says *scanning…*, or *index failed*. The row under it is the
 project's **health** — *3 defects · 41 advice*, a link into [Atlas Findings](#atlas-findings) — with
 *Analyze Again* beside it once a model changed since the analysis. Before any analysis it offers *Analyze
-findings*; the Hub never starts one on its own, because it is a full analysis of the project. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
+findings*, and clicking it runs the analysis and opens Atlas Findings on it; the Hub never starts one on its
+own, because it is a full analysis of the project. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
 index, the output folder and the Design target follow. It is a drop-down like the environment pickers
 below it, always offering the whole repository, so "is this mine to change?" is answered by the control
 rather than by trying it.
