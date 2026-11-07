@@ -161,10 +161,14 @@ Reach it from the right stripe, or **Tools → Flowable Atlas → Open Atlas Hub
 Every finding of the project — the explorer's [Checks page](../checks/) in a tool window on the bottom
 stripe, in Swing, so it works under Remote Development and without JCEF. The tree reads **Defects** first
 — what is wrong now — then, when asked for, **Advice** and **Accepted**, each by check in the checks
-page's order; a double-click or Enter opens the finding's file at its line.
+page's order. A double-click or Enter opens the finding where it is: at its line, or — in a minified
+form, or for a column or a config path, which name their file and not a line — at its element or at what
+it names. A finding with no file of its own — a variable, a service operation, an expression several
+models hold — opens in the model it lives in, and asks which when there are several.
 
 Beside the tree, the **detail pane** says what the page says about the selected check: which kind of
-finding it is (*Defect · broken*, *Advice · noise*), the finding's own sentence and where it is, **why it
+finding it is (*Defect · broken*, *Advice · noise*), the finding's own sentence and where it is — for a
+finding with no file of its own, the first model it lives in and how many more — **why it
 matters** and **what to do** — including when accepting it is the right answer — with *Read on the checks
 page*, *Open in Atlas Explorer* (the finding's model page, or the check on the Checks page) and
 *Accept…*. Accepting asks why, in a dialog that refuses an empty reason, and writes one rule per finding

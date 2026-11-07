@@ -19,7 +19,10 @@ internal data class FindingsDetail(
     val kind: String?,
     /** The finding's own sentence: its label and message. Null for a check or a group. */
     val finding: String?,
-    /** Project-relative file of the finding, and its line. */
+    /**
+     * Project-relative file of the finding, and its line — or, for a finding with no file of its own (a
+     * variable, an expression several models hold), the first model it lives in, with [others] more.
+     */
     val file: String?,
     val line: Int?,
     /** The explorer route this row opens — a model's page, or the Checks page filtered to the check. */
@@ -32,6 +35,8 @@ internal data class FindingsDetail(
     val acceptable: Int,
     /** A finding already accepted: who, and why. */
     val accepted: String?,
+    /** How many more models than [file] the finding lives in — opening it then asks which. */
+    val others: Int = 0,
 ) {
     companion object {
         /** Nothing selected: the pane says what it is for. */
@@ -39,7 +44,8 @@ internal data class FindingsDetail(
             message("findings.detail.empty"), null, null, null, null, null, null, null, null, null, 0, null,
         )
 
-        fun of(item: FindingsTree.Item?, openUnder: Int): FindingsDetail = when (item) {
+        /** [targets]: where a finding without a file of its own opens — see [FindingTargets.filesOf]. */
+        fun of(item: FindingsTree.Item?, openUnder: Int, targets: List<String> = emptyList()): FindingsDetail = when (item) {
             null -> EMPTY
             is Group -> EMPTY.copy(title = message("findings.detail.group", item.title, item.count), acceptable = openUnder)
             is CheckItem -> {
@@ -66,8 +72,8 @@ internal data class FindingsDetail(
                     title = check?.title ?: id,
                     kind = check?.let(::kindOf),
                     finding = listOf(item.label, item.message).filter { it.isNotBlank() }.joinToString(" — "),
-                    file = item.file,
-                    line = item.line,
+                    file = item.file ?: targets.firstOrNull(),
+                    line = item.line.takeIf { item.file != null },
                     route = node?.let(ExplorerRoutes::encodeUriComponent)
                         ?: check?.let { "/checks&f=" + ExplorerRoutes.encodeUriComponent(it.title) },
                     what = null,
@@ -79,6 +85,7 @@ internal data class FindingsDetail(
                         listOfNotNull(w["reason"]?.toString(), w["by"]?.toString()?.let { message("findings.detail.by", it) })
                             .joinToString(" · ").ifBlank { null }
                     },
+                    others = if (item.file == null) (targets.size - 1).coerceAtLeast(0) else 0,
                 )
             }
         }

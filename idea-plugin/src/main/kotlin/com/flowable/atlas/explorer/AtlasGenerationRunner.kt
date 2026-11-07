@@ -161,7 +161,7 @@ object AtlasGenerationRunner {
                     if (project.isDisposed) return@invokeLater
                     when (outcome) {
                         is AtlasGeneratorService.Outcome.Success -> {
-                            outcome.outputDir?.let { AtlasFindingsService.getInstance(project).adopt(projectDir, it, outcome.findings) }
+                            outcome.outputDir?.let { AtlasFindingsService.getInstance(project).adopt(projectDir, it, outcome.findings, outcome.targets) }
                             project.messageBus.syncPublisher(AtlasEvents.TOPIC)
                                 .artifactsGenerated(outcome.explorerHtml, outcome.written)
                             AtlasExplorerNotifier.notifySuccess(

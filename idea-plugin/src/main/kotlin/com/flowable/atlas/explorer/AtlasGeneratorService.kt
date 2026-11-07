@@ -2,6 +2,7 @@ package com.flowable.atlas.explorer
 
 import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
+import com.flowable.atlas.findings.FindingTargets
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
@@ -39,8 +40,9 @@ class AtlasGeneratorService(private val project: Project) {
         /**
          * [explorerHtml] is the `.explorer.html` produced (if any); [written] lists all files written.
          * [findings] are the analysis's, beside the `waivers.json` in [outputDir] — handed to the Findings
-         * window, which would otherwise run the very same analysis again. [removed] are the drawings of
-         * models that are gone, deleted from the diagrams folder — the VFS has to hear of those too.
+         * window, which would otherwise run the very same analysis again — with [targets], where the ones
+         * without a file of their own open ([FindingTargets]). [removed] are the drawings of models that are
+         * gone, deleted from the diagrams folder — the VFS has to hear of those too.
          */
         data class Success(
             val explorerHtml: Path?,
@@ -49,6 +51,7 @@ class AtlasGeneratorService(private val project: Project) {
             val outputDir: Path? = null,
             val findings: List<Map<String, Any?>> = emptyList(),
             val removed: List<Path> = emptyList(),
+            val targets: Map<String, List<String>> = emptyMap(),
         ) : Outcome
         data class Failure(val message: String, val log: String) : Outcome
     }
@@ -76,7 +79,7 @@ class AtlasGeneratorService(private val project: Project) {
             indicator.checkCanceled()
             for ((out, html) in pages) out.toFile().writeText(html, Charsets.UTF_8)
 
-            Outcome.Success(outputs.first(), outputs, summaryLog(result), outputs.first().parent, findingsOf(result))
+            Outcome.Success(outputs.first(), outputs, summaryLog(result), outputs.first().parent, findingsOf(result), targets = FindingTargets.index(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
@@ -173,7 +176,7 @@ class AtlasGeneratorService(private val project: Project) {
             // the page to open afterwards: the explorer, else the ER diagram page when that is all that was chosen
             val explorer = written.firstOrNull { it.fileName.toString().endsWith(AtlasArtifact.EXPLORER_HTML.suffix) }
                 ?: written.firstOrNull { AtlasArtifact.isErdPage(it.fileName.toString()) }
-            Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result), removed)
+            Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result), removed, FindingTargets.index(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {

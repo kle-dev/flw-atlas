@@ -47,12 +47,17 @@ class AtlasFindingsService(private val project: Project) : Disposable {
 
     private val LOG = logger<AtlasFindingsService>()
 
-    /** One analysis: the folder analysed, the folder its `waivers.json` lives in, what it found, and when. */
+    /**
+     * One analysis: the folder analysed, the folder its `waivers.json` lives in, what it found, and when —
+     * and, for a finding with no file of its own, the files of the models it lives in ([FindingTargets]),
+     * keyed by its node, which is where opening it goes.
+     */
     class Analysis(
         val root: Path,
         val outputDir: Path,
         val findings: List<Map<String, Any?>>,
         val atMillis: Long = System.currentTimeMillis(),
+        val targets: Map<String, List<String>> = emptyMap(),
     ) {
         val defects: Int get() = CheckCatalog.countOpen(findings, CheckCatalog.DEFECT)
         val advice: Int get() = CheckCatalog.countOpen(findings, CheckCatalog.ADVICE)
@@ -99,10 +104,10 @@ class AtlasFindingsService(private val project: Project) : Disposable {
      * analysis — so the window follows every generation without a second one. Ignored for a folder other
      * than the active Flowable project, which is what the window is about.
      */
-    fun adopt(root: Path, outputDir: Path, findings: List<Map<String, Any?>>) {
+    fun adopt(root: Path, outputDir: Path, findings: List<Map<String, Any?>>, targets: Map<String, List<String>> = emptyMap()) {
         val active = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return
         if (active.normalize() != root.normalize()) return
-        last = Analysis(root, outputDir, findings)
+        last = Analysis(root, outputDir, findings, targets = targets)
         changed()
     }
 
@@ -154,7 +159,7 @@ class AtlasFindingsService(private val project: Project) : Disposable {
         val result = generator.extract(root.toFile(), indicator, generator.waiverFile(outputDir))
         @Suppress("UNCHECKED_CAST")
         val findings = (result["findings"] as? List<Map<String, Any?>>).orEmpty()
-        return Analysis(root, outputDir, findings)
+        return Analysis(root, outputDir, findings, targets = FindingTargets.index(result))
     }
 
     /**

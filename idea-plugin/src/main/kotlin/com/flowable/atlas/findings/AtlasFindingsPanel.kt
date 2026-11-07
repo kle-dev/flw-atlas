@@ -10,6 +10,7 @@ import com.flowable.atlas.hub.HubLayout
 import com.flowable.atlas.hub.HubText
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.intention.OpenInAtlasExplorerIntention
+import com.flowable.atlas.usage.ModelSearchUsages
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.CommonActionsManager
@@ -23,11 +24,14 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.DumbAwareToggleAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.OnePixelSplitter
@@ -43,6 +47,7 @@ import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.TopGap
 import com.intellij.ui.dsl.builder.RightGap
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.EditSourceOnDoubleClickHandler
 import com.intellij.util.ui.JBUI
@@ -52,6 +57,8 @@ import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
+import java.nio.file.Path
+import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
@@ -66,8 +73,9 @@ import javax.swing.tree.DefaultTreeModel
  * saying how current the analysis is (*3 defects · 41 advice · analyzed 2 min ago*, and when a model
  * changed since, how many and *Analyze Again*), and the tree beside a detail pane. The pane is what the
  * page says about a check — why it matters, what to do, where to read more — and the way into the
- * explorer at the finding's model. A double-click or Enter opens the finding's file at its line;
- * *Accept…* writes a rule to the same `waivers.json` the explorer's Save writes.
+ * explorer at the finding's model. A double-click or Enter opens the finding where it is — its line, its
+ * element, or the model a finding without a file of its own lives in; *Accept…* writes a rule to the same
+ * `waivers.json` the explorer's Save writes.
  */
 internal class AtlasFindingsPanel(private val project: Project) : SimpleToolWindowPanel(false, true), Disposable {
 
@@ -189,7 +197,9 @@ internal class AtlasFindingsPanel(private val project: Project) : SimpleToolWind
         (tree.selectionPath?.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? FindingsTree.Item
 
     private fun showDetail() {
-        detail = FindingsDetail.of(selectedItem(), selectedFindings().size)
+        val item = selectedItem()
+        val targets = (item as? FindingItem)?.let { FindingTargets.filesOf(it.finding, service.last?.targets.orEmpty()) }.orEmpty()
+        detail = FindingsDetail.of(item, selectedFindings().size, targets)
         val d = detail
         // Paragraphs wrap to the pane's width whatever it is — HubText, not the DSL's word-wrapping text,
         // which asks for its whole line and pushed the pane wider than the splitter gave it.
@@ -200,8 +210,10 @@ internal class AtlasFindingsPanel(private val project: Project) : SimpleToolWind
             d.finding?.let { text -> row { para(text) } }
             d.file?.let { file ->
                 row(message("findings.detail.where")) {
-                    link(file.substringAfterLast('/') + (d.line?.let { ":$it" } ?: "")) { open() }
-                        .applyToComponent { toolTipText = file }
+                    link(file.substringAfterLast('/') + (d.line?.let { ":$it" } ?: "")) { e ->
+                        open { RelativePoint.getSouthWestOf(e.source as JComponent) }
+                    }.applyToComponent { toolTipText = file }
+                    if (d.others > 0) comment(message("findings.detail.more", d.others))
                 }
             }
             d.accepted?.let { text -> row(message("findings.detail.accepted")) { para(text) } }
@@ -236,17 +248,47 @@ internal class AtlasFindingsPanel(private val project: Project) : SimpleToolWind
             }
         }.filter { it["waived"] == null }.distinct()
 
-    /** Opens the finding's file at its line. The file is resolved off the EDT — it may need a refresh. */
-    private fun open() {
+    /**
+     * Opens the selected finding where it is: its file at its line when the analysis knows the line, else at
+     * its element or what it names, found in the file's text ([FindingTargets.offsetIn]) — a minified form
+     * has no lines, a column finding names its file and not where in it. A finding with no file of its own
+     * (a variable, an operation, an expression several models hold) opens in the model it lives in, with a
+     * chooser at [at] when there are several; one that lives in no model lists where the models mention
+     * its name. Without this a third of the rows of a real project opened nothing at all.
+     */
+    private fun open(at: () -> RelativePoint = { JBPopupFactory.getInstance().guessBestPopupLocation(tree) }) {
         val item = selectedItem() as? FindingItem ?: return
-        val root = service.last?.root ?: return
-        val label = item.file ?: return
-        val line = item.line
+        val analysis = service.last ?: return
+        val files = FindingTargets.filesOf(item.finding, analysis.targets)
+        when {
+            files.isEmpty() -> item.label.takeIf { it.length >= ModelSearchUsages.MIN_PATTERN_LENGTH }
+                ?.let { ModelSearchUsages.show(project, it) }
+            files.size == 1 -> navigate(analysis.root, files.single(), item)
+            else -> JBPopupFactory.getInstance().createPopupChooserBuilder(files)
+                .setTitle(message("findings.open.choose"))
+                .setItemChosenCallback { navigate(analysis.root, it, item) }
+                .createPopup()
+                .show(at())
+        }
+    }
+
+    /** Resolves [label] and finds the finding in it off the EDT — it may need a refresh, an archive a mount. */
+    private fun navigate(root: Path, label: String, item: FindingItem) {
+        // the line is a line of the finding's own file, never of a model it is only used in
+        val line = item.line?.takeIf { label == item.file && it > 0 }
         ApplicationManager.getApplication().executeOnPooledThread {
             val vf = AtlasFileLabels.resolve(root, label) ?: return@executeOnPooledThread
+            // the document's text, not the file's bytes: its offsets are the editor's, line separators included
+            val offset = if (line != null) null else ReadAction.computeBlocking<Int?, RuntimeException> {
+                FileDocumentManager.getInstance().getDocument(vf)?.let { FindingTargets.offsetIn(it.text, item.finding) }
+            }
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
-                (if (line != null && line > 0) OpenFileDescriptor(project, vf, line - 1, 0) else OpenFileDescriptor(project, vf)).navigate(true)
+                when {
+                    line != null -> OpenFileDescriptor(project, vf, line - 1, 0)
+                    offset != null -> OpenFileDescriptor(project, vf, offset)
+                    else -> OpenFileDescriptor(project, vf)
+                }.navigate(true)
             }, ModalityState.any())
         }
     }
