@@ -168,7 +168,6 @@ object GraphBuilder {
         }
 
         // --- model nodes from buckets (explicit semantic order — key_to_node is first-wins). ---
-        val nodeTypeByBucket = ModelKinds.MODEL_KINDS.associate { it.bucket to it.nodeType }
         val modelBucketOrder = listOf(
             "apps", "processes", "cases", "decisions", "forms", "dataObjects",
             "services", "agents", "channels", "events", "dictionaries", "policies", "actions",
@@ -176,9 +175,7 @@ object GraphBuilder {
         for (bucket in modelBucketOrder) {
             for (o in bucketList(bucket)) {
                 val om = o as Map<String, Any?>
-                val ntype = if (bucket == "forms") (om["modelType"] as? String ?: "form")
-                else nodeTypeByBucket.getValue(bucket)
-                addNode(ntype, om["key"], om["name"], om["file"], o)
+                addNode(ModelKinds.nodeType(bucket, om), om["key"], om["name"], om["file"], o)
             }
         }
         for (o in bucketList("liquibase")) {
@@ -196,7 +193,7 @@ object GraphBuilder {
         }
         for (o in bucketList("others")) {
             val om = o as Map<String, Any?>
-            addNode(om["modelType"] as? String ?: "other", om["key"], om["name"], om["file"], o)
+            addNode(ModelKinds.nodeType("others", om), om["key"], om["name"], om["file"], o)
         }
 
         // all model keys (for CODE -> MODEL references); liquibase keys are file-derived, so excluded.

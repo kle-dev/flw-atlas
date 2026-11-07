@@ -67,4 +67,19 @@ object ModelKinds {
     /** Model types whose graph/index type differs from the parser key (bpmn→process, cmmn→case, …). */
     val NORMALIZE_TYPE: Map<String, String> =
         MODEL_KINDS.filter { it.mtype != it.nodeType }.associate { it.mtype to it.nodeType }
+
+    private val NODE_TYPE_OF_BUCKET: Map<String, String> = MODEL_KINDS.associate { it.bucket to it.nodeType }
+
+    /**
+     * The graph node type of [entry], a model in [bucket] — what its node id `<type>:<key>` starts with. Two
+     * buckets hold several types and the entry says which: `forms` (a form or a page) and `others` (every
+     * kind without a bucket of its own). Shared by the graph and by anything that has to name a bucket entry
+     * the way the graph does, so the two cannot drift.
+     */
+    fun nodeType(bucket: String, entry: Map<*, *>): String = when (bucket) {
+        "forms" -> entry["modelType"] as? String ?: "form"
+        "others" -> entry["modelType"] as? String ?: "other"
+        "liquibase" -> "liquibase"
+        else -> NODE_TYPE_OF_BUCKET[bucket] ?: bucket
+    }
 }
