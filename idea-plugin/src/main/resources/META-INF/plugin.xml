@@ -183,435 +183,412 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        <h3>0.30.1</h3>
+        <h3>0.31.0</h3>
         <ul>
-          <li><b><code>graph.json</code> is back to its size on projects with large, nested forms.</b>
-              0.30.0 copied the gated containers around a form field — each panel or subform that can hide,
-              disable or ignore it, with its conditions — onto every field inside them. That grew with
-              fields × nesting depth × condition length, and on large, deeply nested forms it multiplied the
-              size of the whole graph and slowed the explorer and everything else that reads it. A form now
-              describes each such container once, under <code>containers</code>, and a field's
-              <code>containerGates</code> lists only their ids, nearest first.</li>
-        </ul>
-        <h3>0.30.0</h3>
-        <ul>
-          <li><b>A guide for agents that drive Flowable Work in a browser.</b> Atlas now writes
-              <code>&lt;project&gt;.playwright.md</code>: what an agent with a browser — the Playwright MCP
-              server, a Playwright script or another browser tool — needs to work <i>in</i> Work rather than
-              on the code. Start a case or process, open a case or task, see which stage a case is in, claim
-              and complete tasks and fill in their forms, press a case's actions, bring a case to a given
-              stage, find the open tasks of a user or group, explain why a button is missing or greyed out,
-              and know when to stop and ask. The first part is how Work behaves, for any project: a quick
-              start that reads a case's whole state in one call; the rules (act through the UI, only look
-              through REST, never click a disabled button, ask before anything irreversible); the sign-in,
-              the routes, <i>Create New</i>, the stage bar, the toolbar where manual-activation items and
-              user event listeners become buttons, and a task's outcome buttons; the read-only REST
-              endpoints that explain a screen; the CMMN rules that move a case; a checklist for a disabled
-              button; the loop for reaching a stage; and the Playwright traps, with what each script call is
-              in Playwright MCP.</li>
-          <li><b>The guide says which Work it describes.</b> Locators, dialogs and buttons differ between
-              Work's lines. The guide describes 2026.1 and newer, marks what older lines do differently, and
-              keeps a table with one column each for 2026.1 and newer, 2025.2, 2025.1 with 3.15–3.17, and
-              3.14 and older — apart because Work's own screens got their ARIA roles only in 3.15. The
-              version the project builds against names the column, and the agent is told to read the running
-              version from the system before relying on it. The notes were compiled from Work's frontend
-              source for each line and its own end-to-end test helpers, not by driving a running Work; the
-              guide says so, and what to fall back on when a locator finds nothing.</li>
-          <li><b>Its second part is this project, read from its models.</b> An index of every deployed case
-              and process: its key, the link that starts it
-              (<code>#/work?create=true&amp;definitionKey=&lt;key&gt;</code>, which also tells apart two
-              definitions with one title), its stage bar or its number of user tasks, and who may start it;
-              then the apps the sidebar shows, with their pages. Behind the index, for each case: its stage
-              bar in Work's order, and for each stage what starts it, read out of its sentries, whether it
-              completes by itself, and the tasks, manual items and listeners inside it with the groups that
-              get them. For each process: its user tasks in flow order and what leads to each. For every
-              form: its required fields and their validation rules, its outcomes and the variable they
-              write, and its conditional buttons. A condition on a variable names the outcome or the field
-              that sets it, and ⚠ marks the traps: a required field that can be hidden, which, on a form
-              saved by Design 3.8 or later, keeps the outcomes disabled with no error on the page, and
-              stage-bar entries that share a <code>displayOrder</code> or have none, which Work reorders as
-              they end. Models that only a test source set deploys are left out.</li>
-          <li><b>One artifact in two files.</b> A skill is loaded whole, and on a real project the details
-              are most of the text, so <code>--all</code>, the launcher and the plugin write them to a
-              project map beside the guide, <code>&lt;project&gt;.playwright-map.md</code>, which its index
-              points into; <code>--playwright</code> alone writes one file with the details inline. In the
-              plugin, tick <i>Playwright guide for Flowable Work (+ project map)</i> under <i>Settings →
-              Tools → Flowable Atlas → Generation</i>. The guide opens with skill front matter: copy it to
-              <code>.claude/skills/flowable-work-ui/SKILL.md</code> and the map beside it as
-              <code>project-map.md</code>, and Claude Code loads it when a request is about Work. With the
-              guide written beside it, the generated <code>CLAUDE.md</code> names the requests it is for and
-              says to read it before the first click. Written outside the project — the launcher's default —
-              the guide names the map and the graph by their full path, the home directory as
-              <code>~</code>.</li>
-          <li><b>A sentry's condition is read from its <code>ifPart</code>.</b> Design writes its condition
-              builder as <code>&lt;flowable:condition&gt;</code> elements before the <code>ifPart</code>.
-              Atlas took the first of them, which is empty, so on every sentry built that way the real
-              condition was missing from the overview, the explorer and the graph.</li>
-          <li><b>The graph keeps what moves a case in Work.</b> Sentries keep their <code>triggerMode</code>
-              and the event each on-part waits for, and every entry and exit criterion the plan item it sits
-              on (<code>planItemId</code>); an exit keeps its <code>exitEventType</code> and
-              <code>exitType</code>. A case keeps its own exit criteria, its start form, its <i>Work
-              form</i> and its candidate starter users. Stages and milestones keep
-              <code>displayOrder</code>, <code>includeInStageOverview</code> and their place in Work's stage
-              overview, and a stage its <code>autoCompleteCondition</code>. A plan item keeps the button
-              name, groups and users of its manual activation, the start form that button opens, its
-              <code>maxInstanceCount</code> and the collection a repetition runs over, and its
-              <code>parentCompletionRule</code> and <code>completionNeutralRule</code>; a listener keeps its
-              <code>availableCondition</code>, its timer, and the variable or signal it waits for. A user
-              task keeps its candidate users and the sub-process around it, a multi-instance its completion
-              condition, and a process its candidate starter users.</li>
-          <li><b>Forms and apps keep what Work shows of them.</b> A form keeps the variable its outcome is
-              stored in (<code>outcomeVariableName</code>), <code>doNotCreateOutcomeVariable</code> and the
-              Design version it records. An outcome keeps <code>visible</code>, <code>enabled</code>,
-              <code>ignoreValidation</code> and <code>navigationUrl</code>. A field keeps its validation
-              rules — pattern, bounds, length, date format, custom checks — and the containers around it
-              that can hide, disable or ignore it. An app keeps <code>flowApp</code>, its <code>url</code>
-              and <code>order</code>, and each page its label and url.</li>
-          <li><b>A deployed model wins over its test copy.</b> A model under a test source set
-              (<code>src/test/…</code>) that shared its key with one the app deploys could stand in for it
-              everywhere: the first copy read was the model, and loose files are read before archives, so an
-              empty test fixture replaced the process a <code>.bar</code> deploys — in the explorer, the
-              overview, the graph and the findings. Test copies are read last now: the deployed copy is the
-              model, and a test copy that references other models is listed among its other copies.</li>
-          <li><b>A case's generic event listeners are among its event listeners.</b> Design writes a
-              variable, signal or reactivation listener as a generic <code>eventListener</code>, which Atlas
-              did not count as one, so a signal listener was never linked to the models that throw its
-              signal. It is listed now, with its kind, and linked.</li>
-          <li><b>A form input without a caption is a field.</b> Design lets a modeller leave the label out,
-              and such an input was never recorded: a task form whose only input was a required number field
-              read as having nothing required. An input without a caption now counts when it is required, or
-              bound to a value.</li>
-          <li><b>An app that lists its pages under <code>pages</code> contains them.</b> Older Design
-              workspace exports keep an app's pages there rather than under <code>pageModels</code>, the
-              only place Atlas looked: such an app contained no page, and its pages' permissions were
-              missing from the access map.</li>
-          <li><b><code>CLAUDE.md</code> states the Flowable version of Work projects.</b> Only engine
-              versions (6.x–9.x) were accepted, and the property the platform's project template declares,
-              <code>&lt;com.flowable.platform.version&gt;</code>, was not looked for: every Work project
-              measured (3.11 to 2025.1) was told nothing about its version. Platform versions (3.x, 2025.x,
-              2026.x) are now found in Maven properties and dependencies and in Gradle properties, version
-              catalogs and dependency coordinates, the platform's <code>com.flowable.platform:…</code>
-              sub-groups included, and a platform version wins over an engine one. The Playwright guide
-              picks its version column from it.</li>
-          <li><b>Execution order holds across a loop.</b> When a process's flows loop back, the overview
-              could put a step the loop leads to ahead of the loop's own gateway: breaking the cycle
-              compared one step's position in the file with the order in which the walk had reached the
-              others. The step the walk is waiting on goes first now, in the overview and in the guide's
-              user tasks.</li>
-          <li><b>A project given as <code>.</code> names its files by its directory.</b> Run on
-              <code>.</code> from inside the project, the summary, the overview and <code>CLAUDE.md</code>
-              pointed at <code>..graph.json</code>, <code>..overview.md</code> and so on, while the files
-              themselves were written under the directory's name. They name the files as written now.</li>
-          <li><b>The Atlas Hub stays where you scrolled it.</b> Ticking or unticking an app in the Design
-              block threw the panel back up to the Explorer block, so the next app further down meant
-              scrolling down again — and so did every other refresh of the Hub: an analysis landing, or the
-              index rebuilt. The Hub now keeps its place.</li>
-        </ul>
-        <h3>0.29.0</h3>
-        <ul>
-          <li><b>A button that would wipe the form is a finding.</b> An expression button stores what it
-              computes, and a REST button what its call returns, in the variable its value binds — but only
-              a plain binding names one. <code>{{}}</code>, <code>{{ }}</code>, an expression such as
-              <code>{{a + b}}</code>, a literal or no value at all binds no path, and the forms runtime then
-              writes the result over the form's whole payload, or a bound panel's whole value: every field
-              the user filled in is gone the moment the button is pressed, or the moment the form opens when
-              it runs on its own. The new defect <code>payloadOverwrite</code> names each such button by
-              Design's name and its id, says what its value is and whether it runs on its own, shows the
-              value as the finding's snippet and opens on the button. A REST button that maps its response
-              with <i>Store response attributes</i> writes the mapped names instead and is not reported.
-              Atlas now runs twenty-five checks.</li>
-          <li><b>Elements: Design's palette, turned round.</b> A new page, <code>#/elements</code> (sidebar
-              → Models → Elements), lists the palette entries the project's processes, cases, forms and
-              pages use, each with how often, under Design's own groups and in its order — start events,
-              activities, gateways … for processes, tasks, sentries, listeners for cases, data entry,
-              selection, display, container, Flowable Work for forms and pages. Pick one and the page lists
-              every model holding it, opened to the elements themselves: caption, id, the value a form
-              component binds or stores, and any open finding on it, each a click away from the element in
-              its model. The filter narrows by element id, caption, value, model name, key or file, and the
-              pick and the filter ride in the URL.</li>
-          <li><b>Every form component is called what Design calls it.</b> A form's Fields table, the
-              Elements page and the search name all of the form and page palette by Design's word: an
-              <code>upload</code> is an <i>Attachment</i>, a <code>htmlComponent</code> a <i>Text
-              display</i>, a <code>number</code> with <code>numberType</code> <i>float</i> a <i>Decimal</i>,
-              a <code>select</code> with <code>multi</code> a <i>Select (multiple)</i> — the parser now
-              records which of the two entries sharing a type a component came from. Document tasks
-              (<i>Create document</i>, <i>Merge documents</i>, <i>PDF convert</i>) and the other Flowable
-              Work tasks have their Design names too.</li>
-          <li><b>The search asks for elements by type.</b> <code>has:attachment</code>, <code>has:"start
-              event"</code>, <code>has:"expression button"</code> or <code>has:scriptButton</code> finds the
-              models holding an element of that type, by the type the model stores or by Design's word for
-              it. Beside <code>has:</code>, <code>id:</code> and <code>label:</code> describe that same
-              element: <code>has:attachment label:passport</code> is the form with an attachment captioned
-              <i>Passport</i>. The row names the element that matched and opens on it; the Elements page
-              hands its pick to the search with one click.</li>
-          <li><b>A word of punctuation only is searched for as written.</b> <code>{{}}</code>,
-              <code>${}</code> or <code>=&gt;</code> split into no words at all, so the query was empty and
-              the palette answered with the recent list. Such a word is now matched literally:
-              <code>{{}}</code> finds every empty binding and every form whose button stores its result in
-              one.</li>
-        </ul>
-        <h3>0.28.8</h3>
-        <ul>
-          <li><b>An endpoint's page says what it takes.</b> A REST endpoint's page named its path, its
-              handler and who calls it, but not what a caller has to send. Its Overview now opens with
-              <i>Parameters</i>: every <code>{variable}</code> of the path, then each query parameter,
-              header, cookie, multipart part and the body its handler declares (<code>@PathVariable</code>,
-              <code>@RequestParam</code>, <code>@RequestHeader</code>, <code>@CookieValue</code>,
-              <code>@RequestPart</code>, <code>@RequestBody</code>). Each row shows the name the caller
-              sends, the type, whether it is required and its default, for Java and Kotlin handlers alike.
-              <i>Required</i> follows Spring: <code>required = false</code>, a <code>defaultValue</code>, an
-              <code>Optional</code> or a Kotlin <code>T?</code> makes a parameter optional. A parameter
-              without an annotation is listed as the query parameter Spring binds it to. What the server
-              supplies itself (the request, the principal, a session attribute) is not listed. A path
-              variable the handler takes but the path does not name is marked <i>not in the path</i>, since
-              Spring fails every such request, and a handler that takes nothing says so. A class's
-              <i>Endpoints served</i> now links each path to its page, and <code>graph.json</code> carries
-              the same list as the endpoint's <code>params</code>.</li>
-          <li><b>A handler behind a nested annotation has its own name again.</b> When a mapping was
-              followed by <code>@PreAuthorize("hasRole('A')")</code>, or by an OpenAPI
-              <code>@Operation(…)</code> with annotations nested inside it, the handler was named after a
-              word inside that annotation (<code>hasRole</code>) instead of the method.</li>
-        </ul>
-        <h3>0.28.7</h3>
-        <ul>
-          <li><b>The ER designer takes databases and tables of your own.</b> A data model rarely ends at the
-              project's schema — an order refers to a customer kept in a CRM, a task to an engine table no
-              changelog creates. The table list is now grouped by database: the project's own first, then
-              every database added with <i>+ Database</i>. <i>+ Table</i> on a group adds a table by hand —
-              a name, and a row per column with its type and whether it is the primary key — to that
-              database or to the project's own. A table added by hand is a table like any other: it relates
-              to any table of any database, frames, arranges and searches, and its panel edits it; a renamed
-              table or column keeps its relations. The databases belong to the diagram and its file (format
-              version 4). Every card names its database, small in its corner.</li>
-          <li><b>A diagram kept in the project exports again, and says when it was changed.</b> Opened for
-              the first time in a browser, the diagram was the very object it was compared with: <i>changed
-              here</i> never showed, and an export of it — the diagram file, SVG or PNG — failed without a
-              word.</li>
-          <li><b>The ER designer's search finds tables again.</b> It ranked what the diagram already shows
-              before everything else, tables and columns alike, so the columns of the tables on the canvas
-              came first — an <code>order_id_</code> in each of them buried the <code>ORDER</code> table,
-              and past sixty rows it was not listed at all, though the count above the list said it was
-              found. Tables now come first, then columns; within each, what the diagram shows first, as
-              before. And what a search finds in a table's name is marked on its card, as a column it finds
-              is — and in the list, what its filter finds.</li>
-        </ul>
-        <h3>0.28.6</h3>
-        <ul>
-          <li><b>An ER designer relation meets the rows of the columns it joins.</b> Over several columns it
-              left the card from halfway between their rows — over <code>id_</code> and <code>total_</code>,
-              from <code>customer_id_</code>, a row it does not join. Now it forks just outside the card, a
-              short stub with a dot to each of its rows. A relation over columns also meets them when the
-              two cards stand one above the other — from the side, as a bow, where it used to run from edge
-              to edge past every column — and a folded card shows the columns its relations join, in their
-              place among its first five, where a column beyond them left the line at the card's header. A
-              relation without columns meets the card's middle, as before.</li>
-        </ul>
-        <h3>0.28.5</h3>
-        <ul>
-          <li><b>An ER designer relation can join on several columns.</b> The relation's panel lists the
-              columns it joins, a row per pair under the two tables' names, and <i>+ Column pair</i> adds
-              one — for a key over several columns, <code>order_id_, line_no_</code> → <code>order_id_,
-              line_no_</code>, paired position by position as SQL pairs them. The line leaves each card from
-              between its columns' rows. In the diagram file, <code>fromColumn</code> and
-              <code>toColumn</code> are a name each for one column and lists for several; the file is
-              version 3, so 0.28.4 refuses it rather than read the relations without their columns.</li>
-          <li><b>Every relation the models state is proposed, not one per pair of tables.</b> Two fields of
-              one data object that both refer to a customer — a buyer and a payer — were one proposal, and
-              taking it hid the other. Now each is proposed on its own, over the columns it joins: a
-              service's column relation joins exactly its column and the one it refers to, and a data object
-              field the columns its service maps it to. When a data object and its service tell the same
-              relation it is one proposal, named as the data object names it and counted as the service
-              counts it. A relation you draw accounts for the proposal over its columns — else the first one
-              left — and leaves the others.</li>
-        </ul>
-        <h3>0.28.4</h3>
-        <ul>
-          <li><b>The ER designer's relations say how many at each end.</b> A relation had four cardinalities
-              — <code>1:1</code>, <code>1:n</code>, <code>n:1</code>, <code>n:m</code> — and none of them
-              could say that a customer may have no orders at all, or an order at most one invoice. Now each
-              end is chosen on its own, a row each in the relation's panel: <code>1</code> exactly one,
-              <code>0..1</code> zero or one, <code>1..n</code> one or more, <code>0..n</code> zero or more —
-              the minimum and maximum crow's-foot notation draws, so the two rows give all sixteen
-              cardinalities, <code>0..n:1</code>, <code>1:0..1</code>, <code>0..n:0..n</code> and the rest.
-              The line draws them as the notation does — a ring for none, a bar for one, a foot for many —
-              with the count beside it, and the sentence under the choice says what it means (<i>Many to
-              one: each Order has exactly one Customer, each Customer zero or more Order</i>).
-              <code>⇄</code> now turns a relation round with each table keeping its own end, where it used
-              to hand the ends to the other table.</li>
-          <li><b>Frames gather tables under a name.</b> <i>Frame</i> in the designer's toolbar (or
-              <code>F</code>), then drag over the tables: the frame holds whatever lies inside it, gets a
-              name and a colour in its panel, moves with its tables when dragged by its name tab or edge,
-              and resizes by its corners; <i>Fit to its tables</i> draws it around them again.
-              <i>Arrange</i> keeps a frame's tables together, arranged inside it, and places the frame as
-              one block beside what its tables relate to. Frames are in exported pictures and in the diagram
-              file.</li>
-          <li><b>The diagram file is version 2</b>, for the frames and the counts at each end. A version 1
-              file reads as it is (<code>1:n</code> is <code>1:0..n</code>, <code>n:m</code> is
-              <code>0..n:0..n</code>); 0.28.3 and older refuse a version 2 file rather than read it without
-              its frames.</li>
-        </ul>
-        <h3>0.28.3</h3>
-        <ul>
-          <li><b>A large project's explorer is a fraction of its size, and opens under Remote Development
-              again.</b> 0.28.0 made the explorer carry every Liquibase column's origin, every change set
-              and each service's schema coverage — on the projects measured the Liquibase part of the page
-              about tripled — and a large project's explorer grew past 20 MB: the IDE's content limit, above
-              which a Remote Development client refuses to open a file (<i>the file is too large</i>) before
-              any editor is asked. The graph inside the page, above 1 MB, is now embedded deflated and
-              inflated by the page itself before it starts. It deflates about tenfold, so an explorer is
-              about a quarter of its size (5.4 MB to 1.4 MB on the largest project measured) and still one
-              self-contained HTML file that opens the same way in any browser, from disk, from a web server
-              or in the IDE. Nothing on the page changes.</li>
-          <li><b>The ER designer's table list can be dragged wider,</b> for a table name longer than the
-              list: drag its right edge, or move the focused edge with <code>←</code> <code>→</code>; a
-              double click or <code>Home</code> resets it. The width is remembered in this browser.</li>
-        </ul>
-        <h3>0.28.2</h3>
-        <ul>
-          <li><b>The ER diagram designer is a page of its own: <code>&lt;project&gt;.erd.html</code>.</b> It
-              was a page inside the explorer, and that was the wrong place: the explorer carries the whole
-              graph, and a large one outgrows what a Remote Development client will open, while the designer
-              needs a sliver of it. The new page carries only the tables — the Liquibase changelogs'
-              columns, the database services, the data objects that read a table and their relations — and
-              the project's <code>*.atlas-erd.json</code> diagrams, so it stays a few hundred KB however
-              large the project is. <code>--all</code> writes it beside the explorer when the project has a
-              table, its tables linking into the explorer's pages; <code>--erd</code> writes it on its own.
-              In the plugin it is the artifact <i>ER diagram designer (HTML)</i> in <i>Settings →
-              Generation</i>, and opens in the same kind of editor tab, whose <i>Regenerate</i> rewrites it
-              and whose banner says when the models are newer. The explorer is back to what it was before
-              the designer: no <code>--extension</code> flag, no <i>Explorer extensions</i> setting, no
-              <code>#/erd</code> page (a link to one opens the overview). On the corpora measured, the
-              designer was about 100 KB of an explorer; a page of 20 MB is the project's own data, which the
-              explorer carries as before.</li>
-          <li><b>Search every table and column.</b> <code>⌘F</code>, <code>Ctrl+F</code> or <code>/</code>
-              in the designer searches the project's tables and their columns — by name, business name, data
-              object or column type — on the diagram or not. The results list tables and
-              <code>table.column</code> rows, the diagram's own first; <code>Enter</code> goes to one,
-              centred on the column, and adds its table when the diagram does not have it. While a search is
-              on, matching cards are outlined, the rest step back, matching columns are marked, and a folded
-              card also shows the columns it found — the one column of forty without unfolding the rest. A
-              table's panel filters its columns too.</li>
-          <li><b>Expand all, collapse all.</b> Two buttons unfold every card to all its columns and fold
-              them back to the first five, one undo step each; unfolding moves the cards below down so none
-              is covered.</li>
-          <li><b>A table's data object and service keys, to copy.</b> An (i) beside the table's name in its
-              panel unfolds what is behind it — its changelog, the services that map it and the data objects
-              that read it — each name with its key under it and a copy button, and the table's own name has
-              a copy button in the panel's title; the line that listed them under forty columns, out of
-              sight, is gone. In the list, a table read by one data object has a quiet copy icon for that
-              key beside the data object's name, and the same (i), before the table is on the canvas. A
-              search finds a table by those keys too.</li>
-          <li><b>The ER diagram from the menu.</b> With <i>ER diagram designer (HTML)</i> chosen in Settings
-              → Generation, <i>Tools → Flowable Atlas</i> — and so the Atlas Hub's ⋮ — has an <i>Open Atlas
-              ER Diagram Designer</i>: it opens the newest page in an editor tab, generating one into the
-              output folder first when there is none. In the IDE the page wears the IDE's theme and colours
-              exactly as the explorer does — it runs the explorer's own theme code — and its toolbar keeps
-              to one row in a narrow editor tab.</li>
-        </ul>
-        <h3>0.28.1</h3>
-        <ul>
-          <li><b>The ER diagram designer arranges the tables for you.</b> <i>Arrange</i> in the designer's
-              toolbar lays every table out by its relations — for a diagram with too many tables to sort by
-              hand: each relation's one side in a column left of its many side, the tables in a column
-              ordered so that as few relation lines cross as possible, each table level with the ones it
-              relates to, the columns far enough apart for the relation names between them, and unrelated
-              tables and separate groups packed underneath. The cards glide to their places and one undo
-              puts them back.</li>
-          <li><b>Relation names no longer sit on top of each other.</b> Two relations whose lines meet in
-              the same gap drew their names in one place; the lower one now moves below the upper, on the
-              canvas and in an exported picture alike.</li>
-        </ul>
-        <h3>0.28.0</h3>
-        <ul>
-          <li><b>An ER diagram designer in the explorer, for explaining a data model.</b> A page generated
-              with <code>--extension erd</code> has an <i>ER diagram</i> entry: the project's tables in a
-              list — every table the Liquibase changelogs leave once they have run, with each column's type
-              as written, and the tables of database services no changelog creates — to drag onto a canvas.
-              A card shows a table's business name, its table name and its first five columns, unfolds to
-              all of them, and takes a colour; columns can be dragged into the order that decides which five
-              show. Drawing from a card's dot to another table makes a relation with a name and a
-              cardinality (<code>1:1</code>, <code>1:n</code>, <code>n:1</code>, <code>n:m</code>), drawn
-              with crow's feet, and the relations the models already state — a data object field referring
-              to another data object, a service column relation — are offered as dashed proposals to take
-              with one click. Undo and redo, several diagrams per project, a <i>Present</i> mode that shows
-              the diagram and nothing else, and SVG and PNG export for a slide. What you draw is kept in the
-              browser, per project.</li>
-          <li><b>Explorer extensions are optional, and absent unless chosen.</b> The designer is the first
-              explorer extension: its code is inlined only into a page generated with it
-              (<code>--extension</code> on the CLI, comma-separated), so a page without it is byte-for-byte
-              what it was, and a <code>#/erd</code> link opened there lands on the overview. An unknown
-              extension, or <code>--extension</code> with an output that has no explorer page, is a misuse
-              (exit 2).</li>
-          <li><b>A diagram can live in the project.</b> <i>Export → Diagram file</i> writes
-              <code>&lt;name&gt;.atlas-erd.json</code>, which imports again in any explorer — from the menu,
-              by dropping it on the canvas, or by pasting it in the IDE. Commit it anywhere in the project
-              and every explorer generated with the designer opens on it without an import; what someone
-              changes there stays in their browser, marked <i>changed here</i>, until they export it again.
-              A diagram refers to tables by name, so it follows the schema: a dropped column leaves its
-              card, a new one joins, and a table the project no longer has is drawn dashed from the
-              diagram's own snapshot.</li>
-          <li><b>A changelog's primary key is known.</b> Atlas reads which columns are a table's primary key
-              — an inline <code>&lt;constraints primaryKey="true"/&gt;</code>,
-              <code>&lt;addPrimaryKey&gt;</code>, <code>PRIMARY KEY</code> in formatted SQL or an
-              <code>&lt;sql&gt;</code> block — and keeps it through a rename and drops it with
-              <code>&lt;dropPrimaryKey&gt;</code>. A changelog's page tags those columns <b>PK</b>, and the
-              ER diagram designer marks them with a key and lists them first on a card.</li>
-          <li><b>The plugin chooses the explorer's extensions per project.</b> <i>Settings → Tools →
-              Flowable Atlas → Generation → Explorer extensions</i> has a checkbox per extension, stored
-              with the project's other generation settings. Changing it regenerates the explorer, so the
-              page on disk has the designer — or loses it — at once; with no page yet, the IDE offers to
-              generate one. Inside the IDE's explorer tab the designer works, and <i>Export</i> copies the
-              diagram file or the SVG to the clipboard, since the tab cannot download.</li>
-        </ul>
-        <h3>0.27.2</h3>
-        <ul>
-          <li><b>Liquibase changelogs are replayed the way Liquibase runs them, and a table shows what it
-              holds at the end.</b> Changelogs were matched with regular expressions and deduplicated by
-              file name, so of a history kept as <code>v2/customer.xml</code>, <code>v3/customer.xml</code>
-              and <code>v4/customer.xml</code> only the first file was read, and the table showed what that
-              one said. Atlas now reads the XML itself and follows a master's <code>&lt;include&gt;</code>
-              and <code>&lt;includeAll&gt;</code> where they stand, an <code>includeAll</code> in
-              Liquibase's plain path order. A change set is identified by its id, author and
-              <code>logicalFilePath</code>, so one that already ran does not run again. A failed
-              precondition skips its change set, a <code>&lt;rollback&gt;</code> or a commented-out change
-              set no longer adds or drops anything, and <code>&lt;sql&gt;</code>,
-              <code>&lt;sqlFile&gt;</code> and formatted-SQL changelogs have their DDL read. Every copy of
-              one schema definition — the same app exported into several folders — is one history too.</li>
-          <li><b>A service's table is the one the application builds.</b> When a project keeps its tables in
-              its own changelogs, run by the application at startup, and the app carries the schema
-              definition the service model names, Atlas read the definition. The columns the project added
-              in its own changelog were then reported as "not in Liquibase", and the project's changelog as
-              <i>superseded</i> by its older copy in the app. The application's changelog now describes the
-              table. A definition with the same <code>logicalFilePath</code> as the application's changelog
-              is marked <b>copy</b>, not superseded. Changelogs of one Liquibase run never supersede one
-              another: the file that adds a column to another file's table is part of that table. On a real
-              project this took the changelog findings from 15 to 3, the three definitions the project
-              really had left behind.</li>
-          <li><b>A changelog the application uses for its own tables is no orphan.</b> An application
-              changelog that names no service, and whose tables no service maps, backs a table the code owns
-              — a JPA entity, a lock table — and is no longer reported. One that names a service the project
-              does not define still is, and the finding now says which service.</li>
-          <li><b>A changelog page shows its change sets and where each column came from.</b> The explorer
-              lists every change set in run order with what it changes and whether it ran, was skipped by
-              its precondition, or had already run from another file. Each column names the change set that
-              added it, and a column or table a later change set dropped or renamed is listed as gone. In
-              the schema coverage table, a mapped column the table no longer has says which change set
-              dropped or renamed it, where it said "not in changelog".</li>
-          <li><b>The IDE's changelog inspection knows about the project's other changelogs.</b> <i>Liquibase
-              column not defined in Flowable model</i> flagged a column at its declaration even when a later
-              changelog dropped or renamed it, as a <code>v3/</code> folder does to a <code>v2/</code> one.
-              It now replays the project's changelogs and leaves a column alone once the table no longer has
-              it.</li>
-          <li><b>New check: an app's copy of a changelog that differs from the code.</b> A schema definition
-              that shares its <code>logicalFilePath</code> with one of the application's changelogs is a
-              copy of it. <code>changelogDrift</code> compares the two change set by change set, setting
-              whitespace, attribute order and comments aside. When they differ, one sentence names both
-              files and the change sets that are only in the code, only in the app, or different. On a real
-              project, 11 of 12 such copies differed: an index, a column or a changed type that only one
-              side had.</li>
-          <li><b>A changelog that is not well-formed XML is reported.</b> Liquibase stops at startup on a
-              changelog it cannot read; Atlas reported nothing and read what its regular expressions found.
-              It is now a parse issue.</li>
+          <li><b>A gateway flow that can never be taken is a finding.</b> The new defect
+              <code>shadowedFlow</code> reports the default, and every flow listed after it, when an
+              exclusive gateway has a flow without a condition ahead of them: the engine takes the first
+              flow whose condition holds, and a flow without one always holds. An unconditional flow written
+              last works as an implicit default and is not reported. The sample project shows one, and Atlas
+              now runs twenty-six checks.</li>
+          <li><b><code>--baseline</code> gates what a change adds, not the backlog.</b> Most real projects
+              fail <code>--fail-on defects</code> on their first run. With <code>--baseline
+              &lt;path&gt;</code>, <code>--fail-on</code> matches only findings the baseline does not have.
+              The path can be a <code>graph.json</code> from an earlier run, or the target branch's checkout
+              or archive, which is analysed in the same run. An archive is read under any name: <code>git
+              show "$BASE:apps/app.zip" &gt; base.zip</code> is the quick way to get the base of a pull
+              request, and a file that fails to parse in both versions is not called new. Findings are
+              compared by check, model, element and subject, so a reworded message does not count as new.
+              Every report still lists every finding, and the verdict says how many it left to the
+              baseline.</li>
+          <li><b>What a change did to the models, for reviewing a pull request.</b> Git shows a commit to an
+              app archive as a binary change, so a reviewer sees nothing of what it does to a process.
+              <code>--changes --baseline &lt;base&gt;</code> writes <code>APP_OVERVIEW.changes.md</code>, or
+              prints it with <code>--stdout</code>, and <code>--all</code> with <code>--baseline</code>
+              writes <code>&lt;project&gt;.changes.md</code> beside the other artifacts. The report lists
+              every model added, removed or changed, with the tasks, flows, form fields and rules that came,
+              went or changed in each. It also lists the references added and removed, and the findings the
+              change brought and the ones it resolved. It is short enough for a pull-request comment or a CI
+              step summary. A model kept in two files, such as a Design export beside its
+              <code>-bar.zip</code>, counts as changed when either copy changes, and the report names the
+              file when only the copy Atlas does not show changed (<code>graph.json</code> lists such models
+              under <code>modelCopies</code>).</li>
+          <li><b>A red <code>--fail-on</code> run names the findings that made it red.</b> The log used to
+              show only counts per check. After the count line it now lists the matching findings, worst
+              first and one per line: severity, check, file and line (or node id), model and element, and
+              message. It lists the first 50, then says where to read all of them.</li>
+          <li><b><code>--annotate github</code> puts those findings on the pull request.</b> The same
+              findings are printed as GitHub Actions workflow commands on stdout, which GitHub shows as
+              annotations on the run and on the pull request's files. Paths are relative to the working
+              directory, so run the job from the checkout's root. A model inside an archive gets no line
+              number, because GitHub can only point at the archive.</li>
+          <li><b><code>--junit &lt;file&gt;</code> writes the findings as a JUnit report for CI test
+              views.</b> GitLab's merge-request widget, Jenkins, Azure DevOps and GitHub test reporters show
+              one suite per check and one testcase per finding. A finding keeps the same name from run to
+              run. A finding the gate matches is a failure that says why it matters and what to do. Waived,
+              ungated and baselined findings are skipped, each with its reason.</li>
+          <li><b>A CLAUDE.md the CLI writes tells an agent how to check its model edit.</b> Its start-here
+              procedure now ends with the command that reruns Atlas with <code>--baseline</code> against the
+              generated <code>graph.json</code> and <code>--fail-on defects</code>. An agent sees each
+              defect its change added before it reports done.</li>
+          <li><b>A waiver file that waives less than it seems to now says why.</b> A syntax error is
+              reported with the file's name, line and column, not as "waivers.json is not a JSON object". A
+              rule naming a check Atlas does not know is reported with the nearest check id, and the rule is
+              kept. A top-level key nothing reads is reported, because the explorer's Save would drop it.
+              Above all this is <code>rules</code>, which is what <code>graph.json</code> calls them. A
+              <code>waivers</code> or <code>notes</code> that is not a list is reported too. A
+              <code>--waivers</code> path that does not exist is now said on stderr; before, it waived
+              nothing without a word.</li>
+          <li><b>A finding opens on the line it is about.</b> Each finding now carries the line of its
+              element's declaration, of the reference that names a missing model, of the expression, or of
+              the script line a script problem is on. A script problem used to give its line within the
+              script as a line of the model. The explorer's open button, the IDE's Findings panel and the
+              overview's <code>file:line</code> now land on that line, inside archives too.</li>
+          <li><b>A missing model says who references it.</b> A <code>missingRefs</code> finding names the
+              model that references the missing key, and how many more do, and opens on that reference. It
+              used to name only the missing key.</li>
+          <li><b>An expression finding names the models that hold the expression.</b> The summary,
+              <code>CLAUDE.md</code> and the overview say which models contain an invalid or suspect
+              expression. The finding opens there when a single model holds it, and a model's
+              <code>--slice</code> now lists the problems of its expressions.</li>
+          <li><b>A task whose every outgoing flow is conditional needs a default too.</b>
+              <code>gatewayNoDefault</code> now also reports a task, event or subprocess that leaves only
+              through conditional flows and has no default flow. When none of the conditions holds, the
+              engine throws "no outgoing sequence flow" there, just as it does at a gateway. The count line
+              now reads <i>choices with no way out</i>.</li>
+          <li><b>Two flows that are exact opposites always leave a way out.</b>
+              <code>${x}</code>/<code>${!x}</code>, <code>${a == b}</code>/<code>${a != b}</code> and
+              <code>vars:isEmpty</code>/<code>vars:isNotEmpty</code> are no longer reported by
+              <code>gatewayNoDefault</code>. <code>== true</code>/<code>== false</code> still are, because
+              both are false when the value is unset.</li>
+          <li><b>An error boundary counts only when it can catch the failure.</b> Only a BPMN error reaches
+              an error boundary event or an error event subprocess. A mail or HTTP task behind one is
+              therefore reported by <code>unguardedTasks</code> unless it maps its failure with
+              <code>flowable:mapException</code>, and the messages and the suggested fix now say so.</li>
+          <li><b>An HTTP task with <code>handleStatusCodes</code> is no longer treated as handled.</b> The
+              engine turns those status codes into the BPMN error <code>HTTP&lt;code&gt;</code>, which fails
+              the instance when nothing catches it. The task is now reported until an error boundary or an
+              error event subprocess is there to catch it, even when <code>ignoreException</code> is
+              set.</li>
+          <li><b>A task that only ever runs inside a timer's or an async step's job is no longer told its
+              exceptions reach a caller.</b> <code>unguardedTasks</code> now treats a synchronous task like
+              an async one when every path to it starts at a timer or an async step with no wait state in
+              between.</li>
+          <li><b>A <code>vars:</code> call with the wrong number of arguments is an invalid expression.</b>
+              <code>${vars:get('route', 'A')}</code> makes the engine read <code>'route'</code> as the
+              variable container and fail at runtime, and <code>${vars:equals(x)}</code> is an argument
+              short. Both are now <code>invalidExpr</code> errors in the reports, and the IDE's expression
+              inspection flags them too. <code>${vars:get(execution, 'x')}</code> stays valid.</li>
+          <li><b>Models the platform ships are no longer reported as missing.</b> A reference to one of the
+              platform's default forms, permission decisions, templates, documents, actions or security
+              policies now resolves to a platform-provided model. That includes the
+              <code>F07-deactivateUser</code> form that a copied <code>deactivate-user.action</code> keeps,
+              which used to be a <code>missingRefs</code> error and failed <code>--fail-on error</code>. A
+              misspelt key, or the same key used for another kind of model, is still reported, and the IDE's
+              broken-key inspections draw the same line.</li>
+          <li><b>A repository without service models no longer reports its changelogs as orphans.</b> When a
+              project defines no service and no data object, its models are deployed from elsewhere. A
+              changelog that names a service the project lacks is then no longer a
+              <code>changelogIssues</code> finding.</li>
+          <li><b>A script may use <code>task</code> or <code>execution</code> as its own variable names.</b>
+              Closure, loop, <code>catch</code>, function and arrow parameters now shadow the engine's
+              bindings the same way a declaration does. So <code>tasks.any { task -&gt; … }</code> in a
+              script task is no longer reported as using a <code>task</code> that the context does not
+              bind.</li>
+          <li><b>Calls to the methods of the engine's own objects are no longer typos.</b> A script may call
+              any method of the entity the engine binds, such as
+              <code>execution.getRootProcessInstance()</code> or <code>caseInstance.setName(…)</code>, and
+              <code>scriptIssues</code> no longer suggests the nearest documented method instead. Completion
+              still offers only the documented interface.</li>
+          <li><b>A script service operation's body is checked.</b> The script of a script-type service
+              operation (<code>config.script</code>) runs only when something calls the operation, and Atlas
+              did not look at it, so a body that could never run was found by its first caller. It is now
+              validated in its own context — the <code>flw</code> API and the operation's inputs, by name,
+              and no execution — reported as <code>scriptIssues</code> on the operation, shown on the
+              operation's card on the service's page, where the finding opens it, and listed on the
+              explorer's Scripts page under <i>Service scripts</i>. The Script Playground offers the context
+              too, with an example.</li>
+          <li><b>A TODO in a BPMN, CMMN or DMN file names the element it sits in.</b> The finding jumps to
+              that element, and a sentry is shown by the diamond of its criterion. A TODO with nothing after
+              it is identified by that element and what carries it (<code>sentry2/documentation</code>)
+              instead of by its line, so accepting it survives an edit above it.</li>
+          <li><b>A broken palette, dashboard component, user definition or tenant setup is a parse
+              issue.</b> A truncated <code>.palette</code> or <code>.dashboardcomponent</code> came out as a
+              record with no key that nothing could show. An unparseable <code>.user.json</code>, tenant
+              setup or master-data rows file was dropped, and so was one above the 32 MB limit. None of this
+              was reported, although the platform fails to deploy or start on a broken one. Each is now
+              reported like any other model that does not parse: a <code>parse</code> diagnostic and a
+              <code>parseIssues</code> error naming the file. An oversized one is a <code>skip</code>
+              warning, like an oversized model.</li>
+          <li><b>A malformed XML file is reported with its line, and <code>-q</code> stays quiet.</b> A
+              BPMN, CMMN or DMN model or a Liquibase changelog that was not well-formed made the XML parser
+              print its own <code>[Fatal Error] :2:3: …</code> to stderr, even under <code>-q</code>, and
+              the parse issue named the file but not the line. Nothing is printed now. The
+              <code>parseIssues</code> finding carries the line, so the explorer and the IDE open the file
+              there, and <code>-v</code> prints <code>path:line</code>.</li>
+          <li><b>Alt+Enter opens the explorer page of a Java class, method or REST handler.</b> On the name
+              of a class or method a model uses, or of a REST handler, <i>Open in Atlas Explorer</i> opens
+              its class, method or endpoint page: roles and bean names, the models using it, an endpoint's
+              callers and parameters. The gutter marks only list the models.</li>
+          <li><b>A broken model key inside a JSON model is flagged in the editor.</b> A form component's
+              subform, a data object's backing service, an app's models or a channel's event that names no
+              model used to deploy without a word, although the report calls it a missing reference. The new
+              inspection <i>Unknown Flowable model key (model JSON)</i> flags it, with a fix to the nearest
+              key.</li>
+          <li><b>Messages, signals and task keys in Java are links, and an unknown one is flagged.</b>
+              Ctrl+click on <code>signalEventReceived("…")</code>,
+              <code>startProcessInstanceByMessage("…")</code>, <code>taskDefinitionKey("…")</code> or
+              <code>activityId("…")</code> lands on the <code>&lt;signal&gt;</code>,
+              <code>&lt;message&gt;</code> or <code>&lt;userTask&gt;</code> that declares it, and Ctrl-Q
+              names the model. The new inspection <i>Unknown Flowable message, signal or task name</i> flags
+              a message or signal that no model declares: an unknown message throws at run time, and an
+              unknown signal reaches nobody. It flags a task key or activity id only when the chain names
+              its process. A bare <code>signalRef</code>, or a signal a case's event listener waits for,
+              counts as a name the engine uses. A name a model computes at run time gets no verdict.</li>
+          <li><b>Event keys the platform ships are no longer flagged in model XML.</b>
+              <code>_flowableMailEvent</code> and its siblings are not missing models, as the report already
+              says. A form key that names a page, or a data-object key that names master data, also counts,
+              as it does at run time.</li>
+          <li><b>Atlas Findings opens every finding where it is.</b> A double-click or Enter did nothing for
+              a finding with no file of its own, and opened most of the rest at the top of the file. A
+              finding now opens at its line. Without a line (in a minified form, or for a column or a config
+              path) it opens at its element or at what it names. A variable, a service operation or an
+              expression that several models hold opens in the model it lives in, and the window asks which
+              one when there are several. The detail pane's <i>Where:</i> row names that model and how many
+              more there are.</li>
+          <li><b>Accepting a finding in Atlas Findings updates the explorer too.</b> Accept now regenerates
+              the explorer pages in the folder of the <code>waivers.json</code> it wrote, and an open page
+              reloads where you were reading. The window, the Hub and the page then show the same counts.
+              Before, the page still counted the accepted finding as open. While the pages are regenerated,
+              the window says it is analyzing.</li>
+          <li><b>An accepted finding stays accepted when the explorer was generated outside the output
+              folder.</b> Accept writes <code>waivers.json</code> next to that page, but the next analysis
+              read the one in the configured output folder, so the finding came back as open. The analysis
+              now reads the file Accept wrote.</li>
+          <li><b>The Hub's "Analyze findings" link runs the analysis.</b> After a sub-project switch or a
+              failed run, the link only brought up Atlas Findings, which read <i>No analysis yet</i> and
+              needed a second click. Now the link runs the analysis and opens the window on it.</li>
+          <li><b>A Design pull that removed model keys offers "Find broken references".</b> The action runs
+              the <i>Unknown Flowable model key</i> inspection over the Flowable project, so Java that still
+              uses a removed key shows in the Inspection Results window. It also analyzes the project again
+              in Atlas Findings, where <i>Missing model refs</i> lists every removed key that a model still
+              uses, including models inside archives. Each row names the first model that uses the key and
+              how many more do.</li>
+          <li><b>Generate Atlas Explorer on another Flowable project's folder generates that project.</b> In
+              a monorepo, the Project-view entry ignored the folder that was right-clicked. On a folder of
+              another detected project it now reads <i>Generate Atlas Explorer for apps/billing…</i> and
+              makes that project the active one first, so its settings apply.</li>
+          <li><b>The model-constants class stays with the Flowable project it was generated in.</b> In a
+              monorepo, picking another project in the Atlas Hub used to rewrite the shared constants class
+              with that project's keys and naming, so code compiling against it broke. The class is now kept
+              in sync only while its own project is active, and switching back brings it up to date. In a
+              repository with several Flowable projects, the Model Constants settings page names the one it
+              follows.</li>
+          <li><b>Generate Model Constants works while the model index is still being built.</b> Right after
+              opening a project or saving a model, the action ended in a "NullPointerException" balloon and
+              wrote nothing. It now waits for the index behind its progress dialog, which you can
+              cancel.</li>
+          <li><b>Generate Model Constants leaves its sync setting as you set it.</b> Generating the class by
+              hand ticked <i>Keep the generated class in sync</i> again, and the class was then rewritten on
+              every model change.</li>
+          <li><b>Generate → Liquibase builds a data object's table from its service's columns.</b> When a
+              data object had no bundled changelog, its changelog was built from its field names, none of
+              which are columns its service reads, and it had no primary key. It is now built the way
+              Flowable Design builds it: the service's column names, the lookup id as the primary key and a
+              join table per relation. Field names are used only as a labelled guess when there is no
+              database service. A table your own Liquibase changelogs already create is shown as <i>Already
+              created by</i> that file, cannot be ticked and is not written again.</li>
+          <li><b>Generate → Liquibase no longer freezes typing while it prepares its preview.</b> On a cold
+              index it scanned every model, walked the project and decompressed every app export in one read
+              action, holding the editor's read lock the whole time. The model scan and the decompression
+              now run without it, and the walk takes it only in a short read action of its own.</li>
+          <li><b>Generated data-object DTOs handle JSON fields and awkwardly named fields.</b> A JSON field
+              was read as a String and threw a ClassCastException for every instance that set it. It is now
+              a Jackson <code>JsonNode</code>, the type the platform keeps it as. A field named after a Java
+              keyword, such as <code>default</code> or <code>case</code>, or named <code>bean</code>,
+              produced a class that did not compile. A keyword field now gets an escaped identifier and
+              keeps its getter <code>getDefault()</code>.</li>
+          <li><b>The Atlas Hub no longer stays on "scanning…" after a sub-project switch during a scan.</b>
+              Switching sub-project or saving a model while the index was being built threw that build away
+              without starting the next one, so the Hub, the editor's markers and the model-constants class
+              waited for some unrelated event. The new build now starts at once, and a failure of the
+              discarded build no longer blocks it.</li>
+          <li><b>A model index that could not be built no longer rebuilds in a loop while the Atlas
+              Playground is open.</b> The playground retried the failed build on every index event: a full
+              rescan every few hundred milliseconds, each one an IDE error report. It now waits for a model
+              change or <i>Rebuild Model Index</i>.</li>
+          <li><b>Find Usages into models no longer blocks typing, and Cancel stops it.</b> The search held
+              the editor's read lock while it read every model file and archive entry. It now reads them
+              without it, takes the lock only for a file with a hit, and stops at the next file when you
+              cancel.</li>
+          <li><b>The editor reads your custom functions from the same place as the explorer.</b> With a
+              sub-project active, the editor resolved the <i>Customization source</i> against the repository
+              root, missed it and read every app's functions instead. Changing the custom-function settings
+              or switching sub-project also only took effect once a frontend file changed or the IDE
+              restarted. The editor now resolves the source the way generation does and reads the functions
+              again as soon as either changes.</li>
+          <li><b>Helm templates, systemd units and Java policy files are no longer opened as JSON.</b> Atlas
+              mapped <code>.tpl</code>, <code>.service</code>, <code>.policy</code>, <code>.data</code> and
+              other model extensions to JSON in every project of the IDE. Those extensions are now JSON only
+              when the file holds a JSON object, whether in a folder or inside an archive.</li>
+          <li><b>Without the embedded browser, the explorer opens in your browser, not as source.</b> In an
+              IDE without JCEF, the Open action, the auto-open after Generate, the balloon, the Alt+Enter
+              intention, Atlas Findings and Recent Models opened the generated page's megabytes of HTML in
+              the text editor and dropped the page you asked for. They now open it in your browser, on the
+              page you asked for where your system's launcher passes the route on, or say that neither is
+              possible here.</li>
+          <li><b>Open in Atlas Explorer on a model Atlas does not read says why.</b> On a model in another
+              Flowable project than the active one, in a build folder, or with no readable key, the
+              Project-view entry used to do nothing at all. A balloon now names the reason.</li>
+          <li><b>Regenerate and the stale line work when no explorer page is selected.</b> A project that
+              generates only CLAUDE.md, the graph or the Playwright guide got "No Atlas Explorer yet" from
+              Regenerate, no Regenerate after a Design pull, and no warning that those files were stale. An
+              old page left from the default selection also kept a stale line that Regenerate could never
+              clear. Regenerate, the pull balloon and the Hub now go by the selected artifacts, and the line
+              reads <i>changed since the Atlas artifacts</i>.</li>
+          <li><b>The plugin names a dot-prefixed project's files the way the CLI does.</b> For a folder like
+              <code>.DEMO-solution</code>, the plugin wrote <code>project.*</code>, while the CLAUDE.md and
+              the Playwright guide it wrote alongside pointed at <code>.DEMO-solution.*</code>, which did
+              not exist.</li>
+          <li><b>The plugin manager's description covers what the plugin does today.</b> It now names Atlas
+              Findings, Go to Model and the Search Everywhere tab, the text-and-picture model editor,
+              archive browsing, Compare Model with Archive, the gutter icons and the DTO and Liquibase
+              generators. It gives menu and settings paths as the IDE shows them. The settings page no
+              longer calls the IDE-wide environments per project.</li>
+          <li><b>The ER designer proposes the relations Design keeps in join tables.</b> A database
+              service's <code>object-relation</code> or <code>list-relation</code> is not a column of its
+              table. Design keeps it in a join table of two columns, the owning row's lookup id and the
+              referenced row's, and the runtime joins through that table. The designer understood only a
+              column relation that Design never writes. On a real project it proposed a relation only where
+              a data object named one: between the two tables, without columns, and mostly as a strict
+              <code>1:1</code>. Every join table sat unconnected. When a changelog creates the join table,
+              the designer now proposes two relations from it, over exactly its columns: one to the owning
+              table and one to the table it refers to. When none does, it proposes one relation between the
+              two tables. When the relation names no service, the table it refers to is found through the
+              data object field of the same name, as the runtime finds it. A data object's one-to-one is now
+              proposed as <code>0..n:0..1</code> instead of a strict <code>1:1</code>: the field holds one
+              object, but nothing in the schema makes it unique.</li>
+          <li><b>A table's panel in the ER designer names the tables the models relate it to.</b> A proposal
+              shows only once both of its tables are on the canvas, and nothing said which table to add. A
+              table's panel, and its (i) in the list, now list the related tables. Through a join table, the
+              list names the table beyond it. Each row says whether the relation is proposed, drawn or
+              dismissed. <i>add</i> puts the missing tables on the canvas beside it, with the proposals
+              between them, and <i>add all</i> adds every one in a single undo step.</li>
+          <li><b>A dismissed proposal can come back.</b> <i>Diagram → Show N dismissed proposals again</i>
+              brings them all back in one undoable step, and <i>show again</i> in a table's related list
+              brings back one at a time. Before, once the undo history was gone, a mis-click on × was
+              permanent.</li>
+          <li><b>A browser copy of a project diagram no longer hides a teammate's change to the file.</b> A
+              copy undone back to the file, or one whose export the file now holds, follows the file again.
+              A copy edited before the file changed keeps your work and says the file has changed in the
+              project since, with <i>Revert</i> to show it. Before, it invited an export that would write
+              over the teammate's change.</li>
+          <li><b>Schema coverage no longer lists a relation mapping as a column Liquibase lacks.</b> A
+              relation is kept in a join table of its own, so its mapping has no column in the service's
+              table. Every service that related to another used to show the relation's name as mapped by the
+              service but in no changelog, in the explorer's coverage table and in the overview.</li>
+          <li><b>ER designer panels fit on a short page.</b> The table, relation and table-editor panels
+              were placed before they were filled. When one opened low on the page, its last button (Remove,
+              Delete) ran off the bottom, out of reach. Panels are now placed once filled, and they scroll
+              inside themselves when they grow.</li>
+          <li><b>Tables added without a drop land beside what is already drawn.</b> +, Enter, a search
+              result and a new hand-made table now put the card in the nearest free place where you are
+              looking, clear of other cards and frames. Before, they piled up on top of each other, and the
+              sixth landed exactly on the first.</li>
+          <li><b><code>+</code> in the ER designer's table list no longer also zooms the canvas.</b> The
+              list also keeps its focus after + or Enter, so the arrow keys still move through it.</li>
+          <li><b>A relation dropped onto the other table's key starts as many to one.</b> Dropped onto a
+              table's one-column primary key, a new relation is a lookup and starts as <code>0..n:1</code>.
+              Anywhere else it still starts as <code>1:0..n</code>.</li>
+          <li><b>A slice now shows what a model contains, and who uses a variable.</b> <code>--slice</code>
+              on a process, case, decision, form or page adds its <i>Contents</i> exactly as the overview
+              lists them (the steps in execution order with what follows each, the plan tree, the rule rows,
+              the fields) and its <i>Variables</i>, each with the elements that set and read it. The slice
+              of a variable, an expression or a service operation names the models that use it, and a
+              variable's slice lists under <i>Set by</i> and <i>Read by</i> the element and how. Before,
+              these slices said "Nothing references this node".</li>
+          <li><b><code>--slice</code> accepts what you actually have in hand.</b> Besides
+              <code>&lt;type&gt;:&lt;key&gt;</code> and a bare key, it now matches the key in a different
+              case, a model's file path (<code>processes/order.bpmn</code>, or its absolute path), a Java
+              class's simple name and a label, and says which one it matched. A miss suggests the nearest
+              ids (<code>did you mean: process:orderProcess</code>) instead of an example id that does not
+              exist.</li>
+          <li><b>The summary and CLAUDE.md name the defects their headline counts.</b> Their lists picked
+              error-level findings only, so a project whose defects were all warnings, such as a gateway
+              with no way out, announced "2 defects" and named neither. The summary now lists up to five
+              open defects, errors first. CLAUDE.md lists up to three, one per check, so they name three
+              different problems. Every finding in graph.json carries its check's <code>kind</code>, and the
+              "what is broken" recipes select open defects by kind.</li>
+          <li><b>CLAUDE.md states a key convention only when most keys follow it.</b> Before, the most
+              frequent pattern was stated whatever its share: one app's prefix in a six-app project, or
+              Design's default <code>decision#</code> on four keys of nine. A pattern now needs at least two
+              keys and at least half of them. Where each app prefixes its own keys, the pattern reads
+              <code>&lt;APP&gt;-P#</code> and names the prefixes seen; a project whose own prefix holds
+              nearly every key keeps it. Test fixtures no longer count towards a convention or appear under
+              <i>Where to write</i>, and more than three archives in one folder are named by that folder and
+              a count.</li>
+          <li><b>CLAUDE.md's "Run &amp; verify" line names the app that deploys the models.</b> It used to
+              name the alphabetically first <code>*-app</code> module, which in a build with Flowable
+              Control beside Work is the admin app. It now prefers the modules that start a Spring Boot
+              application, and among them the one holding the most models.</li>
+          <li><b>A CLAUDE.md written by the IDE plugin no longer tells anyone to run a CLI jar.</b> For one
+              model it sends the agent to the model's entry in the overview and to the graph's
+              <code>usedBy</code>, and it says to regenerate from <i>Tools → Flowable Atlas → Generate →
+              Atlas Explorer…</i>. It relies on the summary, the overview and the graph only when all three
+              are ticked, and otherwise names the checkboxes to tick. It also leaves out the CLI's
+              <code>--baseline</code> self-check.</li>
+          <li><b>A summary or report generated on its own no longer points at files that were not
+              written.</b> <code>--summary</code> and the default report used to send the reader to
+              <code>&lt;name&gt;.overview.md</code>, <code>&lt;name&gt;.graph.json</code>, the explorer and
+              the diagrams folder, which only <code>--all</code> writes. They now name only what was written
+              beside them, the plugin included, and otherwise say how to generate the rest. "Regenerate with
+              <code>atlas &lt;project-dir&gt;</code>" now gives the jar command and the IDE menu.</li>
+          <li><b>The overview warns only about a REST call no endpoint of the project could serve.</b> Calls
+              are listed once per method and URL with the models that make them, and calls to Flowable's own
+              REST API (<code>{{endpoints.idm}}/users/…</code>, <code>platform-api/…</code>) and to other
+              systems are listed apart instead of as "no matching controller (external or unimplemented)" —
+              on a large real project that warning stood on 174 of 203 calls.</li>
+          <li><b>The overview lists a boundary event right after the activity it hangs on.</b> It names that
+              activity, says when it does not interrupt it, and is no longer called "not reachable"; an
+              embedded sub-process lists its contents before what follows it, an event sub-process "starts
+              on its event" and comes after the main flow, also when that flow loops back, and a
+              multi-instance step says whether it runs in parallel or one after the other. The Playwright
+              project map follows the same order, so a task reached through a boundary event no longer comes
+              first.</li>
+          <li><b>A case in the overview reads as a list, with each sentry said once.</b> The plan tree under
+              its heading showed as a code block in Markdown previews; each criterion now shows both the
+              events and the condition its sentry waits for, the case's own exit criteria sit on the plan
+              model's line, rules read as <i>required</i>, <i>repeats while …</i> or <i>manual
+              activation</i>, and only the sentries no plan item uses are listed after the tree.</li>
+          <li><b>The overview's variables are the ones shared by the most models, with who sets and reads
+              each.</b> Past 60 variables it showed the alphabetically first ones; it now picks the
+              variables that cross models, says so, and names the elements that set and read each one.</li>
+          <li><b>The overview names the interface every Java delegate and listener implements.</b> It
+              printed <code>implements []</code> for every glue class, and no delegate or listener row
+              carried its <code>[JavaDelegate]</code>. <code>graph.json</code> and the explorer always had
+              the interface.</li>
+          <li><b>The overview no longer prints <code>None</code>, <code>True</code> or <code>implements
+              []</code>.</b> A decision without a table, a database service operation, an unconditional
+              plan-item rule and a class with no glue interface printed Python placeholders, the published
+              sample included, and a script button that sets a variable to <code>true</code> or to an object
+              showed that value as Python (<code>True</code>, <code>{'regions': …}</code>) — it shows the
+              JSON now. Conditions, URLs and expressions sit in code spans on one line.</li>
+          <li><b>The overview is shorter on large projects.</b> A model inside a Design export is named
+              <code>Name-bar.zip!entry</code>, with one line under the header saying where each archive
+              lives; app membership is no longer repeated among the references, and the code map no longer
+              lists the services a second time — 12–14% less on the largest real projects.</li>
+          <li><b>The Playwright project map gives a guarded sub-process's condition to the task inside
+              it.</b> A task in an embedded sub-process was listed as unconditional while the condition in
+              front of the sub-process went to the task after it; the inner task now carries it, and the
+              task after reads "after sub-process …".</li>
+          <li><b>The Playwright guide's placeholders show in Markdown previews.</b> Texts such as
+              <code>Create New &lt;name&gt;?</code> lost their placeholder in GitHub and IDE previews, which
+              read <code>&lt;name&gt;</code> as an HTML tag; they are code spans now.</li>
+          <li><b><code>usedBy</code> in graph.json now answers for every node.</b> Variables, expressions,
+              bindings, strings, service operations and custom functions kept their users only in
+              <code>data.usedBy</code>, so the "who references it" recipe returned nothing for them. Their
+              users are now in the node's own <code>usedBy</code>, and <code>data.usedBy</code> is gone: a
+              script that read it reads <code>.usedBy</code> instead.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

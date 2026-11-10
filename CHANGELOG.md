@@ -12,6 +12,658 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.31.0
+
+- **A gateway flow that can never be taken is a finding.** The new defect `shadowedFlow` reports the
+  default, and every flow listed after it, when an exclusive gateway has a flow without a condition ahead of
+  them: the engine takes the first flow whose condition holds, and a flow without one always holds. An
+  unconditional flow written last works as an implicit default and is not reported. The sample project shows
+  one, and Atlas now runs twenty-six checks.
+- **`--baseline` gates what a change adds, not the backlog.** Most real projects fail `--fail-on defects` on
+  their first run. With `--baseline <path>`, `--fail-on` matches only findings the baseline does not have.
+  The path can be a `graph.json` from an earlier run, or the target branch's checkout or archive, which is
+  analysed in the same run. An archive is read under any name: `git show "$BASE:apps/app.zip" > base.zip` is
+  the quick way to get the base of a pull request, and a file that fails to parse in both versions is not
+  called new. Findings are compared by check, model, element and subject, so a reworded message does not
+  count as new. Every report still lists every finding, and the verdict says how many it left to the
+  baseline.
+- **What a change did to the models, for reviewing a pull request.** Git shows a commit to an app archive as
+  a binary change, so a reviewer sees nothing of what it does to a process. `--changes --baseline <base>`
+  writes `APP_OVERVIEW.changes.md`, or prints it with `--stdout`, and `--all` with `--baseline` writes
+  `<project>.changes.md` beside the other artifacts. The report lists every model added, removed or changed,
+  with the tasks, flows, form fields and rules that came, went or changed in each. It also lists the
+  references added and removed, and the findings the change brought and the ones it resolved. It is short
+  enough for a pull-request comment or a CI step summary. A model kept in two files, such as a Design export
+  beside its `-bar.zip`, counts as changed when either copy changes, and the report names the file when only
+  the copy Atlas does not show changed (`graph.json` lists such models under `modelCopies`).
+- **A red `--fail-on` run names the findings that made it red.** The log used to show only counts per check.
+  After the count line it now lists the matching findings, worst first and one per line: severity, check,
+  file and line (or node id), model and element, and message. It lists the first 50, then says where to read
+  all of them.
+- **`--annotate github` puts those findings on the pull request.** The same findings are printed as GitHub
+  Actions workflow commands on stdout, which GitHub shows as annotations on the run and on the pull
+  request's files. Paths are relative to the working directory, so run the job from the checkout's root. A
+  model inside an archive gets no line number, because GitHub can only point at the archive.
+- **`--junit <file>` writes the findings as a JUnit report for CI test views.** GitLab's merge-request
+  widget, Jenkins, Azure DevOps and GitHub test reporters show one suite per check and one testcase per
+  finding. A finding keeps the same name from run to run. A finding the gate matches is a failure that says
+  why it matters and what to do. Waived, ungated and baselined findings are skipped, each with its reason.
+- **A CLAUDE.md the CLI writes tells an agent how to check its model edit.** Its start-here procedure now
+  ends with the command that reruns Atlas with `--baseline` against the generated `graph.json` and
+  `--fail-on defects`. An agent sees each defect its change added before it reports done.
+- **A waiver file that waives less than it seems to now says why.** A syntax error is reported with the
+  file's name, line and column, not as "waivers.json is not a JSON object". A rule naming a check Atlas does
+  not know is reported with the nearest check id, and the rule is kept. A top-level key nothing reads is
+  reported, because the explorer's Save would drop it. Above all this is `rules`, which is what `graph.json`
+  calls them. A `waivers` or `notes` that is not a list is reported too. A `--waivers` path that does not
+  exist is now said on stderr; before, it waived nothing without a word.
+- **A finding opens on the line it is about.** Each finding now carries the line of its element's
+  declaration, of the reference that names a missing model, of the expression, or of the script line a
+  script problem is on. A script problem used to give its line within the script as a line of the model. The
+  explorer's open button, the IDE's Findings panel and the overview's `file:line` now land on that line,
+  inside archives too.
+- **A missing model says who references it.** A `missingRefs` finding names the model that references the
+  missing key, and how many more do, and opens on that reference. It used to name only the missing key.
+- **An expression finding names the models that hold the expression.** The summary, `CLAUDE.md` and the
+  overview say which models contain an invalid or suspect expression. The finding opens there when a single
+  model holds it, and a model's `--slice` now lists the problems of its expressions.
+- **A task whose every outgoing flow is conditional needs a default too.** `gatewayNoDefault` now also
+  reports a task, event or subprocess that leaves only through conditional flows and has no default flow.
+  When none of the conditions holds, the engine throws "no outgoing sequence flow" there, just as it does at
+  a gateway. The count line now reads *choices with no way out*.
+- **Two flows that are exact opposites always leave a way out.** `${x}`/`${!x}`, `${a == b}`/`${a != b}` and
+  `vars:isEmpty`/`vars:isNotEmpty` are no longer reported by `gatewayNoDefault`. `== true`/`== false` still
+  are, because both are false when the value is unset.
+- **An error boundary counts only when it can catch the failure.** Only a BPMN error reaches an error
+  boundary event or an error event subprocess. A mail or HTTP task behind one is therefore reported by
+  `unguardedTasks` unless it maps its failure with `flowable:mapException`, and the messages and the
+  suggested fix now say so.
+- **An HTTP task with `handleStatusCodes` is no longer treated as handled.** The engine turns those status
+  codes into the BPMN error `HTTP<code>`, which fails the instance when nothing catches it. The task is now
+  reported until an error boundary or an error event subprocess is there to catch it, even when
+  `ignoreException` is set.
+- **A task that only ever runs inside a timer's or an async step's job is no longer told its exceptions
+  reach a caller.** `unguardedTasks` now treats a synchronous task like an async one when every path to it
+  starts at a timer or an async step with no wait state in between.
+- **A `vars:` call with the wrong number of arguments is an invalid expression.** `${vars:get('route',
+  'A')}` makes the engine read `'route'` as the variable container and fail at runtime, and
+  `${vars:equals(x)}` is an argument short. Both are now `invalidExpr` errors in the reports, and the IDE's
+  expression inspection flags them too. `${vars:get(execution, 'x')}` stays valid.
+- **Models the platform ships are no longer reported as missing.** A reference to one of the platform's
+  default forms, permission decisions, templates, documents, actions or security policies now resolves to a
+  platform-provided model. That includes the `F07-deactivateUser` form that a copied
+  `deactivate-user.action` keeps, which used to be a `missingRefs` error and failed `--fail-on error`. A
+  misspelt key, or the same key used for another kind of model, is still reported, and the IDE's broken-key
+  inspections draw the same line.
+- **A repository without service models no longer reports its changelogs as orphans.** When a project
+  defines no service and no data object, its models are deployed from elsewhere. A changelog that names a
+  service the project lacks is then no longer a `changelogIssues` finding.
+- **A script may use `task` or `execution` as its own variable names.** Closure, loop, `catch`, function and
+  arrow parameters now shadow the engine's bindings the same way a declaration does. So `tasks.any { task ->
+  … }` in a script task is no longer reported as using a `task` that the context does not bind.
+- **Calls to the methods of the engine's own objects are no longer typos.** A script may call any method of
+  the entity the engine binds, such as `execution.getRootProcessInstance()` or `caseInstance.setName(…)`,
+  and `scriptIssues` no longer suggests the nearest documented method instead. Completion still offers only
+  the documented interface.
+- **A script service operation's body is checked.** The script of a script-type service operation
+  (`config.script`) runs only when something calls the operation, and Atlas did not look at it, so a body
+  that could never run was found by its first caller. It is now validated in its own context — the `flw` API
+  and the operation's inputs, by name, and no execution — reported as `scriptIssues` on the operation, shown
+  on the operation's card on the service's page, where the finding opens it, and listed on the explorer's
+  Scripts page under *Service scripts*. The Script Playground offers the context too, with an example.
+- **A TODO in a BPMN, CMMN or DMN file names the element it sits in.** The finding jumps to that element,
+  and a sentry is shown by the diamond of its criterion. A TODO with nothing after it is identified by that
+  element and what carries it (`sentry2/documentation`) instead of by its line, so accepting it survives an
+  edit above it.
+- **A broken palette, dashboard component, user definition or tenant setup is a parse issue.** A truncated
+  `.palette` or `.dashboardcomponent` came out as a record with no key that nothing could show. An
+  unparseable `.user.json`, tenant setup or master-data rows file was dropped, and so was one above the 32
+  MB limit. None of this was reported, although the platform fails to deploy or start on a broken one. Each
+  is now reported like any other model that does not parse: a `parse` diagnostic and a `parseIssues` error
+  naming the file. An oversized one is a `skip` warning, like an oversized model.
+- **A malformed XML file is reported with its line, and `-q` stays quiet.** A BPMN, CMMN or DMN model or a
+  Liquibase changelog that was not well-formed made the XML parser print its own `[Fatal Error] :2:3: …` to
+  stderr, even under `-q`, and the parse issue named the file but not the line. Nothing is printed now. The
+  `parseIssues` finding carries the line, so the explorer and the IDE open the file there, and `-v` prints
+  `path:line`.
+- **Alt+Enter opens the explorer page of a Java class, method or REST handler.** On the name of a class or
+  method a model uses, or of a REST handler, *Open in Atlas Explorer* opens its class, method or endpoint
+  page: roles and bean names, the models using it, an endpoint's callers and parameters. The gutter marks
+  only list the models.
+- **A broken model key inside a JSON model is flagged in the editor.** A form component's subform, a data
+  object's backing service, an app's models or a channel's event that names no model used to deploy without
+  a word, although the report calls it a missing reference. The new inspection *Unknown Flowable model key
+  (model JSON)* flags it, with a fix to the nearest key.
+- **Messages, signals and task keys in Java are links, and an unknown one is flagged.** Ctrl+click on
+  `signalEventReceived("…")`, `startProcessInstanceByMessage("…")`, `taskDefinitionKey("…")` or
+  `activityId("…")` lands on the `<signal>`, `<message>` or `<userTask>` that declares it, and Ctrl-Q names
+  the model. The new inspection *Unknown Flowable message, signal or task name* flags a message or signal
+  that no model declares: an unknown message throws at run time, and an unknown signal reaches nobody. It
+  flags a task key or activity id only when the chain names its process. A bare `signalRef`, or a signal a
+  case's event listener waits for, counts as a name the engine uses. A name a model computes at run time
+  gets no verdict.
+- **Event keys the platform ships are no longer flagged in model XML.** `_flowableMailEvent` and its
+  siblings are not missing models, as the report already says. A form key that names a page, or a
+  data-object key that names master data, also counts, as it does at run time.
+- **Atlas Findings opens every finding where it is.** A double-click or Enter did nothing for a finding with
+  no file of its own, and opened most of the rest at the top of the file. A finding now opens at its line.
+  Without a line (in a minified form, or for a column or a config path) it opens at its element or at what
+  it names. A variable, a service operation or an expression that several models hold opens in the model it
+  lives in, and the window asks which one when there are several. The detail pane's *Where:* row names that
+  model and how many more there are.
+- **Accepting a finding in Atlas Findings updates the explorer too.** Accept now regenerates the explorer
+  pages in the folder of the `waivers.json` it wrote, and an open page reloads where you were reading. The
+  window, the Hub and the page then show the same counts. Before, the page still counted the accepted
+  finding as open. While the pages are regenerated, the window says it is analyzing.
+- **An accepted finding stays accepted when the explorer was generated outside the output folder.** Accept
+  writes `waivers.json` next to that page, but the next analysis read the one in the configured output
+  folder, so the finding came back as open. The analysis now reads the file Accept wrote.
+- **The Hub's "Analyze findings" link runs the analysis.** After a sub-project switch or a failed run, the
+  link only brought up Atlas Findings, which read *No analysis yet* and needed a second click. Now the link
+  runs the analysis and opens the window on it.
+- **A Design pull that removed model keys offers "Find broken references".** The action runs the *Unknown
+  Flowable model key* inspection over the Flowable project, so Java that still uses a removed key shows in
+  the Inspection Results window. It also analyzes the project again in Atlas Findings, where *Missing model
+  refs* lists every removed key that a model still uses, including models inside archives. Each row names
+  the first model that uses the key and how many more do.
+- **Generate Atlas Explorer on another Flowable project's folder generates that project.** In a monorepo,
+  the Project-view entry ignored the folder that was right-clicked. On a folder of another detected project
+  it now reads *Generate Atlas Explorer for apps/billing…* and makes that project the active one first, so
+  its settings apply.
+- **The model-constants class stays with the Flowable project it was generated in.** In a monorepo, picking
+  another project in the Atlas Hub used to rewrite the shared constants class with that project's keys and
+  naming, so code compiling against it broke. The class is now kept in sync only while its own project is
+  active, and switching back brings it up to date. In a repository with several Flowable projects, the Model
+  Constants settings page names the one it follows.
+- **Generate Model Constants works while the model index is still being built.** Right after opening a
+  project or saving a model, the action ended in a "NullPointerException" balloon and wrote nothing. It now
+  waits for the index behind its progress dialog, which you can cancel.
+- **Generate Model Constants leaves its sync setting as you set it.** Generating the class by hand ticked
+  *Keep the generated class in sync* again, and the class was then rewritten on every model change.
+- **Generate → Liquibase builds a data object's table from its service's columns.** When a data object had
+  no bundled changelog, its changelog was built from its field names, none of which are columns its service
+  reads, and it had no primary key. It is now built the way Flowable Design builds it: the service's column
+  names, the lookup id as the primary key and a join table per relation. Field names are used only as a
+  labelled guess when there is no database service. A table your own Liquibase changelogs already create is
+  shown as *Already created by* that file, cannot be ticked and is not written again.
+- **Generate → Liquibase no longer freezes typing while it prepares its preview.** On a cold index it
+  scanned every model, walked the project and decompressed every app export in one read action, holding the
+  editor's read lock the whole time. The model scan and the decompression now run without it, and the walk
+  takes it only in a short read action of its own.
+- **Generated data-object DTOs handle JSON fields and awkwardly named fields.** A JSON field was read as a
+  String and threw a ClassCastException for every instance that set it. It is now a Jackson `JsonNode`, the
+  type the platform keeps it as. A field named after a Java keyword, such as `default` or `case`, or named
+  `bean`, produced a class that did not compile. A keyword field now gets an escaped identifier and keeps
+  its getter `getDefault()`.
+- **The Atlas Hub no longer stays on "scanning…" after a sub-project switch during a scan.** Switching
+  sub-project or saving a model while the index was being built threw that build away without starting the
+  next one, so the Hub, the editor's markers and the model-constants class waited for some unrelated event.
+  The new build now starts at once, and a failure of the discarded build no longer blocks it.
+- **A model index that could not be built no longer rebuilds in a loop while the Atlas Playground is open.**
+  The playground retried the failed build on every index event: a full rescan every few hundred
+  milliseconds, each one an IDE error report. It now waits for a model change or *Rebuild Model Index*.
+- **Find Usages into models no longer blocks typing, and Cancel stops it.** The search held the editor's
+  read lock while it read every model file and archive entry. It now reads them without it, takes the lock
+  only for a file with a hit, and stops at the next file when you cancel.
+- **The editor reads your custom functions from the same place as the explorer.** With a sub-project active,
+  the editor resolved the *Customization source* against the repository root, missed it and read every app's
+  functions instead. Changing the custom-function settings or switching sub-project also only took effect
+  once a frontend file changed or the IDE restarted. The editor now resolves the source the way generation
+  does and reads the functions again as soon as either changes.
+- **Helm templates, systemd units and Java policy files are no longer opened as JSON.** Atlas mapped `.tpl`,
+  `.service`, `.policy`, `.data` and other model extensions to JSON in every project of the IDE. Those
+  extensions are now JSON only when the file holds a JSON object, whether in a folder or inside an archive.
+- **Without the embedded browser, the explorer opens in your browser, not as source.** In an IDE without
+  JCEF, the Open action, the auto-open after Generate, the balloon, the Alt+Enter intention, Atlas Findings
+  and Recent Models opened the generated page's megabytes of HTML in the text editor and dropped the page
+  you asked for. They now open it in your browser, on the page you asked for where your system's launcher
+  passes the route on, or say that neither is possible here.
+- **Open in Atlas Explorer on a model Atlas does not read says why.** On a model in another Flowable project
+  than the active one, in a build folder, or with no readable key, the Project-view entry used to do nothing
+  at all. A balloon now names the reason.
+- **Regenerate and the stale line work when no explorer page is selected.** A project that generates only
+  CLAUDE.md, the graph or the Playwright guide got "No Atlas Explorer yet" from Regenerate, no Regenerate
+  after a Design pull, and no warning that those files were stale. An old page left from the default
+  selection also kept a stale line that Regenerate could never clear. Regenerate, the pull balloon and the
+  Hub now go by the selected artifacts, and the line reads *changed since the Atlas artifacts*.
+- **The plugin names a dot-prefixed project's files the way the CLI does.** For a folder like
+  `.DEMO-solution`, the plugin wrote `project.*`, while the CLAUDE.md and the Playwright guide it wrote
+  alongside pointed at `.DEMO-solution.*`, which did not exist.
+- **The plugin manager's description covers what the plugin does today.** It now names Atlas Findings, Go to
+  Model and the Search Everywhere tab, the text-and-picture model editor, archive browsing, Compare Model
+  with Archive, the gutter icons and the DTO and Liquibase generators. It gives menu and settings paths as
+  the IDE shows them. The settings page no longer calls the IDE-wide environments per project.
+- **The ER designer proposes the relations Design keeps in join tables.** A database service's
+  `object-relation` or `list-relation` is not a column of its table. Design keeps it in a join table of two
+  columns, the owning row's lookup id and the referenced row's, and the runtime joins through that table.
+  The designer understood only a column relation that Design never writes. On a real project it proposed a
+  relation only where a data object named one: between the two tables, without columns, and mostly as a
+  strict `1:1`. Every join table sat unconnected. When a changelog creates the join table, the designer now
+  proposes two relations from it, over exactly its columns: one to the owning table and one to the table it
+  refers to. When none does, it proposes one relation between the two tables. When the relation names no
+  service, the table it refers to is found through the data object field of the same name, as the runtime
+  finds it. A data object's one-to-one is now proposed as `0..n:0..1` instead of a strict `1:1`: the field
+  holds one object, but nothing in the schema makes it unique.
+- **A table's panel in the ER designer names the tables the models relate it to.** A proposal shows only
+  once both of its tables are on the canvas, and nothing said which table to add. A table's panel, and its
+  (i) in the list, now list the related tables. Through a join table, the list names the table beyond it.
+  Each row says whether the relation is proposed, drawn or dismissed. *add* puts the missing tables on the
+  canvas beside it, with the proposals between them, and *add all* adds every one in a single undo step.
+- **A dismissed proposal can come back.** *Diagram → Show N dismissed proposals again* brings them all back
+  in one undoable step, and *show again* in a table's related list brings back one at a time. Before, once
+  the undo history was gone, a mis-click on × was permanent.
+- **A browser copy of a project diagram no longer hides a teammate's change to the file.** A copy undone
+  back to the file, or one whose export the file now holds, follows the file again. A copy edited before the
+  file changed keeps your work and says the file has changed in the project since, with *Revert* to show it.
+  Before, it invited an export that would write over the teammate's change.
+- **Schema coverage no longer lists a relation mapping as a column Liquibase lacks.** A relation is kept in
+  a join table of its own, so its mapping has no column in the service's table. Every service that related
+  to another used to show the relation's name as mapped by the service but in no changelog, in the
+  explorer's coverage table and in the overview.
+- **ER designer panels fit on a short page.** The table, relation and table-editor panels were placed before
+  they were filled. When one opened low on the page, its last button (Remove, Delete) ran off the bottom,
+  out of reach. Panels are now placed once filled, and they scroll inside themselves when they grow.
+- **Tables added without a drop land beside what is already drawn.** +, Enter, a search result and a new
+  hand-made table now put the card in the nearest free place where you are looking, clear of other cards and
+  frames. Before, they piled up on top of each other, and the sixth landed exactly on the first.
+- **`+` in the ER designer's table list no longer also zooms the canvas.** The list also keeps its focus
+  after + or Enter, so the arrow keys still move through it.
+- **A relation dropped onto the other table's key starts as many to one.** Dropped onto a table's one-column
+  primary key, a new relation is a lookup and starts as `0..n:1`. Anywhere else it still starts as `1:0..n`.
+- **A slice now shows what a model contains, and who uses a variable.** `--slice` on a process, case,
+  decision, form or page adds its *Contents* exactly as the overview lists them (the steps in execution
+  order with what follows each, the plan tree, the rule rows, the fields) and its *Variables*, each with the
+  elements that set and read it. The slice of a variable, an expression or a service operation names the
+  models that use it, and a variable's slice lists under *Set by* and *Read by* the element and how. Before,
+  these slices said "Nothing references this node".
+- **`--slice` accepts what you actually have in hand.** Besides `<type>:<key>` and a bare key, it now
+  matches the key in a different case, a model's file path (`processes/order.bpmn`, or its absolute path), a
+  Java class's simple name and a label, and says which one it matched. A miss suggests the nearest ids (`did
+  you mean: process:orderProcess`) instead of an example id that does not exist.
+- **The summary and CLAUDE.md name the defects their headline counts.** Their lists picked error-level
+  findings only, so a project whose defects were all warnings, such as a gateway with no way out, announced
+  "2 defects" and named neither. The summary now lists up to five open defects, errors first. CLAUDE.md
+  lists up to three, one per check, so they name three different problems. Every finding in graph.json
+  carries its check's `kind`, and the "what is broken" recipes select open defects by kind.
+- **CLAUDE.md states a key convention only when most keys follow it.** Before, the most frequent pattern was
+  stated whatever its share: one app's prefix in a six-app project, or Design's default `decision#` on four
+  keys of nine. A pattern now needs at least two keys and at least half of them. Where each app prefixes its
+  own keys, the pattern reads `<APP>-P#` and names the prefixes seen; a project whose own prefix holds
+  nearly every key keeps it. Test fixtures no longer count towards a convention or appear under *Where to
+  write*, and more than three archives in one folder are named by that folder and a count.
+- **CLAUDE.md's "Run & verify" line names the app that deploys the models.** It used to name the
+  alphabetically first `*-app` module, which in a build with Flowable Control beside Work is the admin app.
+  It now prefers the modules that start a Spring Boot application, and among them the one holding the most
+  models.
+- **A CLAUDE.md written by the IDE plugin no longer tells anyone to run a CLI jar.** For one model it sends
+  the agent to the model's entry in the overview and to the graph's `usedBy`, and it says to regenerate from
+  *Tools → Flowable Atlas → Generate → Atlas Explorer…*. It relies on the summary, the overview and the
+  graph only when all three are ticked, and otherwise names the checkboxes to tick. It also leaves out the
+  CLI's `--baseline` self-check.
+- **A summary or report generated on its own no longer points at files that were not written.** `--summary`
+  and the default report used to send the reader to `<name>.overview.md`, `<name>.graph.json`, the explorer
+  and the diagrams folder, which only `--all` writes. They now name only what was written beside them, the
+  plugin included, and otherwise say how to generate the rest. "Regenerate with `atlas <project-dir>`" now
+  gives the jar command and the IDE menu.
+- **The overview warns only about a REST call no endpoint of the project could serve.** Calls are listed
+  once per method and URL with the models that make them, and calls to Flowable's own REST API
+  (`{{endpoints.idm}}/users/…`, `platform-api/…`) and to other systems are listed apart instead of as "no
+  matching controller (external or unimplemented)" — on a large real project that warning stood on 174 of
+  203 calls.
+- **The overview lists a boundary event right after the activity it hangs on.** It names that activity, says
+  when it does not interrupt it, and is no longer called "not reachable"; an embedded sub-process lists its
+  contents before what follows it, an event sub-process "starts on its event" and comes after the main flow,
+  also when that flow loops back, and a multi-instance step says whether it runs in parallel or one after
+  the other. The Playwright project map follows the same order, so a task reached through a boundary event
+  no longer comes first.
+- **A case in the overview reads as a list, with each sentry said once.** The plan tree under its heading
+  showed as a code block in Markdown previews; each criterion now shows both the events and the condition
+  its sentry waits for, the case's own exit criteria sit on the plan model's line, rules read as *required*,
+  *repeats while …* or *manual activation*, and only the sentries no plan item uses are listed after the
+  tree.
+- **The overview's variables are the ones shared by the most models, with who sets and reads each.** Past 60
+  variables it showed the alphabetically first ones; it now picks the variables that cross models, says so,
+  and names the elements that set and read each one.
+- **The overview names the interface every Java delegate and listener implements.** It printed `implements
+  []` for every glue class, and no delegate or listener row carried its `[JavaDelegate]`. `graph.json` and
+  the explorer always had the interface.
+- **The overview no longer prints `None`, `True` or `implements []`.** A decision without a table, a
+  database service operation, an unconditional plan-item rule and a class with no glue interface printed
+  Python placeholders, the published sample included, and a script button that sets a variable to `true` or
+  to an object showed that value as Python (`True`, `{'regions': …}`) — it shows the JSON now. Conditions,
+  URLs and expressions sit in code spans on one line.
+- **The overview is shorter on large projects.** A model inside a Design export is named
+  `Name-bar.zip!entry`, with one line under the header saying where each archive lives; app membership is no
+  longer repeated among the references, and the code map no longer lists the services a second time — 12–14%
+  less on the largest real projects.
+- **The Playwright project map gives a guarded sub-process's condition to the task inside it.** A task in an
+  embedded sub-process was listed as unconditional while the condition in front of the sub-process went to
+  the task after it; the inner task now carries it, and the task after reads "after sub-process …".
+- **The Playwright guide's placeholders show in Markdown previews.** Texts such as `Create New <name>?` lost
+  their placeholder in GitHub and IDE previews, which read `<name>` as an HTML tag; they are code spans now.
+- **`usedBy` in graph.json now answers for every node.** Variables, expressions, bindings, strings, service
+  operations and custom functions kept their users only in `data.usedBy`, so the "who references it" recipe
+  returned nothing for them. Their users are now in the node's own `usedBy`, and `data.usedBy` is gone: a
+  script that read it reads `.usedBy` instead.
+- **`graph.json` lists Java classes as references and stores each Liquibase changelog once.** `javaByRole`
+  and `javaGlue` now hold `{fqn, file, line}` per class, and what Atlas read from a class — its roles, bean
+  names, methods and endpoints — is on its `java:<fqn>` node. They used to carry the parser's whole record,
+  with imports, string literals and call sites, once per role. `javaControllers` is gone because it was
+  `javaByRole.controller`, and so are `expressions` and `placeholders`, which repeated the keys of the
+  `expression` and `binding` nodes. A changelog node now points into `liquibase` with `data.dataIn`, like a
+  model node. On the projects it was measured on, the file is 7 to 55 % smaller: the more Java a project
+  has, the larger the saving. `_schema` describes the new shape and adds a recipe that lists every
+  expression.
+- **`graph.json` names the sub-process an event sits in.** An event inside a sub-process carries its id as
+  `parent`, as user tasks and sub-processes already did.
+- **A model's file is the same everywhere.** When a `.bar` and a Design export of the same app sat side by
+  side, the model's own entry named the deployed archive, while `graph.json`'s `modelIndex`, the `target` of
+  every reference to the model and the overview's listing of an app's models named the Design export. They
+  now all name the same file: the first copy read outside a test source set.
+- **A CMMN Java task written by hand links to its code.** A `<task flowable:type="java">` that names its
+  `flowable:class` or its bean on the task itself, with no `<extensionElements>`, had no link to that class
+  or bean, and `flowable:class` on a CMMN task was never read at all. Both now link, and the task's record
+  and the overview name the class, bean or expression it runs. A case's own `caseLifecycleListener` is read
+  too: its class or bean is linked and counts as a listener, the explorer lists it among the case's
+  listeners, and a script on it is reported, because the engine never runs one there. Design always writes
+  the extension elements, so only hand-written models were affected.
+- **A decision service runs the decision tables it copies.** A DRD exported from Design holds a copy of each
+  decision table under a generated id (`decisionElement_1`, `decision1`). It names the table in
+  `flowable:decisionKey`, or, in older exports, only in the service's JSON file. A copy now merges into the
+  table it names, so the service calls the table. A copy whose table is not in the project stays as the
+  service's decision, marked `copyOf`, and is not reported missing. Atlas used to take the copies for
+  decisions of their own, with these effects:
+  - phantom decisions appeared;
+  - the service was linked to them and never to its tables;
+  - `unusedDecisions` was reported on every table only the service runs, with "delete it" as the fix, which
+    would break the service;
+  - each output was written twice;
+  - agents were given a generated id as the key convention.
+- **Ad-hoc sub-processes are recognised.** Atlas looked for `adhocSubProcess`, but the engine spells it
+  `adHocSubProcess`. So an ad-hoc sub-process was not listed, the tasks inside it had no parent, and the IDE
+  did not offer its id. An error boundary on it also did not stop `unguardedTasks` from reporting those
+  tasks.
+- **A process or case is described by its own documentation.** A process without a `<documentation>` of its
+  own took the first one anywhere inside it, so a user task's note, a TODO for instance, became the process
+  description in the overview and the explorer. A case took a sentry's or a task's note the same way. Each
+  now uses only its own documentation, and a case falls back to its plan model's.
+- **Security policies and SLAs are read where Design writes them.** Two kinds were not read: a case's
+  security policy on its plan model, and the policy and SLA on a user task or human task. They had no edge,
+  and `missingRefs` could not report a renamed key. They are now references from the process or case. The
+  plan model's policy is listed among the case's model references, and a task's record names its own SLA and
+  policy.
+- **A Design export's queries, variable extractors and template variations are read in full.** A Design
+  workspace export wraps a query (`query-models/<key>.query`) and a variable extractor
+  (`variable-extractor-models/<key>.extractor`) in `{id, key, name, editorJson}`, and Atlas read only the
+  wrapper. When the export was the only copy, queries came out with no parameters, sub-type or template
+  filter, and extractors wrote no variable. Template variations were dropped too: in a `template-models`
+  export, and in the shape Design's editor writes them (`templateText`, `variationParameters`, an attached
+  document). All three are now read from inside the wrapper. The same extractor beside its deployed
+  `-bar.zip` is no longer reported as a copy that references different models.
+- **A query now links the case or process its search template filters on.** Real queries pin their
+  definition inside the Elasticsearch template (`caseDefinitionKey`, `processDefinitionKey`, a scope key or
+  the instance index's `definitionKey` in `templateFilter` / `templateContent`), which Atlas never read:
+  renaming the case made the query return nothing without a word. The filter is now an edge to the model, or
+  a missing-model finding when it is gone, and the query's page lists the definitions it filters by. A key
+  the template fills in at run time (`${caseKey}`) and a sort order (`"desc"`) are left alone.
+- **A REST data table or select links the definition in its query parameters.** Design keeps a REST data
+  source's parameters in `queryParams`, which Atlas ignored, so a table over `…/data-object-instances` or
+  `…/search/case-instances` showed up as a call to an external URL and a renamed data object or case went
+  unreported. The literal parameters are now part of the call's URL, as the forms runtime sends them: the
+  table links its data object and the operation it uses, a `caseDefinitionKey` or `processDefinitionKey` —
+  in the parameters or written into the URL — becomes a *Lists instances* link, and a missing model is a
+  finding.
+- **A variable extractor's full-text variables link their case and count as a read.** `fullTextVariables`
+  were copied onto the extractor and nothing else, so a renamed case silently dropped out of Work's global
+  search, and a variable only the search needed could be reported as written but never read. Each entry now
+  links its process or case (or is a missing-model finding) and is a read of the variable.
+- **An action exported from Design keeps its form.** Design writes an action's form as `{id, key}`; Atlas
+  read it only as a plain key, so an action whose Design export was its only copy lost its form link and the
+  form could be reported as used by nothing.
+- **A subform that an older Design export names by its model id resolves.** Older exports name an embedded
+  subform by its Design model id (`FORM_MODEL-<uuid>`) and keep the key beside it in `form-id`. Atlas read
+  the id as the key, so each such subform was a `missingRefs` error and the subform it embeds was an
+  `unusedForms` warning. On the platform's Travel Request example app that was 4 errors and 1 warning; now
+  there are none.
+- **A nested class and the second class of a Kotlin file are resolved.** Atlas makes one node per Java or
+  Kotlin file, named after its type, and that type used to be the first one declared. So a Kotlin `data
+  class` written above the `@Component` the file is about became the bean's class and was labelled a
+  delegate. A second Kotlin class named by `flowable:class` was reported as unresolved, and a nested
+  `@Component` pointed at the outer class's header. The file's type is now the one named like the file, or
+  else the one a stereotype annotates. Every other type in the file resolves onto the file's node, at the
+  line where it is declared: by its name, and a nested one by `pkg.Outer$Inner`, the binary name Flowable
+  loads. Written `pkg.Outer.Inner`, a nested class is found but marked suspect, because Flowable cannot load
+  it by that name. A Java or Kotlin node's line is now its type's declaration. It used to be the first
+  `class ` in the text, which was sometimes a `Foo.class` inside an annotation.
+- **A Kotlin string template is no Flowable expression.** In a Kotlin source the compiler fills in `"Order
+  total ${total}"`, but Atlas read it as an expression. Kotlin locals became process variables, and a
+  variable a log line happened to name was never reported as unused. Atlas now reads only the escaped
+  spellings: `"\${…}"`, or `${'$'}{…}` in a raw string.
+- **A result variable counts as written in either spelling the engine accepts.** A service task's
+  `flowable:resultVariable` (the spelling the BPMN user guide shows), a script task's
+  `flowable:resultVariableName` and a CMMN Java or script task's `flowable:resultVariableName` recorded no
+  write: the variable had no writer, and the overview did not say where the task's result goes. Each is now
+  a write, as `resultVariableName` on a service task already was.
+- **A variable read through `root.`, `parent.` or `self.` counts as read.** `${root.riskLevel == 'HIGH'}` in
+  a called process, `{{root.customerName}}` in a task form and a decision input `root.amount` read that
+  variable of the root, parent or current instance, but Atlas dropped the name behind the scope token and
+  reported the variable as written but never read. `id`, `name`, `businessKey` and the instance's other own
+  fields are still no variable there. A called model that reads `root.x` or `parent.x` reads the ancestor's
+  `x`, not the copy mapped into it, so a mapping into it that nothing else reads is still reported under
+  `unreadInputs`.
+- **Every name in a `{{…}}` binding is a read, not just the first.** `{{flw.formatDate(due, 'DD')}}`, `{{a
+  && b}}`, `{{!done}}`, `{{$payload.amount}}` and `{{flw.JSON.stringify(result)}}` read `due`, `b`, `done`,
+  `amount` and `result`. Only the first name used to count, so a variable a form showed only that way was
+  reported unused, with the advice to delete its write. A name past the first only counts for a variable
+  something else already names, so a lambda's parameter or a bare word never becomes one.
+- **A decision output that only Java receives is no unused variable.** Java that executes a table gets its
+  outputs back in a result map, not as process variables, yet each output nothing in the models read was
+  reported as written but never read, with the advice to delete an output column the Java code uses. Those
+  outputs are now declined as read outside the models, and the outputs of a table nothing runs are left to
+  `unusedDecisions`, which reports the table itself, instead of being reported twice.
+- **A variable a query filters on is read.** A query template's literal `"variables.name": "x"` term (or a
+  `terms` list of names) and a column's `variableName` now read that variable. A flag that task lists filter
+  on through such queries was reported as never read, and deleting its write as advised would have emptied
+  those lists.
+- **A multi-instance variable aggregation reads its sources and writes its target.** Each `<variable
+  source>` of a `flowable:variableAggregation` is read from every instance and the aggregation's `target` is
+  written, so a per-instance value collected into a list is no longer reported unused, and the list now
+  shows who writes it.
+- **Guessed script variables no longer come from markup, imports and beans.** A Groovy `"""…"""` or
+  `'''…'''` string is read as one literal, so an XML document built in one no longer turns its element names
+  into variables; an `import` or `package` line names no variable; and a bean a script calls by name
+  (`demoLookupBean.createTaskQuery()`, Spring Boot's `springProcessEngineConfiguration`) is no guessed
+  variable when nothing else backs the name.
+- **`unusedFns` counts `$`-prefixed functions and functions passed by reference.** `{{$fmt(x)}}` and
+  `{{$ns.f(x)}}` never counted as a use, and neither did `{{names.map(fmt)}}`, so those functions were
+  reported as registered but never used.
+- **A literal `additionalData` value is a value, not a function.** `$isDesktop: true` or `supportEmail: "…"`
+  was listed as a custom function, reported unused although forms read it, and completed in the IDE as
+  `$isDesktop()`. Such entries are now listed apart as values, never reported, and completed without
+  parentheses.
+- **The IDE offers the variables a form binds, not its component ids.** Completion of `getVariable("…")` and
+  inside a form's `{{…}}`, the expression grounding inspection and Go to Symbol took every labelled
+  component's id (`text1`, `date1`) for a variable, so they offered names that resolve to nothing and never
+  the ones the form binds. They now follow the CLI's rule: the root of a `{{…}}` binding, an unbound input's
+  id, a result button's target and the outcome variable. Pages get the same vocabulary as forms, and Go to
+  Symbol opens a form's variable at the binding that names it, even one called like a JSON key such as
+  `type`.
+- **A decision service in a DRD no longer hides the requirements inside it.** It is drawn as a container
+  under the arrows that cross it, with its name in the corner and a line between the decisions it exposes
+  and the ones it encapsulates. A business knowledge model and a knowledge source get their DMN shapes. This
+  applies to the explorer, the `.diagrams` folder and the IDE preview.
+- **CMMN event listeners and event sub-processes are drawn in their notation.** An event listener is a
+  double ring with its name below, and a user, timer or signal listener has that glyph inside; it used to be
+  a tiny box with the name squeezed into it. Its tooltip names its type. An event sub-process and a
+  non-interrupting start event are dashed in plain BPMN XML too, not only in a Design export.
+- **Diagram labels stay inside their shape.** A task named by a long expression or a camelCase name breaks
+  at a dot, a bracket or a camelCase hump instead of running across its neighbours' labels, and a label that
+  still does not fit ends in `…`. This applies to the explorer, the exported `.diagrams/*.svg` and the IDE
+  preview.
+- **A form with a control character pasted into a label still gets its picture.** A vertical tab copied from
+  Word into a field's label made the form's `.svg` invalid XML. The IDE preview and gutter picture stayed
+  empty, and a browser showed a parse error instead of the form. Such a character is now drawn as a space.
+- **No artifact repeats a secret that `hardcodedSecrets` warns about.** The finding has always named the
+  path and never the value, yet the same run printed the value — in a service task's field injections, a
+  service's base URL, a REST call and the external node it reaches, an HTTP task's request URL and a form's
+  REST URLs. Those values, and credentials the check does not flag beside them — an HTTP task's
+  `Authorization` header and a password in its request body, a password field's default, a REST handler's
+  credential default — now appear as `***` in `graph.json`, the explorer, the Markdown artifacts and every
+  slice, and a Java constant named like a secret is not carried at all. The findings are unchanged.
+- **Atlas no longer follows a symbolic link out of the project.** A link committed to the repository — `up
+  -> ..`, a `vendor` folder linked in from a sibling checkout — pulled another project's models and Java
+  literals into this project's artifacts. Such a link is now not followed, and when it is a folder or a file
+  of a kind Atlas reads it is listed as a skip in the diagnostics; a link that stays inside the project is
+  followed as before.
+- **An archive of oversized text no longer runs Atlas out of memory.** Atlas kept every changelog and
+  template candidate until the end of a run without a limit, so a 1.3 MB archive of large whitespace entries
+  could run the CLI or the IDE out of memory. An XML file that is no changelog is now dropped as soon as it
+  is read, a run keeps at most 256 MB of such text and says what it skipped, and the IDE's model index skips
+  a model above 32 MB, as Generate always did, instead of reading every archive entry in full on project
+  open.
+- **Reading a project is about a quarter faster.** The scan of every model's text for variables, delegate
+  classes, property reads and leftover markers now searches for a literal instead of trying every position
+  of the text. On a large project, `--json` went from 3.7 s to 2.8 s. The output is unchanged.
+- **The `atlas` launcher now comes with every release.** The site leads with `./atlas <project>`, but a
+  release carried only the jar, so without a clone of the repository there was no launcher to run. Download
+  `atlas` and `cli-<version>-all.jar` into one folder, `chmod +x atlas`, and run it. A launcher with no jar
+  beside it now tells you which file to download, instead of trying a Gradle build that a download does not
+  have. The CLI page now states the rule it follows: `$ATLAS_JAR` if set, otherwise the newest `*-all.jar`
+  by modification time across its own folder, `lib/` and `cli/build/libs/`. The CLI and getting-started
+  pages also say that its default output folder is beside the launcher, not inside the analysed project.
+- **`./atlas .` writes into `atlas-output/<project>/` like any other path.** Run from inside a project, the
+  launcher wrote straight into `atlas-output/`, which every such project then shared, and its last line
+  named an explorer file that did not exist. Its help now also lists the ER page and the diagrams folder.
+- **A project analysed from inside itself is named after its folder in every artifact, and keeps its
+  decisions to itself.** Run as `.`, the summary and the overview were headed `.`, and the explorer and the
+  ER page were called `.`. That name also scoped their browser storage, so every such project shared one
+  store: a finding accepted but not yet saved on one project's page was offered for export into another
+  project's `waivers.json`, and ER diagrams drawn for one showed up in the other. The pages now keep
+  accepted findings, open tabs, the Recent list and ER drafts per project location, so two projects of the
+  same name stay apart.
+- **`--claude` no longer overwrites your own `CLAUDE.md`.** Without `-o`, it replaced the project's
+  `CLAUDE.md` without a word, even one the team wrote by hand. It now regenerates only a file Atlas wrote.
+  For any other file it stops with exit 2 and asks for `-o <file>` or `--stdout`.
+- **The `.gitignore` in the output folder ignores only what Atlas writes.** It used to say `*`. Written into
+  a project folder, it hid every model or source file added there afterwards from git. It now lists the
+  artifacts by suffix, so `waivers.json` and any file of yours in that folder stay visible. The plugin
+  writes the same file.
+- **`--all` without `-o` writes to `./atlas-output/<project>/`.** It used to write seven artifacts, an
+  eighth when the project has tables, a diagrams folder and a `.gitignore` into the working directory,
+  usually the project itself. The new default is the launcher's layout.
+- **A single artifact written into the project reads the `waivers.json` beside it.** Without `-o`,
+  `--summary` or `--html` writes into the project folder but read `waivers.json` from the working directory,
+  so the waivers you put beside the report, as the explorer advises, were ignored.
+- **A run that cannot write its output says so, and has its own exit code.** An output that cannot be
+  written (a file where `--all` needs a folder, a folder where a file goes, a read-only location, an empty
+  `-o`) is refused in one line with exit 2, before the analysis runs. A write that fails during the run, or
+  an unexpected error, ends with one line and exit 3 instead of a stack trace and exit 1, which pipelines
+  read as "findings matched, report written". A single file's missing folders are created, as `--all`
+  already did for its folder.
+- **`--fail-on-stale-waivers` no longer hides the `--fail-on` verdict.** With both flags, a stale waiver
+  ended the run before the findings that failed `--fail-on` were listed. Both are now printed before the run
+  exits with 1.
+- **Flag mistakes are errors instead of quiet choices.** `--all --stdout` used to write every artifact into
+  the working directory and print nothing. `--fail-on ""` (an unset CI variable) switched the gate off. `-o
+  --stdout` wrote a file called `--stdout`. `--stdout=false` turned stdout on. Each is now exit 2.
+- **A path with nothing to analyse fails instead of passing.** An empty, wrong or unreadable directory used
+  to report `0 models` with ✅ and pass `--fail-on error`, so a CI job whose path went stale stayed green. It
+  is now exit 2. A project with only Java runs as before, with a warning. A folder inside the project that
+  cannot be listed is now reported as a warning-level parse issue instead of disappearing silently.
+- **A single model file is analysed, as `--help` always said.** `atlas order.bpmn` found nothing (0 models,
+  exit 0). It now reads the model and draws its diagram. Any other single file, such as a README, is exit 2.
+- **`--all` removes the drawings of models that no longer exist.** Stale SVGs of deleted or renamed models
+  stayed in `<project>.diagrams/` and showed as current, as did an ER page left over from a run that still
+  had tables. The plugin does the same when it regenerates with diagrams selected.
+- **The status line comes after the files `--all` wrote, and the diagrams take one line.** It used to come
+  first, followed by one line per written file. On a large project, about 250 diagram paths scrolled it out
+  of view. The diagrams folder is now one line with a count (`-v` lists each SVG), and only `-v`'s detail,
+  waiver warnings and the `--fail-on` verdict follow the status line.
+- **`--open` hands the page to Windows's default handler, and says when nothing can open it.** It looked for
+  `start` on the PATH, which never exists on Windows, so there it did nothing. It now uses Windows's own
+  file handler (not yet tried on a Windows machine). On a machine with no way to open a browser, it prints
+  the path to open yourself.
+- **An exported waiver decision survives a reload.** If you reloaded the explorer after *Export
+  waivers.json* but before regenerating, the decision dropped off the page and its finding showed as open
+  again. The next export then wrote a `waivers.json` without it. A saved decision now stays applied until a
+  page generated after the save is opened.
+- **A waiver's dates use your local day, in the explorer as in the CLI.** The explorer read the UTC date for
+  a waiver's `at` and `until`, while the CLI and the gate read the local one. For a few hours each day the
+  page and the gate disagreed on whether a rule had expired, the form refused tomorrow as an *until* date,
+  and a decision taken just after midnight was stamped with the day before.
+- **Browsing many diagrams no longer grows the explorer's memory.** Every inline diagram the explorer
+  replaced stayed in memory until ⌘/Ctrl was next pressed, so reading a large project with the mouse alone,
+  as in the IDE, piled up hundreds of thousands of page elements. Each opening of the full-screen diagram
+  also left another copy of the drawing behind. Both now let go of what they no longer show.
+- **An external node opens in its own list.** Opening a missing model reference, a platform bean or a
+  library showed an empty list column, or the previously open list with nothing selected. It now opens in
+  the list it belongs to, such as *Missing model refs*, *Flowable platform* or *External / library*, with
+  the node selected. A missing model reference is now labelled as one instead of *External / library*.
+- **Platform bots are no longer hotspots.** Bots the platform ships, such as the start-case and
+  start-process bots, took hotspot places on the overview ahead of the project's own models. The overview
+  and `summary.md` now leave them out.
+- **A search hint shows the part of a long value that matched.** The *why it matched* hint showed the start
+  of a long value, so a match near the end of a file path, URL or expression was cut off. On large projects
+  up to a third of the hints did not show the searched word. The hint now shows the text around the match
+  (for a file path, the archive entry), in the search, the browse list and the category table, and hovering
+  it shows the whole value.
+- **A filter that matches nothing says so on every report page.** On the Checks, tree, scripts, variables
+  and Elements pages, a filter that matched nothing (including one arriving in a shared link) left headings,
+  counts and table headers standing over an empty page. The page now says *No match* under the filter, with
+  buttons to clear it or to search everything, and hides headings that have nothing under them.
+- **Faint labels are readable, in the IDE's colours too.** Advice, counts, a check's description and the
+  provenance line were drawn at 3.3–3.8:1 contrast in the explorer's light and dark palettes, and at
+  2.0–2.4:1 in the IDE's own colours, where they were a mix of the look-and-feel's hint grey. They now read
+  at 4.5:1 (WCAG AA) in all of them. In the IDE's colours the secondary grey is darkened (lightened in a
+  dark theme) along with them, so the faint labels stay the lighter of the two. An exported ER picture uses
+  the new grey.
+- **A node is named in the singular.** A process's page said *Processes · KEY*, its chips *PROCESSES* and
+  its copy button *Copy Processes key*. One node is now a *Process*, a *User group* or a *Decision table*,
+  and a count of one says *1 decision table*. Lists and the sidebar keep the plural, and a filter finds a
+  node by either word.
+- **The overview lists each entry-point group once.** One group usually starts nearly every model, so *Entry
+  points* was dozens of identical *flowableUser can start* rows, each model chip cut off at the card's edge.
+  A group is now one row with the models it can start (the first eight, and *+N more* for the rest), and a
+  chip too long for the card ends in an ellipsis.
+- **The breadcrumb drops a path it cannot show.** Beside a long page name, such as a REST path, the project
+  and category crumbs were squeezed to nothing and the bar read */ / GET /api/…*. The breadcrumb now shows
+  the page's own name alone until there is room for the path again.
+- **A model's name is readable in a table at an editor tab's width.** A chip in a table cell kept its
+  uppercase kind label whole and gave its name what was left, so at 800–1000px the Checks page's Model
+  column read *PROCESSES* where the model belongs. A chip that is a cell's value now shows its name: the
+  column and the icon say the kind, and hovering the chip names it. Elsewhere a chip's kind label gives way
+  before its name.
+- **The accept button stays in its row in an editor tab.** The findings table kept its seven columns down to
+  a 560px panel, and at 800px they did not fit: the row ran past the table and cut *accept…* off. From 760px
+  down, a findings table puts the model, element and file under the message. This applies to a model's
+  Findings tab too.
+- **A file column names the file.** For a model inside an app archive, the column showed
+  `<App>-bar.zip!form…` on every row of the app. It now shows the archive entry, with the whole path on
+  hover. Under a page's title the path stays on the key's line instead of wrapping under a dangling *·*, and
+  on a narrow page it cuts its folders before the file's own name.
+- **A check's description ends in an ellipsis.** On the overview and the Checks page, a description too long
+  for its row was cut mid-word at the card's edge, along with its pill's border. Hovering it shows the whole
+  sentence.
+- **An element's name outlasts its id.** In the Calls table and the other element tables, a name and the id
+  beside it were cut alike (*Decide appr… decideT…*). The id now gives way first, and the Calls table gives
+  the element column more room. A gap mark too long for its cell ends in an ellipsis instead of running
+  under the next column.
+- **The documented `CLAUDE.md` import line now resolves.** The README and the agents page told you to import
+  a nested `@atlas-output/<project>/<project>.CLAUDE.md`, which neither `./atlas <project>
+  <project>/atlas-output` nor the IDE writes, and Claude Code skips an import it cannot resolve without a
+  word. They now give the `@atlas-output/<project>.CLAUDE.md` line that the generated file's header prints
+  when the output goes into the project (`./atlas <project> <project>/atlas-output`, or the IDE's default
+  output folder).
+- **The plugin no longer promises a loose Design workspace with zero configuration.** The IDE indexes a
+  Flowable Design `*-models` workspace checked in as loose JSON only once *Settings → Tools → Flowable Atlas
+  → Also index raw Flowable Design workspace sources* is on. The marketplace description and the
+  getting-started and plugin pages now say so.
+- **Several stale claims in the documentation are corrected.** The checks page dates past changes to the
+  release that made them (0.24.0), no longer to whichever version is current. The front page no longer
+  counts fourteen health checks, and it puts the parse-issue chip in the explorer's sidebar footer, where it
+  is. The variables page points to the Atlas Findings tool window instead of a Hub tab that does not exist.
+  The plugin page says the code generators run in the IDE only, not on the command line.
+
 ## 0.30.1
 
 - **`graph.json` is back to its size on projects with large, nested forms.** 0.30.0 copied the gated
