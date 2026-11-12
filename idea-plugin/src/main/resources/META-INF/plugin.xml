@@ -183,6 +183,28 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.32.0</h3>
+        <ul>
+          <li><b>Storylines: each process and case told in the order a person would.</b> The explorer has a
+              new page, <code>#/flow</code>, that nests what a model's own page lists: a gateway holds its
+              branches, each under its condition and up to the point where they meet; a loop is one step
+              naming the step it goes back to; a boundary event follows the step it is attached to, with its
+              own path and where that rejoins; a call activity, and a process task in a case, is opened one
+              level deep. A case is told by its stages and plan items, each with what it waits for.
+              <code>--flow</code> writes the same stories as <code>flow.json</code>, for a script or for an
+              agent asked to retell a process in prose, which then has the order and the branching in hand
+              instead of reconstructing them from sequence flows. It is not part of <code>--all</code>: the
+              explorer that run writes carries the stories.</li>
+          <li><b>The IDE's <code>CLAUDE.md</code> names only the artifacts written with it.</b> With
+              <i>Graph (JSON)</i> unticked — on a large project it is the one artifact too big to commit —
+              the file still sent an agent to query <code>graph.json</code> and told the user to tick it. It
+              now leaves the graph's recipes out and sends the agent to the overview for who uses a
+              model.</li>
+          <li><b>The generated <code>CLAUDE.md</code> says how to read a model inside an archive.</b> Most
+              models of a solution project are entries of an app archive, which the overview names as
+              <code>&lt;archive&gt;.zip!&lt;entry&gt;</code>; the step that says to read the source now
+              gives the command, <code>unzip -p &lt;archive&gt;.zip &lt;entry&gt;</code>.</li>
+        </ul>
         <h3>0.31.2</h3>
         <ul>
           <li><b>A table grown over many changelog files is listed once.</b> Every changelog carried every
@@ -577,26 +599,6 @@
               of a variable, an expression or a service operation names the models that use it, and a
               variable's slice lists under <i>Set by</i> and <i>Read by</i> the element and how. Before,
               these slices said "Nothing references this node".</li>
-          <li><b><code>--slice</code> accepts what you actually have in hand.</b> Besides
-              <code>&lt;type&gt;:&lt;key&gt;</code> and a bare key, it now matches the key in a different
-              case, a model's file path (<code>processes/order.bpmn</code>, or its absolute path), a Java
-              class's simple name and a label, and says which one it matched. A miss suggests the nearest
-              ids (<code>did you mean: process:orderProcess</code>) instead of an example id that does not
-              exist.</li>
-          <li><b>The summary and CLAUDE.md name the defects their headline counts.</b> Their lists picked
-              error-level findings only, so a project whose defects were all warnings, such as a gateway
-              with no way out, announced "2 defects" and named neither. The summary now lists up to five
-              open defects, errors first. CLAUDE.md lists up to three, one per check, so they name three
-              different problems. Every finding in graph.json carries its check's <code>kind</code>, and the
-              "what is broken" recipes select open defects by kind.</li>
-          <li><b>CLAUDE.md states a key convention only when most keys follow it.</b> Before, the most
-              frequent pattern was stated whatever its share: one app's prefix in a six-app project, or
-              Design's default <code>decision#</code> on four keys of nine. A pattern now needs at least two
-              keys and at least half of them. Where each app prefixes its own keys, the pattern reads
-              <code>&lt;APP&gt;-P#</code> and names the prefixes seen; a project whose own prefix holds
-              nearly every key keeps it. Test fixtures no longer count towards a convention or appear under
-              <i>Where to write</i>, and more than three archives in one folder are named by that folder and
-              a count.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

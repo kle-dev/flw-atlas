@@ -12,6 +12,25 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.32.0
+
+- **Storylines: each process and case told in the order a person would.** The explorer has a new page,
+  `#/flow`, that nests what a model's own page lists: a gateway holds its branches, each under its
+  condition and up to the point where they meet; a loop is one step naming the step it goes back to; a
+  boundary event follows the step it is attached to, with its own path and where that rejoins; a call
+  activity, and a process task in a case, is opened one level deep. A case is told by its stages and plan
+  items, each with what it waits for. `--flow` writes the same stories as `flow.json`, for a script or
+  for an agent asked to retell a process in prose, which then has the order and the branching in hand
+  instead of reconstructing them from sequence flows. It is not part of `--all`: the explorer that run
+  writes carries the stories.
+- **The IDE's `CLAUDE.md` names only the artifacts written with it.** With *Graph (JSON)* unticked — on a
+  large project it is the one artifact too big to commit — the file still sent an agent to query
+  `graph.json` and told the user to tick it. It now leaves the graph's recipes out and sends the agent to
+  the overview for who uses a model.
+- **The generated `CLAUDE.md` says how to read a model inside an archive.** Most models of a solution
+  project are entries of an app archive, which the overview names as `<archive>.zip!<entry>`; the step
+  that says to read the source now gives the command, `unzip -p <archive>.zip <entry>`.
+
 ## 0.31.2
 
 - **A table grown over many changelog files is listed once.** Every changelog carried every column of
