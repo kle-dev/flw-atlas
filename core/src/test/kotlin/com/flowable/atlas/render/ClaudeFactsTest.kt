@@ -261,6 +261,29 @@ class ClaudeFactsTest {
         assertTrue(step, step.contains("one line per step, plan item or field") && step.contains("`| grep -i '<its name>'`"))
     }
 
+    /**
+     * A plugin user may untick the graph — on a large project it is the artifact too big to commit. The
+     * file then sent an agent to query a file that is not there, and told the user to tick it. Without a
+     * graph it names the overview for who uses a model, and none of the graph's recipes.
+     */
+    @Test
+    fun withoutAGraphTheFileDoesNotSendAnAgentToOne() {
+        val without = render(layout = ClaudeRenderer.Layout(cli = false, graph = false))
+        assertFalse(without, without.contains("graph.json") || without.contains("jq '"))
+        assertTrue(without, without.contains("search the file for the key again"))
+        val with = render(layout = ClaudeRenderer.Layout(cli = false))
+        assertTrue(with.contains("**Query — never read — `$name.graph.json`**") && with.contains("the `usedBy` recipe below"))
+        val unticked = render(layout = ClaudeRenderer.Layout(siblings = false, cli = false, graph = false))
+        assertTrue(unticked, unticked.contains("*Summary (Markdown)* and *Overview (Markdown)* ticked"))
+        assertFalse(unticked, unticked.contains("Graph (JSON)"))
+    }
+
+    /** Most models sit inside an archive, so "read the source" says how to read an entry of one. */
+    @Test
+    fun theSourceStepSaysHowToReadAModelInsideAnArchive() {
+        assertTrue(render().contains("read it with `unzip -p <archive>.zip <entry>`"))
+    }
+
     /** An agent that edits a model is told how to see that it broke nothing: the run against the graph beside it. */
     @Test
     fun anAgentIsToldHowToCheckItsModelEdit() {

@@ -25,6 +25,11 @@ tool is used, a stated rule is kept — but gain nothing from its *overviews*, w
 read anyway, and the file costs about a fifth more per task. So the file holds instructions, conventions
 and catalogs an agent cannot get out of the repository, and nothing it can.
 
+In the IDE, the file names only what is written beside it. With *Graph (JSON)* unticked — on a large
+project it is the one artifact too big to commit — it leaves the graph's recipes out and sends the agent
+to the overview for who uses a model. Either way it says how to read a model that sits inside an archive:
+`unzip -p <archive>.zip <entry>`, with the entry the overview names.
+
 **2 · `--summary`** — a few KB of orientation: apps, inventory, entry points, integrations, hotspots,
 health. The health line reads *3 defects · 41 advice* — what is wrong now, and what is only worth a
 look — so an agent knows which number to act on. This is the right thing to paste into a conversation

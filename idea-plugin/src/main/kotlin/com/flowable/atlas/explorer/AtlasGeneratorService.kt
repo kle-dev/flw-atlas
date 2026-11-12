@@ -146,13 +146,13 @@ class AtlasGeneratorService(private val project: Project) {
                 // are actually being written — the user picks the artifact set in Settings → Generation.
                 AtlasArtifact.CLAUDE_MD to {
                     // The overview too: without a slice to offer, it is where the file sends the agent for
-                    // one model.
-                    val beside = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.OVERVIEW_MD in artifacts &&
-                        AtlasArtifact.GRAPH_JSON in artifacts
+                    // one model. The graph is its own choice: unticked — it is the artifact a large project
+                    // cannot commit — the file leaves its steps out instead of asking for it to be ticked.
+                    val beside = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.OVERVIEW_MD in artifacts
                     val guide = AtlasArtifact.PLAYWRIGHT_MD in artifacts
                     // Not the CLI: the file must not send the agent to a jar or a slice the plugin does not offer.
                     ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), beside,
-                        playwright = guide, playwrightMap = guide, cli = false))
+                        playwright = guide, playwrightMap = guide, cli = false, graph = AtlasArtifact.GRAPH_JSON in artifacts))
                 },
                 // Its lookups point at the graph only when the graph is written beside it.
                 AtlasArtifact.PLAYWRIGHT_MD to { PlaywrightRenderer.render(result, root, guideLayout(outputDir, artifacts)) },

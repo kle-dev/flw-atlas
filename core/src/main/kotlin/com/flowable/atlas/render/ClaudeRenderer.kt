@@ -49,11 +49,15 @@ object ClaudeRenderer {
      * [cli] says the command-line tool wrote the file. The IDE plugin passes `false`: its users have no
      * CLI jar to hand and the plugin offers no slice, so the file sends the agent to the overview and the
      * graph, and the user to the IDE's menu, instead of telling either to run a jar.
+     *
+     * [graph] says `<name>.graph.json` is written. A plugin user may untick it — on a large project it is
+     * the one artifact too big to commit — and the file then must not send an agent to query a file that
+     * is not there: it names the overview for who uses a model, and the archives for the model itself.
      */
     data class Layout(
         val outDir: File? = null, val siblings: Boolean = true,
         val playwright: Boolean = false, val playwrightMap: Boolean = false,
-        val cli: Boolean = true,
+        val cli: Boolean = true, val graph: Boolean = true,
     )
 
     /** Where a plugin user regenerates the artifacts — one spelling with the summary's and the overview's. */
@@ -199,11 +203,10 @@ object ClaudeRenderer {
         } else if (!layout.siblings) {
             // The plugin's user unticked them; the IDE that wrote this file is where they come from.
             // The checkboxes by their labels in Settings (AtlasArtifact), so the user finds them as written.
-            steps.add("Generate the Atlas artifacts first: in the IDE, $IDE_GENERATE with *Summary (Markdown)*, " +
-                    "*Overview (Markdown)* and *Graph (JSON)* ticked under *Settings → Tools → Flowable Atlas → " +
-                    "Generation*. It writes " +
-                    "`$name.summary.md`, `$name.overview.md` and `$name.graph.json` beside this file; the steps " +
-                    "below read them from there.")
+            steps.add("Generate the Atlas artifacts first: in the IDE, $IDE_GENERATE with *Summary (Markdown)* " +
+                    "and *Overview (Markdown)* ticked under *Settings → Tools → Flowable Atlas → Generation*. " +
+                    "It writes `$name.summary.md` and `$name.overview.md` beside this file; the steps below read " +
+                    "them from there.")
         }
         steps.add("Read **`${art("summary.md")}`** — apps, inventory, entry points, integrations, hotspots, " +
                 "open findings. A few KB; read it whole.")
@@ -225,17 +228,19 @@ object ClaudeRenderer {
                     "append `| grep -i '<its name>'`.")
         } else {
             // The plugin ships no CLI jar and offers no slice: the overview holds the model's own section,
-            // and the graph answers who uses it.
+            // and the graph answers who uses it — or, without a graph, the other models' lines that name it.
+            val users = if (layout.graph) "**who uses it** is the `usedBy` recipe below."
+                else "**who uses it**: search the file for the key again — every model that refers to it names it " +
+                    "on the line of the step, plan item or field that does."
             steps.add("For one model, read its entry in **`${art("overview.md")}`** — search it for the model's " +
-                    "key — its steps in execution order with what follows each, or its plan, rules or fields; " +
-                    "**who uses it** is the `usedBy` recipe below.")
+                    "key — its steps in execution order with what follows each, or its plan, rules or fields; $users")
         }
         steps.add("For the wider picture, **`${art("overview.md")}`** — every model in execution order, the " +
                 "access map, the data layer, the findings.")
         // Telling an agent to "query the graph" without saying how, or how big it is, invites it to read
         // the file: on a real project that is megabytes and blows the context it was meant to save.
         val g = art("graph.json")
-        steps.add("**Query — never read — `$g`** (${s["nodes"] ?: 0} nodes, " +
+        if (layout.graph) steps.add("**Query — never read — `$g`** (${s["nodes"] ?: 0} nodes, " +
                 "${s["edges"] ?: 0} edges; megabytes on a large project). Its `_schema` key documents the " +
                 "shape; the recipes that matter:\n" +
                 "   ```bash\n" +
@@ -255,13 +260,16 @@ object ClaudeRenderer {
                 "traversable in both directions; for a variable, `.data.writes` and `.data.reads` say which " +
                 "element sets and reads it.")
         steps.add("Open **`${art("explorer.html")}`** for the clickable view (for humans).")
-        steps.add("Read the actual source to verify, then implement.")
+        // The models are in the repository whatever Atlas wrote, and most of them inside an archive: an
+        // agent told only to "read the source" looked for a .bpmn file that is an entry of a zip.
+        steps.add("Read the actual source to verify, then implement. A model inside an archive is named " +
+                "`<archive>.zip!<entry>` in the overview: read it with `unzip -p <archive>.zip <entry>`.")
         // An agent that edits a model has no way to see that it broke a reference; this is the check that
         // does, phrased as a command because a named tool is what agents demonstrably use. Against the graph
         // as generated — what is new since then is what the change added, unless the file is stale.
         // Only when the CLI wrote the file: the check is a run of the jar, which a plugin user does not have,
         // and the plugin has no baseline comparison to offer in its place.
-        if (layout.cli) {
+        if (layout.cli && layout.graph) {
             val base = if (layout.siblings) g else "<out-dir>/$name.graph.json"
             steps.add("After changing models, check that you added no defect: `java -jar <atlas-cli>.jar <project-dir> " +
                     "--summary --stdout --baseline $base --fail-on defects > /dev/null`. Exit 1 lists on stderr each " +
@@ -468,7 +476,8 @@ object ClaudeRenderer {
                 L.add("- ${Fmt.severityMark(f)} ${f["message"]}" + (if (at.isEmpty()) "" else " — `$at`") +
                     (if (models.isNotEmpty()) " $models" else ""))
             }
-            L.add("- Full list: `${art("overview.md")}` §Findings, or `findings` in `${art("graph.json")}`.")
+            L.add("- Full list: `${art("overview.md")}` §Findings" +
+                (if (layout.graph) ", or `findings` in `${art("graph.json")}`." else "."))
         }
         // An agent that re-reports an accepted finding wastes the reader's attention on a decision that
         // was already made, so the context says the decision exists and where it is written down.

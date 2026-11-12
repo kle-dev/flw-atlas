@@ -251,7 +251,8 @@ the folder a Design pull lands in. The three generators with shapes of their own
 page they were four screens of fields with no hierarchy. Every folder field on these pages is project-relative, and its
 browse button writes the chosen folder relative to the active Flowable project (an absolute path only
 for a folder outside it). Unticking every artifact is not a way to generate nothing: the selection
-falls back to the explorer HTML. Generating into the output folder also drops a `.gitignore` there that keeps
+falls back to the explorer HTML. The *CLAUDE.md primer* names only the artifacts ticked with it: without
+*Graph (JSON)* it leaves the graph's recipes out. Generating into the output folder also drops a `.gitignore` there that keeps
 the generated artifacts out of the repository and nothing else — `waivers.json` and any file of yours stay
 visible — the same file the CLI writes. With *Diagrams (SVG)* ticked, a regeneration also removes the
 drawings of models that no longer exist from `<name>.diagrams/`.

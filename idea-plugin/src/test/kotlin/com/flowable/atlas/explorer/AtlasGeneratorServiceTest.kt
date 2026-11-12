@@ -90,10 +90,12 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         service.generateAll(dir.toPath(), alone, EmptyProgressIndicator(), setOf(AtlasArtifact.CLAUDE_MD))
         val unticked = Files.readString(alone.resolve("${dir.name}.CLAUDE.md"))
         assertFalse(unticked.contains("playwright"))
-        // it says which checkboxes to tick, by the labels the settings page shows
-        for (a in listOf(AtlasArtifact.SUMMARY_MD, AtlasArtifact.OVERVIEW_MD, AtlasArtifact.GRAPH_JSON)) {
+        // it says which checkboxes to tick, by the labels the settings page shows — the two it reads
+        for (a in listOf(AtlasArtifact.SUMMARY_MD, AtlasArtifact.OVERVIEW_MD)) {
             assertTrue(unticked, unticked.contains("*${a.label}*"))
         }
+        // the graph is the user's choice: unticked, the file neither asks for it nor sends an agent to it
+        assertFalse(unticked, unticked.contains(AtlasArtifact.GRAPH_JSON.label) || unticked.contains("graph.json"))
         assertFalse(Files.exists(alone.resolve("${dir.name}.playwright-map.md")))
     }
 
