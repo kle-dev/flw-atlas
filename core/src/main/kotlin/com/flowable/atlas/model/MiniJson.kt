@@ -42,7 +42,7 @@ object MiniJson {
         }
 
     /** Compact JSON rendering of an evaluated value (for showing results). */
-    fun stringify(value: Any?): String = buildString { write(value, this) }
+    fun stringify(value: Any?): String = buildString { write(value, this, false) }
 
     /**
      * Pretty JSON rendering, matching Python's
@@ -56,9 +56,23 @@ object MiniJson {
      *    (integral values keep one decimal, e.g. `1.0`).
      */
     fun stringify(value: Any?, indent: Int): String =
-        buildString { writeIndented(value, this, indent, 0) }
+        buildString { writeIndented(value, this, indent, 0, false) }
 
-    private fun writeIndented(v: Any?, sb: StringBuilder, unit: Int, level: Int) {
+    /**
+     * [stringify] without the members of an object whose value is null: `{"a": 1, "b": null}` is written
+     * `{"a":1}`. A null in a list keeps its place, where its position is the fact. [indent] null is the
+     * compact form.
+     *
+     * For a document that is queried rather than held. `.b` answers null whether the member is there or
+     * not, so the member costs bytes in the file and tokens in every answer cut from it and says nothing.
+     * Left out while serializing, not by copying the value first: the graph is the largest thing a run
+     * holds, and a second copy of it is what a large project does not have the memory for.
+     */
+    fun stringifyWithoutNulls(value: Any?, indent: Int? = null): String = buildString {
+        if (indent == null) write(value, this, true) else writeIndented(value, this, indent, 0, true)
+    }
+
+    private fun writeIndented(v: Any?, sb: StringBuilder, unit: Int, level: Int, skipNulls: Boolean) {
         when (v) {
             null -> sb.append("null")
             is String -> writeJsonString(v, sb)
@@ -67,14 +81,16 @@ object MiniJson {
             is Float -> sb.append(v.toDouble().toString())
             is Number -> sb.append(v.toString())           // Int/Long/Short/Byte/BigInteger -> no decimal
             is Map<*, *> -> {
-                if (v.isEmpty()) { sb.append("{}"); return }
+                // Counted after the nulls are gone: an object of nothing but nulls is an empty one.
+                if (v.isEmpty() || (skipNulls && v.values.all { it == null })) { sb.append("{}"); return }
                 sb.append("{\n")
                 val childPad = " ".repeat(unit * (level + 1))
                 var first = true
                 for ((k, value) in v) {
+                    if (skipNulls && value == null) continue
                     if (!first) sb.append(",\n"); first = false
                     sb.append(childPad); writeJsonString(k.toString(), sb); sb.append(": ")
-                    writeIndented(value, sb, unit, level + 1)
+                    writeIndented(value, sb, unit, level + 1, skipNulls)
                 }
                 sb.append('\n').append(" ".repeat(unit * level)).append('}')
             }
@@ -85,7 +101,7 @@ object MiniJson {
                 var first = true
                 for (e in v) {
                     if (!first) sb.append(",\n"); first = false
-                    sb.append(childPad); writeIndented(e, sb, unit, level + 1)
+                    sb.append(childPad); writeIndented(e, sb, unit, level + 1, skipNulls)
                 }
                 sb.append('\n').append(" ".repeat(unit * level)).append(']')
             }
@@ -202,7 +218,7 @@ object MiniJson {
         sb.append('"')
     }
 
-    private fun write(v: Any?, sb: StringBuilder) {
+    private fun write(v: Any?, sb: StringBuilder, skipNulls: Boolean) {
         when (v) {
             null -> sb.append("null")
             is String -> writeString(v, sb)
@@ -213,15 +229,16 @@ object MiniJson {
                 sb.append('{')
                 var first = true
                 for ((k, value) in v) {
+                    if (skipNulls && value == null) continue
                     if (!first) sb.append(','); first = false
-                    writeString(k.toString(), sb); sb.append(':'); write(value, sb)
+                    writeString(k.toString(), sb); sb.append(':'); write(value, sb, skipNulls)
                 }
                 sb.append('}')
             }
             is Iterable<*> -> {
                 sb.append('[')
                 var first = true
-                for (e in v) { if (!first) sb.append(','); first = false; write(e, sb) }
+                for (e in v) { if (!first) sb.append(','); first = false; write(e, sb, skipNulls) }
                 sb.append(']')
             }
             else -> writeString(v.toString(), sb)

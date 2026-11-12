@@ -43,6 +43,22 @@ class GraphJsonRendererTest {
         assertTrue("the Atlas version is stated", (generated["atlas"] as String).isNotBlank())
     }
 
+    /**
+     * A member that is null is not written: a query reads `.file` as null either way, and the key was
+     * in every record an agent cut from the file. The projection keeps it — only the writing drops it.
+     */
+    @Test
+    fun aNullMemberIsNotWritten() {
+        val text = GraphJsonRenderer.render(result, generatedAt = Instant.parse("2026-09-02T10:00:00Z"))
+        assertFalse("no `\"key\":null` in the file", Regex("\":null[,}]").containsMatchIn(text))
+        assertFalse("…nor in the indented one",
+            Regex("\": null[,\\n]").containsMatchIn(GraphJsonRenderer.render(result, pretty = true, generatedAt = Instant.parse("2026-09-02T10:00:00Z"))))
+        @Suppress("UNCHECKED_CAST")
+        val projected = (GraphJsonRenderer.project(result)["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+        assertTrue("the fixture has a node without a file, so the test tests something",
+            projected.any { it.containsKey("file") && it["file"] == null })
+    }
+
     @Test
     @Suppress("UNCHECKED_CAST")
     fun modelBodiesAreProjectedToPointersAndReferencesAreIndexedBothWays() {

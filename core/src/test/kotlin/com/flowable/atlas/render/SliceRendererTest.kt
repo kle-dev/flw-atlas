@@ -145,6 +145,109 @@ class SliceRendererTest {
         assertTrue(form, form.substringAfter("## Contents").contains("[number]"))
     }
 
+    /**
+     * A case's plan tree from a `.cmmn` file, through the parser. The renderer's own tests hand it maps
+     * built by hand, and for a long time those maps held on-parts shaped as no parser writes them: the
+     * tests passed while every real case named a plan item by an id none of its lines carries, left out
+     * the transition it waits for and printed an empty sentry as a bare `entry`. A plan item's line also
+     * says what the case hands to the process it starts.
+     */
+    @Test
+    fun aCaseSliceNamesWhatItsCriteriaWaitForAndWhatItsProcessTasksAreHanded() {
+        val tmp = java.nio.file.Files.createTempDirectory("atlas-case-slice").toFile()
+        try {
+            File(tmp, "cases").mkdirs()
+            File(tmp, "cases/intake.cmmn").writeText(
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+                             xmlns:flowable="http://flowable.org/cmmn" targetNamespace="http://flowable.org/test">
+                  <case id="DEMO-intake" name="Intake">
+                    <casePlanModel id="plan" name="Intake plan">
+                      <planItem id="planItemcheck" name="Check" definitionRef="check"/>
+                      <planItem id="planItemreview" name="Review" definitionRef="review">
+                        <entryCriterion id="c1" sentryRef="s1"/>
+                      </planItem>
+                      <planItem id="planItemarchive" name="Archive" definitionRef="archive">
+                        <entryCriterion id="c2" sentryRef="s2"/>
+                      </planItem>
+                      <sentry id="s1" flowable:triggerMode="onEvent">
+                        <planItemOnPart id="on1" sourceRef="planItemcheck">
+                          <standardEvent>complete</standardEvent>
+                        </planItemOnPart>
+                        <ifPart><condition><![CDATA[${'$'}{ready}]]></condition></ifPart>
+                      </sentry>
+                      <sentry id="s2" flowable:triggerMode="onEvent"/>
+                      <humanTask id="check" name="Check"/>
+                      <processTask id="review" name="Review" processRef="DEMO-review">
+                        <extensionElements>
+                          <flowable:in source="orderId" target="reviewedOrder"/>
+                          <flowable:in sourceExpression="express" target="priority"/>
+                          <flowable:out source="approved" target="approved"/>
+                        </extensionElements>
+                      </processTask>
+                      <humanTask id="archive" name="Archive"/>
+                    </casePlanModel>
+                  </case>
+                </definitions>
+                """.trimIndent(),
+            )
+            val contents = SliceRenderer.render(Atlas.extract(tmp), "case:DEMO-intake")!!.substringAfter("## Contents\n").lines()
+            assertEquals(
+                "    - Process task Review processRef=`DEMO-review` in(orderId→reviewedOrder) in(\"express\"→priority) " +
+                    "out(approved→approved) · entry on complete \"Check\" if `\${ready}` (triggerMode=onEvent)",
+                contents.single { it.contains("Process task Review") },
+            )
+            assertEquals(
+                "    - Human task Archive · entry at once (its sentry has no event and no condition)",
+                contents.single { it.contains("Human task Archive") },
+            )
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    /**
+     * A variable's slice says what each model does with it and what a mapping sets it to. *Used by* listed
+     * a model that only ever sets the variable beside the ones that read it, and *Set by … (via
+     * `outParameter`)* said that a call sets it and withheld from what — the reader went to the graph for
+     * the value, which is what a slice is there to prevent.
+     */
+    @Test
+    fun aVariableSliceSaysWhoSetsAndWhoReadsItAndWhatAMappingAssigns() {
+        val total = SliceRenderer.render(result, "variable:total")!!.lines()
+        val usedIn = total.single { it.startsWith("- **used in**") }
+        assertTrue(usedIn, usedIn.contains("`decision:orderDecision` Order decision (reads)") &&
+            usedIn.contains("`java:com.example.DemoBean` DemoBean (sets)") &&
+            usedIn.contains("`process:orderProcess` Order Process (sets and reads)"))
+        assertTrue(total.joinToString("\n"), total.contains(
+            "- `process:orderProcess` Order Process — Fulfil (via `outParameter`) ← `subTotal` of `process:fulfilmentProcess`"))
+        val orderId = SliceRenderer.render(result, "variable:orderId")!!.lines()
+        assertTrue(orderId.joinToString("\n"), orderId.contains("- `process:orderProcess` Order Process — Fulfil " +
+            "(via `inParameterSource`) → copied to `subOrderId` of `process:fulfilmentProcess`, `orderId` of `process:fulfilmentProcess`"))
+    }
+
+    /**
+     * The report caps a form's fields so it stays a report. A slice is the page of that one form: capped,
+     * it sent its reader to the graph for the last few fields.
+     */
+    @Test
+    fun aFormSliceListsEveryFieldWhereTheReportCaps() {
+        val tmp = java.nio.file.Files.createTempDirectory("atlas-form-slice").toFile()
+        try {
+            val fields = (1..45).joinToString(",") { """{"id":"f$it","type":"text","label":"Field $it","value":"{{v$it}}"}""" }
+            File(tmp, "wide.form").writeText(
+                """{"metadata":{"key":"DEMO-wide","name":"Wide","modelType":"form"},"rows":[[$fields]]}""")
+            val extracted = Atlas.extract(tmp)
+            val slice = SliceRenderer.render(extracted, "form:DEMO-wide")!!
+            assertEquals(45, slice.lines().count { it.startsWith("- `f") && it.contains("[text]") })
+            assertFalse(slice, slice.contains("more fields"))
+            assertTrue(OverviewRenderer.render(extracted, tmp).contains("(+5 more fields"))
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
     /** No slice may claim nothing references a node whose own data names who uses it. */
     @Suppress("UNCHECKED_CAST")
     @Test

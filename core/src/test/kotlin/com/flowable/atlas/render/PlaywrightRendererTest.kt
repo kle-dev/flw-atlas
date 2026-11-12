@@ -376,19 +376,23 @@ class PlaywrightRendererTest {
             "containers" to mapOf(
                 "details" to mapOf("id" to "details", "type" to "panel", "visible" to "{{show}}"),
                 "p2" to mapOf("id" to "p2", "type" to "panel", "visible" to "{{y}}", "ignore" to "{{!y}}"),
+                "inner" to mapOf("id" to "inner", "type" to "panel", "visible" to "{{z}}", "containerGate" to "p2"),
             ),
             "fields" to listOf(
             mapOf("id" to "trap", "type" to "text", "required" to true, "settings" to mapOf("visible" to "{{x}}")),
             mapOf("id" to "fine", "type" to "text", "required" to "{{x}}", "settings" to mapOf("visible" to "{{x}}")),
             mapOf("id" to "paired", "type" to "text", "required" to true, "settings" to mapOf("visible" to "{{x}}", "enabled" to "{{ x }}")),
             mapOf("id" to "locked", "type" to "text", "required" to true, "settings" to mapOf("enabled" to false)),
-            mapOf("id" to "inPanel", "type" to "text", "required" to true, "containerGates" to listOf("details")),
-            mapOf("id" to "ignored", "type" to "text", "required" to true, "containerGates" to listOf("p2")),
+            mapOf("id" to "inPanel", "type" to "text", "required" to true, "containerGate" to "details"),
+            mapOf("id" to "ignored", "type" to "text", "required" to true, "containerGate" to "p2"),
+            // its own panel only hides it; the panel around that one ignores it
+            mapOf("id" to "deep", "type" to "text", "required" to true, "containerGate" to "inner"),
         ))
         val out = render(case(task("t", "T", "formKey" to "f")), listOf(form))
         val line = out.lines().single { it.contains("required but hidden at times") }
         assertTrue(line, line.contains("`trap`") && line.contains("`inPanel` (with `panel` `details`, visible if `{{show}}`)"))
         assertFalse(line, line.contains("`fine`") || line.contains("`paired`") || line.contains("`ignored`"))
+        assertFalse("a container further out counts as well: $line", line.contains("`deep`"))
         val required = out.lines().single { it.contains("  - required: ") }
         assertFalse("a disabled field blocks nothing", required.contains("`locked`"))
     }

@@ -638,7 +638,7 @@ object ModelParsers {
         ctx.markReadsUnknown(doc["outcomevariablename"])
         // the date format a date field without its own falls back to
         (doc["defaultDateFormat"] as? String)?.trim()?.ifEmpty { null }?.let { info["defaultDateFormat"] = it }
-        val (containers, containerGates) = containerGatesOf(doc)
+        val (containers, containerGate) = containerGatesOf(doc)
         if (containers.isNotEmpty()) info["containers"] = containers
         fun visit(n: Map<String, Any?>) {
             // The component's own record, kept mutable: what a *button* does lives in `extraSettings`,
@@ -691,7 +691,7 @@ object ModelParsers {
                 // The form runtime validates a component whatever its visibility, but skips a disabled or
                 // ignored one, and a container passes both down to everything inside it. So whether a
                 // required field can block the form depends on the panels around it as much as on itself.
-                containerGates[n]?.let { component["containerGates"] = it }
+                containerGate[n]?.let { component["containerGate"] = it }
                 fields.add(component)
                 if (n["type"] == "outcomeButton" && truthy(n["value"])) {
                     outcomes.add(linkedMapOf("value" to n["value"], "label" to label))
@@ -1079,25 +1079,29 @@ object ModelParsers {
     }
 
     /**
-     * The form's gated containers and, for every component inside one, which of them surround it.
+     * The form's gated containers and, for every component inside one, the nearest of them.
      *
      * The first half is the form's `containers` record: each container that is hidden, disabled or ignored,
-     * or may be, once — `{id, type, label?, visible?, enabled?, ignore?}`, the gate values as [gatingOf]
-     * keeps them — under its id. The second maps each component inside one, by identity (the walk in
-     * [parseForm] meets the very same maps), to those containers' keys, nearest first.
+     * or may be, once — `{id, type, label?, visible?, enabled?, ignore?, containerGate?}`, the gate values as
+     * [gatingOf] keeps them — under its id; its `containerGate` is the key of the next gated container
+     * around it. The second maps each component inside one, by identity (the walk in [parseForm] meets the
+     * very same maps), to the key of the nearest. What can hide, disable or ignore a field is therefore its
+     * `containerGate` and then each container's own, outwards.
      *
      * Why it matters: the form runtime skips a disabled or ignored component when it validates, and a
      * disabled or ignored container takes everything inside it along; visibility it ignores entirely. A
      * required field in a hidden-but-enabled panel therefore keeps the form invalid with no error shown,
      * and one in a disabled panel blocks nothing — neither is visible on the field's own record.
      *
-     * Why a field names its containers instead of carrying them: a copy per field grows with fields ×
+     * Why a field names one container instead of carrying them: a copy per field grows with fields ×
      * nesting depth × condition length, and on large, deeply nested forms that multiplied the whole graph's
-     * size and slowed everything that reads it.
+     * size and slowed everything that reads it. Why it names only the nearest: a list of every container
+     * around it still grows with fields × nesting depth, and which containers surround a container is a
+     * fact about the container, so it is stored there.
      */
     private fun containerGatesOf(
         doc: Map<String, Any?>,
-    ): Pair<Map<String, Map<String, Any?>>, java.util.IdentityHashMap<Map<*, *>, List<String>>> {
+    ): Pair<Map<String, Map<String, Any?>>, java.util.IdentityHashMap<Map<*, *>, String>> {
         val containers = LinkedHashMap<String, Map<String, Any?>>()
         // A gated component enters the table only once something inside it is met — a gated button or
         // input is no container — and under one key however many fields name it.
@@ -1111,25 +1115,28 @@ object ModelParsers {
             containers[r] = g
             r
         }
-        val out = java.util.IdentityHashMap<Map<*, *>, List<String>>()
-        fun walk(node: Any?, gates: List<Map<String, Any?>>) {
+        val out = java.util.IdentityHashMap<Map<*, *>, String>()
+        // `gate` is the nearest gated container around `node`, or null outside every one.
+        fun walk(node: Any?, gate: Map<String, Any?>?) {
             when (node) {
-                is List<*> -> node.forEach { walk(it, gates) }
+                is List<*> -> node.forEach { walk(it, gate) }
                 is Map<*, *> -> {
                     @Suppress("UNCHECKED_CAST") val m = node as Map<String, Any?>
-                    if (gates.isNotEmpty() && m["id"] is String && m["type"] is String) out[m] = gates.map(::ref)
-                    val own = if (m["id"] is String && m["type"] is String) gatingOf(m) else null
-                    val inner = if (own == null) gates else {
+                    val component = m["id"] is String && m["type"] is String
+                    if (gate != null && component) out[m] = ref(gate)
+                    val own = if (component) gatingOf(m) else null
+                    val inner = if (own == null) gate else {
                         val g = linkedMapOf<String, Any?>("id" to m["id"], "type" to m["type"])
                         componentCaption(m)?.let { g["label"] = it }
                         g.putAll(own)
-                        listOf(g) + gates
+                        out[m]?.let { g["containerGate"] = it }
+                        g
                     }
                     for ((k, v) in m) if (k !in ORYX_METADATA_KEYS) walk(v, inner)
                 }
             }
         }
-        walk(doc, emptyList())
+        walk(doc, null)
         return containers to out
     }
 

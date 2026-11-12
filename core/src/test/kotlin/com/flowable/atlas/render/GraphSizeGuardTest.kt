@@ -51,8 +51,11 @@ class GraphSizeGuardTest {
     /**
      * A panel's condition is stored once per panel, not once per field inside it. Doubling the depth adds
      * five panels — five more copies of the condition at most, wherever the file keeps them — while a
-     * per-field copy would add hundreds. The size bound is the backstop for a per-element copy of anything
-     * else: twice the depth is about twice the fields, and measured 2.04× the file.
+     * per-field copy would add hundreds. A panel's id is named by what sits directly inside it, not by every
+     * field below it, so the outermost panel's id occurs exactly as often at twice the depth; a list of every
+     * panel around a field grew with fields × depth and was nearly half of the deep file. The size bound is
+     * the backstop for a per-element copy of anything else: twice the depth is about twice the fields, and
+     * measured 1.70× the file.
      */
     @Test
     fun anEnclosingPanelsConditionIsStoredPerPanelNotPerField() {
@@ -62,9 +65,52 @@ class GraphSizeGuardTest {
         val deepCopies = occurrences(deep, "caseStatus == 'DEMO-OPEN'")
         assertTrue("5 more panels added ${deepCopies - shallowCopies} copies of their condition ($shallowCopies → $deepCopies)",
             deepCopies - shallowCopies <= 2 * 5)
+        val shallowIds = occurrences(shallow, "\"panel0\"")
+        val deepIds = occurrences(deep, "\"panel0\"")
+        assertTrue("the fields further down name the outermost panel as well ($shallowIds → $deepIds occurrences of its id)",
+            deepIds == shallowIds)
         val ratio = deep.length.toDouble() / shallow.length
         assertTrue("twice the depth made graph.json ${"%.2f".format(ratio)}× as large (${shallow.length} → ${deep.length} chars)",
             ratio < 2.6)
+    }
+
+    /**
+     * A model that sits in the project twice — in an app archive and beside it, the usual shape of a
+     * Design export kept next to its sources — is parsed twice and kept once. Its parameter mappings and
+     * script sites reached the variables from both readings, so a real project's variables listed every
+     * mapping twice: 2 % of its graph.json, and a count no reader could trust.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aModelHeldInTwoFilesGivesItsVariablesEachMappingOnce() {
+        val bpmn = """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+            xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://flowable.org/test">
+          <process id="DEMO-parent" name="Parent">
+            <callActivity id="call" calledElement="DEMO-child">
+              <extensionElements><flowable:in source="orderId" target="childOrder"/></extensionElements>
+            </callActivity>
+            <scriptTask id="stamp" scriptFormat="groovy">
+              <script>execution.setVariable('orderId', 1)</script>
+            </scriptTask>
+          </process>
+        </definitions>"""
+        val tmp = Files.createTempDirectory("atlas-size-guard-copies").toFile()
+        try {
+            for (folder in listOf("processes", "export")) {
+                File(tmp, folder).mkdirs()
+                File(tmp, "$folder/parent.bpmn").writeText(bpmn)
+            }
+            val json = MiniJson.parse(GraphJsonRenderer.render(Atlas.extract(tmp), generatedAt = Instant.EPOCH)) as Map<String, Any?>
+            assertTrue("the fixture has to hold the model twice", (json["modelCopies"] as? Map<*, *>).orEmpty().isNotEmpty())
+            val nodes = (json["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+            val orderId = nodes.single { it["id"] == "variable:orderId" }["data"] as Map<String, Any?>
+            for (key in listOf("ioParams", "scriptSites")) {
+                val listed = orderId[key] as? List<*> ?: fail("variable:orderId has no $key") as Nothing
+                assertTrue("$key lists a mapping more than once: $listed", listed.size == listed.distinct().size)
+            }
+        } finally {
+            tmp.deleteRecursively()
+        }
     }
 
     // ---- the copy detector ----

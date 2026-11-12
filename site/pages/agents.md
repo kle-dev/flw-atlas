@@ -32,12 +32,19 @@ when the question is "what is this project".
 
 **3 · `--slice <type:key>`** — one model with its full context, both directions, plus the findings that
 touch it, what it contains in the overview's words, and the variables it sets and reads. A variable's
-slice names the elements that set it and read it. The right size when the task is about one model, which
-it usually is. An agent that knows the model by its file rather than its key can pass the path instead,
+slice names the elements that set it and read it, with the value a mapping assigns; a case's says what
+each plan item waits for, by name, and what a process task hands to the process it starts. A model's
+contents are one line per step, plan item or field, so one of them is a `grep` on the slice — the
+generated `CLAUDE.md` says so. It takes any node id — `process:<key>`, `case:<key>`,
+`form:<key>` and every other model type, `variable:<name>`, `java:<fully.qualified.Class>` — and the
+generated `CLAUDE.md` lists them, because an agent shown only `process:<key>` does not assume the rest.
+The right size when the task is about one model, which it usually is: it is the shorter answer than the
+same node read from the graph. An agent that knows the model by its file rather than its key can pass the path instead,
 relative or absolute; a target that matches nothing names the nearest ids.
 
 **4 · `--json`** — the full graph. **Never paste it whole**; query it with `jq`. The file documents
-itself: a `_schema` key at the top describes the shape and ships eight ready-made recipes.
+itself: a `_schema` key at the top describes the shape and ships eight ready-made recipes. A key whose
+value would be null is not written, so a record cut from it holds only what it says.
 
 `<project>.overview.md` sits between 2 and 4 for a human reader.
 

@@ -209,9 +209,20 @@ object ClaudeRenderer {
                 "open findings. A few KB; read it whole.")
         if (layout.cli) {
             // The launcher always adds `--all`, which `--slice` refuses; only the jar form works as typed.
-            steps.add("For one model, ask for its slice: `java -jar <atlas-cli>.jar <project-dir> --slice process:<key> --stdout` — " +
-                    "what it contains, what it uses, **who uses it**, the variables it sets and reads, and the " +
-                    "findings that touch it, on one page.")
+            // Every kind of id is spelled out: with `process:<key>` as the only example, agents given a form,
+            // a case or a Java class had to guess that the slice takes it, and one asked about a variable
+            // did not try and read the graph instead, for several times the output.
+            steps.add("For one model, variable or class, ask for its slice: `java -jar <atlas-cli>.jar <project-dir> " +
+                    "--slice <type>:<key> --stdout` — what it contains, what it uses, **who uses it**, the " +
+                    "variables it sets and reads, and the findings that touch it, on one page. It takes any " +
+                    "node id: `process:<key>`, `case:<key>`, `form:<key>` and every other model type, " +
+                    "`variable:<name>` (the elements that set and read it), `java:<fully.qualified.Class>` " +
+                    "(the models that call it). Ask for it before you query the graph: it is the shorter answer. " +
+                    // A large case's slice runs to tens of kilobytes, and an agent asked about one plan item
+                    // needed five of its lines. Each line is complete in itself, so a filter is the answer.
+                    "A model's *Contents* are one line per step, plan item or field, and the line says " +
+                    "everything about it — what starts it, what it is handed, what it sets. For one of them, " +
+                    "append `| grep -i '<its name>'`.")
         } else {
             // The plugin ships no CLI jar and offers no slice: the overview holds the model's own section,
             // and the graph answers who uses it.
@@ -235,8 +246,12 @@ object ClaudeRenderer {
                 // one a team already decided to live with.
                 "   jq '.findings[] | select(.kind==\"defect\" and (.waived|not))' $g  # what is broken\n" +
                 "   ```\n" +
-                "   A model node's body is stored once in its bucket; the node carries " +
-                "`data.dataIn` naming that bucket. Every node carries `usedBy`, so relationships are " +
+                // The recipes name a process; an agent asked about a case looked for `.cases[]` and its
+                // parts by trial. A body is also the one recipe that can return tens of kilobytes.
+                "   `process:KEY` stands for any node id (`form:KEY`, `case:KEY`, `variable:NAME`, …), and a " +
+                "model's body is in the bucket named after its type (`.forms[]`, `.cases[]`, …): the node " +
+                "carries `data.dataIn` naming it. A body can run to tens of kilobytes — list its parts with " +
+                "`| keys` and ask for the one you need. Every node carries `usedBy`, so relationships are " +
                 "traversable in both directions; for a variable, `.data.writes` and `.data.reads` say which " +
                 "element sets and reads it.")
         steps.add("Open **`${art("explorer.html")}`** for the clickable view (for humans).")

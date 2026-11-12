@@ -231,6 +231,47 @@ class ProcessFlowOrderTest {
             "completes when: `\${nrOfCompletedInstances >= 2}`"))
     }
 
+    /**
+     * A call activity's mappings say what each source is. A literal `sourceExpression` printed bare read as
+     * a variable being copied, an expression sat outside a code span, and a mapping without a source read
+     * `None→draft`.
+     */
+    @Test
+    fun aCallActivitysMappingsTellAVariableFromALiteralAndAnExpression() {
+        fun io(dir: String, source: String?, target: String, expression: Boolean = false) = mapOf(
+            "element" to "call", "dir" to dir, "kind" to dir, "source" to source, "target" to target,
+        ) + (if (expression) mapOf("expression" to true) else emptyMap())
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "callActivities" to listOf(mapOf("id" to "call", "calledElement" to "DEMO-sub")),
+            "ioParameters" to listOf(
+                io("in", "orderId", "subOrderId"), io("in", "outreach", "category", expression = true),
+                io("in", "\${mail.id}", "mailId", expression = true), io("in", null, "draft"),
+                io("out", "total", "total"),
+            ),
+        )
+        val line = render(process).single { it.contains("`call`") }
+        assertTrue(line, line.endsWith("→ process `DEMO-sub` in(orderId→subOrderId) in(\"outreach\"→category) " +
+            "in(`\${mail.id}`→mailId) in(→draft) out(total→total)"))
+    }
+
+    /** A service task that only assigns variables says which, as a case's Init-Variables task does. */
+    @Test
+    fun aServiceTaskThatAssignsVariablesSaysWhatItAssigns() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "serviceTasks" to listOf(mapOf("id" to "init", "name" to "Reset", "delegateExpression" to "\${demoInit}")),
+            "ioParameters" to listOf(
+                mapOf("element" to "init", "dir" to "in", "kind" to "variableMapping", "source" to "false",
+                    "target" to "approved", "type" to "boolean"),
+                // an input parameter of another kind of task is not an assignment and stays off the line
+                mapOf("element" to "init", "dir" to "in", "kind" to "inputParameter", "source" to "x", "target" to "y"),
+            ),
+        )
+        val line = render(process).single { it.contains("`init`") }
+        assertTrue(line, line.endsWith("Reset → \${demoInit} set(approved=false)"))
+    }
+
     @Test
     fun withoutAnyFlowsNothingIsClaimedAboutOrder() {
         // Some exports carry elements but no sequence flows: no "next", and no unreachable noise either.

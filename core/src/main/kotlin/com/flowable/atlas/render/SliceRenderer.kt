@@ -196,23 +196,56 @@ object SliceRenderer {
         val fromEdges = inc.values.flatten().mapNotNull { it["s"] as? String }.toSet()
         val usedIn = (data["usedBy"] as? List<*> ?: emptyList<Any?>()).mapNotNull { it as? String }
             .filter { it !in fromEdges }.distinct()
+        // A variable's sites: which element sets it and which reads it — what a rename has to change.
+        val writes = if (type == "variable") sites(data["writes"]) else emptyList()
+        val reads = if (type == "variable") sites(data["reads"]) else emptyList()
+        // What each model does with a variable, beside its name. Under a heading that says *Used by*, a
+        // model that only ever sets the variable read as one that consumes it.
+        fun does(model: String): String {
+            if (type != "variable") return ""
+            val setsIt = writes.any { it["model"] == model }
+            val readsIt = reads.any { it["model"] == model }
+            return when {
+                setsIt && readsIt -> " (sets and reads)"
+                setsIt -> " (sets)"
+                readsIt -> " (reads)"
+                else -> " (direction not known)"
+            }
+        }
         if (inc.isNotEmpty() || usedIn.isNotEmpty()) {
             L.add("## Used by")
             for ((rel, group) in inc.entries.sortedBy { it.key }) {
                 L.add("- **$rel** ← " + Fmt.cap(group.map { describe(it["s"]) }, 20))
             }
-            if (usedIn.isNotEmpty()) L.add("- **used in** ← " + Fmt.cap(usedIn.map(::describe), 20))
+            if (usedIn.isNotEmpty()) L.add("- **used in** ← " + Fmt.cap(usedIn.map { describe(it) + does(it) }, 20))
             L.add("")
         }
-        // A variable's sites: which element sets it and which reads it — what a rename has to change.
-        val writes = if (type == "variable") sites(data["writes"]) else emptyList()
-        val reads = if (type == "variable") sites(data["reads"]) else emptyList()
+        // The mapping behind a site, from the variable's `ioParams`: the value an Init-Variables task
+        // assigns, the variable of the called model an out-parameter copies. "Set by … (variableMapping)"
+        // said that something sets it and withheld what to, which is what the reader asked. A read says
+        // *copied to*: after a bare arrow, the target was taken for a second variable the element reads.
+        val flows = if (type == "variable") sites(data["ioParams"]) else emptyList()
+        fun mapped(s: Map<*, *>, side: String): String {
+            val el = s["element"] ?: return ""
+            val ends = flows.filter { it["model"] == s["model"] && it["element"] == el && it["side"] == side }
+                .mapNotNull { f ->
+                    val other = Fmt.scalar(f[if (side == "target") "source" else "target"])?.ifBlank { null } ?: return@mapNotNull null
+                    val callee = Fmt.scalar(f["calleeKey"])?.ifBlank { null }
+                        ?.takeIf { f["kind"] == "in" || f["kind"] == "out" }
+                        ?.let { " of `${Fmt.scalar(f["calleeKind"]) ?: "model"}:$it`" }.orEmpty()
+                    // an out-mapping's source and an in-mapping's target are variables of the called model
+                    val there = if ((f["kind"] == "out") == (side == "target")) callee else ""
+                    Fmt.code(other) + there
+                }.distinct()
+            return if (ends.isEmpty()) "" else (if (side == "target") " ← " else " → copied to ") + Fmt.cap(ends, 4)
+        }
         for ((title, list) in listOf("Set by" to writes, "Read by" to reads)) {
             if (list.isEmpty()) continue
             L.add("## $title")
             for (s in list.take(SITES_LISTED)) {
                 val el = siteElement(s)
-                L.add("- " + describe(s["model"]) + (if (el != null) " — $el" else "") + " (${siteHow(s, code = true)})")
+                L.add("- " + describe(s["model"]) + (if (el != null) " — $el" else "") + " (${siteHow(s, code = true)})" +
+                    mapped(s, if (title == "Set by") "target" else "source"))
             }
             if (list.size > SITES_LISTED) L.add("- … (+${list.size - SITES_LISTED} more)")
             L.add("")
@@ -250,7 +283,7 @@ object SliceRenderer {
                 "process" -> OverviewRenderer.renderProcess(data, body)
                 "case" -> OverviewRenderer.renderCase(data, body)
                 "decision" -> OverviewRenderer.renderDecision(data, body)
-                else -> OverviewRenderer.renderForm(data, body, "the graph (`--json`)")
+                else -> OverviewRenderer.renderForm(data, body, "the graph (`--json`)", fieldsListed = Int.MAX_VALUE)
             }
             if (body.firstOrNull()?.startsWith("### ") == true) body.removeAt(0)
             while (body.lastOrNull()?.isBlank() == true) body.removeAt(body.size - 1)

@@ -4,6 +4,7 @@ import com.flowable.atlas.render.ExplorerHtmlRenderer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -26,6 +27,21 @@ class MiniJsonEscapeTest {
         val island = ExplorerHtmlRenderer.dataIsland(payload)
         assertFalse("a '<' can open or close a tag inside the island: $island", island.contains('<'))
         assertEquals(payload, MiniJson.parse(island))
+    }
+
+    /** A null member is left out; a null in a list keeps its place, and an object of only nulls is empty. */
+    @Test fun withoutNullsLeavesOutNullMembersAtEveryDepthAndKeepsListPositions() {
+        val value = linkedMapOf(
+            "id" to "amount", "value" to null,
+            "settings" to linkedMapOf("visible" to null, "enabled" to false),
+            "none" to linkedMapOf("a" to null),
+            "row" to listOf(1, null, linkedMapOf("x" to null, "y" to 2)),
+        )
+        val compact = MiniJson.stringifyWithoutNulls(value)
+        assertEquals("""{"id":"amount","settings":{"enabled":false},"none":{},"row":[1,null,{"y":2}]}""", compact)
+        assertEquals("the indented form says the same", MiniJson.parse(compact), MiniJson.parse(MiniJson.stringifyWithoutNulls(value, 2)))
+        assertTrue("…with an emptied object inline", MiniJson.stringifyWithoutNulls(value, 2).contains("\"none\": {}"))
+        assertEquals("stringify itself still writes them", """{"a":null}""", MiniJson.stringify(mapOf("a" to null)))
     }
 
     @Test fun aBrokenUnicodeEscapeIsAJsonError() {

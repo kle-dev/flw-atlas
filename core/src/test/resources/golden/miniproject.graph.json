@@ -3,6 +3,7 @@
     "about": "Flowable Atlas project graph. Query it — do not read it whole; a large project runs to megabytes.",
     "node": "{id: '<type>:<key>', type, label, key, file, data, usedBy?}",
     "edge": "{s: <sourceNodeId>, t: <targetNodeId>, rel, suspect?, dynamic?}",
+    "absent": "A key whose value would be null is not written, here and in every record below: `.file`, `.resultVariable` and the like answer null either way, so test a value, not `has(...)`.",
     "dataIn": "A model or changelog node's data lives once in the named top-level bucket — find it by matching type+key there (e.g. data.dataIn='processes' -> .processes[] | select(.key==\"<key>\"), data.dataIn='liquibase' -> .liquibase[] | select(.key==\"<key>\")).",
     "java": "javaByRole ({role: [class]}) and javaGlue list Java classes as {fqn, file, line}; what Atlas read from a class — roles, bean names, methods, endpoints — is on the node 'java:<fqn>' (a class Atlas gave no role, listed under 'other', mostly has none). Controllers are javaByRole.controller.",
     "usedBy": "Node ids that reference this node: the sources of its edges (app 'contains' membership excluded; the relation itself is in `edges`) and, for variable, expression, binding, string, serviceOperation and customFunction nodes, the models that use them (where and how: data.reads, data.writes, data.usages).",
@@ -26,9 +27,6 @@
       "name": "Demo App",
       "file": "apps/demo.app",
       "description": "Miniature fixture app for the atlas test suite",
-      "theme": null,
-      "paletteDefinitionCategory": null,
-      "usersAccess": null,
       "groupsAccess": "sales,backoffice",
       "variables": [
         {
@@ -72,7 +70,6 @@
       "name": "Fulfilment Process",
       "file": "processes/fulfilment.bpmn",
       "documentation": "Ships an approved order and reports the shipping total back to its caller.",
-      "candidateStarterGroups": null,
       "userTasks": [],
       "serviceTasks": [],
       "scriptTasks": [
@@ -81,7 +78,6 @@
           "name": "Pack shipment",
           "format": "groovy",
           "script": "def label = \"pack:\" + orderNotes\n        execution.setVariable('subTotal', 10)",
-          "resultVariable": null,
           "async": "true"
         }
       ],
@@ -90,18 +86,14 @@
         {
           "id": "callCourier",
           "name": "Book courier",
-          "calledElement": "courierProcess",
-          "calledElementType": null
+          "calledElement": "courierProcess"
         }
       ],
       "subProcesses": [],
       "events": [
         {
           "id": "fStart",
-          "name": null,
-          "type": "startEvent",
-          "def": null,
-          "value": null
+          "type": "startEvent"
         },
         {
           "id": "courierLate",
@@ -121,10 +113,7 @@
         },
         {
           "id": "fEnd",
-          "name": null,
-          "type": "endEvent",
-          "def": null,
-          "value": null
+          "type": "endEvent"
         }
       ],
       "gateways": [
@@ -192,8 +181,7 @@
         {
           "id": "orderNotes",
           "name": "orderNotes",
-          "type": "xsd:string",
-          "default": null
+          "type": "xsd:string"
         }
       ],
       "lanes": [
@@ -234,7 +222,6 @@
         {
           "id": "approveTask",
           "name": "Approve order",
-          "assignee": null,
           "candidateGroups": "backoffice",
           "formKey": "orderForm",
           "sla": "approvalSla",
@@ -245,27 +232,17 @@
         {
           "id": "calcTask",
           "name": "Calculate total",
-          "class": null,
           "expression": "${demoBean.run(execution)}",
-          "delegateExpression": null,
-          "type": null,
           "resultVariable": "total"
         },
         {
           "id": "notifyTask",
           "name": "Notify",
-          "class": null,
-          "expression": null,
           "delegateExpression": "${notifierBean}",
-          "type": null,
-          "resultVariable": null,
           "listeners": [
             {
               "kind": "executionListener",
               "event": "end",
-              "class": null,
-              "expression": null,
-              "delegateExpression": null,
               "script": "execution.setVariable('notified', true)",
               "scriptFormat": "groovy"
             }
@@ -274,11 +251,7 @@
         {
           "id": "decideTask",
           "name": "Decide approval",
-          "class": null,
-          "expression": null,
-          "delegateExpression": null,
           "type": "dmn",
-          "resultVariable": null,
           "fields": {
             "decisionTableReferenceKey": "orderDecision"
           }
@@ -290,7 +263,6 @@
           "name": "Stamp order",
           "format": "groovy",
           "script": "def stamp = \"shipped-\" + orderId + \"-\" + courierCode\n        execution.setVariable('shippingStamp', stamp)",
-          "resultVariable": null,
           "documentation": "Builds the shipping stamp from the order and the courier."
         },
         {
@@ -298,7 +270,6 @@
           "name": "Broken stamp",
           "format": "groovy",
           "script": "execution.setVariable('shippingStamp', \"x-\" + orderId",
-          "resultVariable": null,
           "problems": [
             {
               "start": 21,
@@ -316,7 +287,6 @@
           "name": "Broken API call",
           "format": "groovy",
           "script": "execution.setTransientVariabel('meta', orderId)",
-          "resultVariable": null,
           "problems": [
             {
               "start": 10,
@@ -342,25 +312,18 @@
         {
           "id": "callSub",
           "name": "Fulfil",
-          "calledElement": "fulfilmentProcess",
-          "calledElementType": null
+          "calledElement": "fulfilmentProcess"
         }
       ],
       "subProcesses": [],
       "events": [
         {
           "id": "start",
-          "name": null,
-          "type": "startEvent",
-          "def": null,
-          "value": null
+          "type": "startEvent"
         },
         {
           "id": "end",
-          "name": null,
-          "type": "endEvent",
-          "def": null,
-          "value": null
+          "type": "endEvent"
         }
       ],
       "gateways": [],
@@ -440,7 +403,6 @@
           "elementType": "serviceTask",
           "dir": "out",
           "kind": "resultVariable",
-          "source": null,
           "target": "total"
         },
         {
@@ -500,14 +462,10 @@
       "key": "archivedProcess",
       "name": "Archived Process",
       "file": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
-      "documentation": null,
-      "candidateStarterGroups": null,
       "userTasks": [
         {
           "id": "confirm",
           "name": "Confirm order",
-          "assignee": null,
-          "candidateGroups": null,
           "formKey": "orderForm"
         }
       ],
@@ -519,17 +477,11 @@
       "events": [
         {
           "id": "start",
-          "name": null,
-          "type": "startEvent",
-          "def": null,
-          "value": null
+          "type": "startEvent"
         },
         {
           "id": "end",
-          "name": null,
-          "type": "endEvent",
-          "def": null,
-          "value": null
+          "type": "endEvent"
         }
       ],
       "gateways": [],
@@ -558,20 +510,16 @@
       "key": "reviewCase",
       "name": "Review Case",
       "file": "cases/review.cmmn",
-      "documentation": null,
-      "initiatorVariableName": null,
       "candidateStarterGroups": "auditors",
       "planModel": {
         "id": "planModel",
         "name": "Review plan",
         "type": "casePlanModel",
-        "autoComplete": null,
         "children": [
           {
             "id": "reviewTask",
             "name": "Review order",
             "type": "humanTask",
-            "assignee": null,
             "candidateGroups": "auditors",
             "formKey": "orderForm",
             "listeners": [],
@@ -591,10 +539,8 @@
             "id": "lookupTask",
             "name": "Lookup customer",
             "type": "task",
-            "serviceTaskType": null,
             "serviceModelKey": "customerService",
             "operationKey": "findAll",
-            "formKey": null,
             "listeners": [],
             "rules": {},
             "planItemId": "pi_lookup"
@@ -680,8 +626,7 @@
           "id": "panel1",
           "type": "panel",
           "label": "Order",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "legacyOrderId",
@@ -695,7 +640,6 @@
           "type": "subform",
           "label": "Order details",
           "required": false,
-          "value": null,
           "subform": "orderForm"
         },
         {
@@ -703,7 +647,6 @@
           "type": "dataObjectSelect",
           "label": "Customer",
           "required": false,
-          "value": null,
           "callee": {
             "kind": "dataObject",
             "key": "customerDO",
@@ -730,7 +673,6 @@
           "type": "workAction",
           "label": "Run the check",
           "required": false,
-          "value": null,
           "callee": {
             "kind": "action",
             "key": "notifyCustomerAction"
@@ -740,8 +682,7 @@
           "id": "orderRows",
           "type": "dataTable",
           "label": "Rows",
-          "required": false,
-          "value": null
+          "required": false
         }
       ],
       "outcomes": [
@@ -797,8 +738,7 @@
         {
           "where": "loadOrder",
           "method": "GET",
-          "url": "/api/orders/{{legacyOrderId}}",
-          "path": null
+          "url": "/api/orders/{{legacyOrderId}}"
         }
       ],
       "description": "A Design-workspace export in the legacy editor's shape.",
@@ -839,15 +779,13 @@
           "id": "customer",
           "type": "select",
           "label": "Customer",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "amount",
           "type": "number",
           "label": "Amount",
-          "required": true,
-          "value": null
+          "required": true
         },
         {
           "id": "totalDisplay",
@@ -861,7 +799,6 @@
           "type": "button",
           "label": "Lookup customer",
           "required": false,
-          "value": null,
           "callee": {
             "kind": "service",
             "key": "customerService",
@@ -873,7 +810,6 @@
           "type": "select",
           "label": "Customer record",
           "required": false,
-          "value": null,
           "callee": {
             "kind": "dataObject",
             "key": "customerDO",
@@ -884,22 +820,19 @@
           "id": "customerRecord.customerName",
           "type": "text",
           "label": "Customer name",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "shipTo.deliveryCity",
           "type": "text",
           "label": "Ship-to city",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "canEditButton",
           "type": "restButton",
           "label": "Check if editable",
           "required": false,
-          "value": null,
           "callee": {
             "kind": "rest",
             "key": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit"
@@ -913,7 +846,6 @@
           "type": "workAction",
           "label": "Notify customer",
           "required": false,
-          "value": null,
           "settings": {
             "visible": "{{amount > 0}}",
             "primary": true
@@ -939,9 +871,7 @@
         {
           "id": "escalate",
           "type": "workAction",
-          "label": null,
           "required": false,
-          "value": null,
           "callee": {
             "kind": "action",
             "key": "notifyCustomerAction"
@@ -989,7 +919,6 @@
           "type": "textarea",
           "label": "Internal note",
           "required": false,
-          "value": null,
           "settings": {
             "enabled": "{{isSupervisor}}"
           }
@@ -998,15 +927,13 @@
           "id": "invoiceCopy",
           "type": "upload",
           "label": "Invoice copy",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "discountRate",
           "type": "number",
           "label": "Discount rate",
           "required": false,
-          "value": null,
           "variant": "float"
         },
         {
@@ -1100,7 +1027,6 @@
         },
         {
           "element": "escalate",
-          "elementName": null,
           "elementType": "workAction",
           "elementSubType": "action",
           "dir": "in",
@@ -1122,8 +1048,7 @@
         {
           "where": "creditScore",
           "method": "GET",
-          "url": "/api/customers/{{customer}}/score",
-          "path": null
+          "url": "/api/customers/{{customer}}/score"
         }
       ],
       "_uses": {
@@ -1176,15 +1101,13 @@
           "id": "startOrder",
           "type": "button",
           "label": "Start an order",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "openOrders",
           "type": "workProcessList",
           "label": "Open orders",
-          "required": false,
-          "value": null
+          "required": false
         },
         {
           "id": "priorityPick",
@@ -1254,11 +1177,7 @@
       "name": "Customer Service",
       "file": "services/customer.service",
       "type": "db",
-      "baseUrl": null,
-      "auth": null,
       "tableName": "cust_customer",
-      "referencedLiquibaseModelKey": null,
-      "referenceKey": null,
       "columns": [
         {
           "name": "id",
@@ -1285,7 +1204,6 @@
         {
           "key": "findAll",
           "name": "Find all",
-          "type": null,
           "method": "GET",
           "url": "/api/customers",
           "fullUrl": "/api/customers",
@@ -1352,9 +1270,6 @@
             "sqlType": "varchar(255)",
             "inLiquibase": true,
             "inService": false,
-            "service": null,
-            "serviceCol": null,
-            "serviceType": null,
             "dataObjects": [],
             "status": "no-service",
             "from": {
@@ -1439,20 +1354,12 @@
       "name": "Scoring Service",
       "file": "services/scoring.service",
       "type": "script",
-      "baseUrl": null,
-      "auth": null,
-      "tableName": null,
-      "referencedLiquibaseModelKey": null,
-      "referenceKey": null,
       "columns": [],
       "operations": [
         {
           "key": "score",
           "name": "Score an order",
           "type": "script",
-          "method": null,
-          "url": null,
-          "fullUrl": null,
           "params": [
             {
               "name": "total",
@@ -1478,7 +1385,6 @@
       "file": "channels/order-events.channel",
       "channelType": "inbound",
       "type": "jms",
-      "topics": null,
       "destination": "orders.shipped",
       "eventKey": {
         "fixedValue": "orderShipped"
@@ -1557,10 +1463,7 @@
       "file": "data/customer.data",
       "modelType": "dataObject",
       "dataObjectType": "lookup",
-      "sourceId": null,
       "service": "customerService",
-      "dictionary": null,
-      "dictionaryType": null,
       "columns": [
         {
           "name": "id",
@@ -1631,12 +1534,7 @@
       "name": "Notify customer",
       "file": "actions/notify-customer.action",
       "botKey": "script-evaluation-bot",
-      "formKey": null,
-      "signalName": null,
-      "channels": null,
       "scopeType": "bpmn",
-      "icon": null,
-      "permissionGroups": null,
       "script": "var to = flw.getInput('customerEmail'); var amount = flw.getInput('orderTotal'); flw.setOutput('sent', true);",
       "scriptLanguage": "javascript",
       "ioParameters": [
@@ -1648,7 +1546,6 @@
           "refKey": "script-evaluation-bot",
           "dir": "in",
           "kind": "signalVariable",
-          "source": null,
           "target": "notified"
         },
         {
@@ -1670,7 +1567,6 @@
           "refKey": "script-evaluation-bot",
           "dir": "in",
           "kind": "flwScript",
-          "source": null,
           "target": "customerEmail"
         },
         {
@@ -1681,7 +1577,6 @@
           "refKey": "script-evaluation-bot",
           "dir": "in",
           "kind": "flwScript",
-          "source": null,
           "target": "orderTotal"
         },
         {
@@ -1692,7 +1587,6 @@
           "refKey": "script-evaluation-bot",
           "dir": "out",
           "kind": "flwScript",
-          "source": null,
           "target": "sent"
         }
       ],
@@ -1707,14 +1601,7 @@
       "name": "Send invoice",
       "file": "actions/send-invoice.action",
       "botKey": "DEMO-invoice-bot",
-      "formKey": null,
-      "signalName": null,
-      "channels": null,
       "scopeType": "bpmn",
-      "icon": null,
-      "permissionGroups": null,
-      "script": null,
-      "scriptLanguage": null,
       "ioParameters": []
     }
   ],
@@ -1789,7 +1676,6 @@
           "file": "db/changelog/001-customer.xml",
           "line": 6,
           "status": "ran",
-          "note": null,
           "changes": [
             "createTable cust_customer (5 columns)"
           ]
@@ -1826,19 +1712,14 @@
       "modelType": "masterData",
       "dataObjectType": "masterData",
       "sourceId": "JSON",
-      "service": null,
-      "dictionary": null,
-      "dictionaryType": null,
       "columns": [
         {
           "name": "level",
-          "label": "Level",
-          "type": null
+          "label": "Level"
         },
         {
           "name": "color",
-          "label": "Color",
-          "type": null
+          "label": "Color"
         }
       ],
       "fields": [
@@ -1973,8 +1854,7 @@
         {
           "name": "minTotal",
           "type": "number",
-          "label": "Minimum total",
-          "required": null
+          "label": "Minimum total"
         }
       ],
       "sortParameters": [
@@ -2584,7 +2464,6 @@
       "rel": "callActivity",
       "kind": "process",
       "value": "courierProcess",
-      "target": null,
       "targetType": "model"
     },
     {
@@ -2594,9 +2473,7 @@
       "rel": "serviceTask-delegate",
       "kind": "bean",
       "value": "notifierBean",
-      "target": null,
-      "targetType": "bean",
-      "targetFqn": null
+      "targetType": "bean"
     }
   ],
   "dynamicRefs": [],
@@ -2867,7 +2744,6 @@
       }
     ]
   },
-  "customFunctions": null,
   "stats": {
     "models": 28,
     "modelCount": 28,
@@ -2889,7 +2765,6 @@
       "check": "parseIssues",
       "kind": "defect",
       "severity": "error",
-      "node": null,
       "label": "broken.form",
       "message": "parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
       "file": "broken.form"
@@ -3535,7 +3410,6 @@
               ]
             }
           ],
-          "botKey": null,
           "methods": [
             {
               "name": "customers",
@@ -3570,7 +3444,6 @@
           ],
           "interfaces": [],
           "endpoints": [],
-          "botKey": null,
           "methods": [
             {
               "name": "run",
@@ -3686,7 +3559,6 @@
         "type": "group",
         "label": "sales",
         "key": "sales",
-        "file": null,
         "data": {}
       },
       {
@@ -3694,7 +3566,6 @@
         "type": "group",
         "label": "backoffice",
         "key": "backoffice",
-        "file": null,
         "data": {}
       },
       {
@@ -3702,7 +3573,6 @@
         "type": "group",
         "label": "auditors",
         "key": "auditors",
-        "file": null,
         "data": {}
       },
       {
@@ -3710,7 +3580,6 @@
         "type": "expression",
         "label": "${subTotal > 5}",
         "key": "${subTotal > 5}",
-        "file": null,
         "data": {},
         "usedBy": [
           "process:fulfilmentProcess"
@@ -3721,7 +3590,6 @@
         "type": "expression",
         "label": "${stockLevel > 0}",
         "key": "${stockLevel > 0}",
-        "file": null,
         "data": {},
         "usedBy": [
           "process:fulfilmentProcess"
@@ -3732,7 +3600,6 @@
         "type": "expression",
         "label": "${demoBean.run(execution)}",
         "key": "${demoBean.run(execution)}",
-        "file": null,
         "data": {},
         "usedBy": [
           "process:orderProcess"
@@ -3743,7 +3610,6 @@
         "type": "expression",
         "label": "${total > 100}",
         "key": "${total > 100}",
-        "file": null,
         "data": {},
         "usedBy": [
           "process:orderProcess"
@@ -3754,7 +3620,6 @@
         "type": "expression",
         "label": "${vars:bogus(}",
         "key": "${vars:bogus(}",
-        "file": null,
         "data": {
           "problems": [
             {
@@ -3762,7 +3627,6 @@
               "end": 12,
               "message": "Unknown function 'vars:bogus'",
               "severity": "warning",
-              "quickFix": null,
               "kind": "unknown-function",
               "subject": "vars:bogus",
               "snippet": "bogus"
@@ -3772,7 +3636,6 @@
               "end": 13,
               "message": "Unclosed '('",
               "severity": "error",
-              "quickFix": null,
               "snippet": "("
             }
           ]
@@ -3786,7 +3649,6 @@
         "type": "expression",
         "label": "${notifierBean}",
         "key": "${notifierBean}",
-        "file": null,
         "data": {},
         "usedBy": [
           "process:orderProcess"
@@ -3797,7 +3659,6 @@
         "type": "expression",
         "label": "${manager}",
         "key": "${manager}",
-        "file": null,
         "data": {},
         "usedBy": [
           "sla:approvalSla"
@@ -3808,7 +3669,6 @@
         "type": "expression",
         "label": "${!managerApproved}",
         "key": "${!managerApproved}",
-        "file": null,
         "data": {},
         "usedBy": [
           "sla:approvalSla"
@@ -3819,7 +3679,6 @@
         "type": "expression",
         "label": "${customerName}",
         "key": "${customerName}",
-        "file": null,
         "data": {},
         "usedBy": [
           "template:orderConfirmationTemplate"
@@ -3830,7 +3689,6 @@
         "type": "expression",
         "label": "${orderNumber}",
         "key": "${orderNumber}",
-        "file": null,
         "data": {},
         "usedBy": [
           "template:orderConfirmationTemplate"
@@ -3841,7 +3699,6 @@
         "type": "expression",
         "label": "${grandTotal}",
         "key": "${grandTotal}",
-        "file": null,
         "data": {},
         "usedBy": [
           "template:orderConfirmationTemplate"
@@ -3852,7 +3709,6 @@
         "type": "binding",
         "label": "{{orderId}}",
         "key": "{{orderId}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "agent:orderAssistant",
@@ -3864,7 +3720,6 @@
         "type": "binding",
         "label": "{{customerName}}",
         "key": "{{customerName}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "agent:orderAssistant"
@@ -3875,7 +3730,6 @@
         "type": "binding",
         "label": "{{legacyOrderId}}",
         "key": "{{legacyOrderId}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3886,7 +3740,6 @@
         "type": "binding",
         "label": "{{legacyMode == 'strict'}}",
         "key": "{{legacyMode == 'strict'}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3897,7 +3750,6 @@
         "type": "binding",
         "label": "{{$temp.loaded}}",
         "key": "{{$temp.loaded}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3908,7 +3760,6 @@
         "type": "binding",
         "label": "{{$response.total}}",
         "key": "{{$response.total}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3919,7 +3770,6 @@
         "type": "binding",
         "label": "{{contactEmail}}",
         "key": "{{contactEmail}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3930,7 +3780,6 @@
         "type": "binding",
         "label": "{{customerPick}}",
         "key": "{{customerPick}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3941,7 +3790,6 @@
         "type": "binding",
         "label": "{{$route.currentAppId}}",
         "key": "{{$route.currentAppId}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3952,7 +3800,6 @@
         "type": "binding",
         "label": "{{$row.id}}",
         "key": "{{$row.id}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:DEMO-LF001"
@@ -3963,7 +3810,6 @@
         "type": "binding",
         "label": "{{amount}}",
         "key": "{{amount}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -3974,7 +3820,6 @@
         "type": "binding",
         "label": "{{endpoints.baseUrl}}",
         "key": "{{endpoints.baseUrl}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -3985,7 +3830,6 @@
         "type": "binding",
         "label": "{{customer}}",
         "key": "{{customer}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -3996,7 +3840,6 @@
         "type": "binding",
         "label": "{{$response.canEdit}}",
         "key": "{{$response.canEdit}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4007,7 +3850,6 @@
         "type": "binding",
         "label": "{{amount > 0}}",
         "key": "{{amount > 0}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4018,7 +3860,6 @@
         "type": "binding",
         "label": "{{customer.email}}",
         "key": "{{customer.email}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4029,7 +3870,6 @@
         "type": "binding",
         "label": "{{$response.executionPayload.sent}}",
         "key": "{{$response.executionPayload.sent}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4040,7 +3880,6 @@
         "type": "binding",
         "label": "{{orderTotal}}",
         "key": "{{orderTotal}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4051,7 +3890,6 @@
         "type": "binding",
         "label": "{{amount * 1.081}}",
         "key": "{{amount * 1.081}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4062,7 +3900,6 @@
         "type": "binding",
         "label": "{{$response.scopeId}}",
         "key": "{{$response.scopeId}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4073,7 +3910,6 @@
         "type": "binding",
         "label": "{{$temp.score}}",
         "key": "{{$temp.score}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4084,7 +3920,6 @@
         "type": "binding",
         "label": "{{!customer}}",
         "key": "{{!customer}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4095,7 +3930,6 @@
         "type": "binding",
         "label": "{{$response.score}}",
         "key": "{{$response.score}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4106,7 +3940,6 @@
         "type": "binding",
         "label": "{{isSupervisor}}",
         "key": "{{isSupervisor}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4117,7 +3950,6 @@
         "type": "binding",
         "label": "{{}}",
         "key": "{{}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "form:orderForm"
@@ -4128,7 +3960,6 @@
         "type": "binding",
         "label": "{{openOrderCount}}",
         "key": "{{openOrderCount}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "page:orderPage"
@@ -4139,7 +3970,6 @@
         "type": "binding",
         "label": "{{priority}}",
         "key": "{{priority}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "page:orderPage"
@@ -4150,7 +3980,6 @@
         "type": "binding",
         "label": "{{minTotal}}",
         "key": "{{minTotal}}",
-        "file": null,
         "data": {},
         "usedBy": [
           "query:openOrdersQuery"
@@ -4161,7 +3990,6 @@
         "type": "variable",
         "label": "subTotal",
         "key": "subTotal",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -4240,7 +4068,6 @@
         "type": "variable",
         "label": "stockLevel",
         "key": "stockLevel",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -4271,7 +4098,6 @@
         "type": "variable",
         "label": "total",
         "key": "total",
-        "file": null,
         "data": {
           "scopes": [
             "decision",
@@ -4306,7 +4132,6 @@
               "model": "process:orderProcess",
               "element": "calcTask",
               "dir": "out",
-              "source": null,
               "target": "total",
               "kind": "resultVariable",
               "side": "target"
@@ -4371,7 +4196,6 @@
         "type": "variable",
         "label": "manager",
         "key": "manager",
-        "file": null,
         "data": {
           "scopes": [
             "sla"
@@ -4402,7 +4226,6 @@
         "type": "variable",
         "label": "managerApproved",
         "key": "managerApproved",
-        "file": null,
         "data": {
           "scopes": [
             "sla"
@@ -4433,7 +4256,6 @@
         "type": "variable",
         "label": "customerName",
         "key": "customerName",
-        "file": null,
         "data": {
           "scopes": [
             "template",
@@ -4478,7 +4300,6 @@
         "type": "variable",
         "label": "orderNumber",
         "key": "orderNumber",
-        "file": null,
         "data": {
           "scopes": [
             "template"
@@ -4509,7 +4330,6 @@
         "type": "variable",
         "label": "grandTotal",
         "key": "grandTotal",
-        "file": null,
         "data": {
           "scopes": [
             "template"
@@ -4540,7 +4360,6 @@
         "type": "variable",
         "label": "legacyOrderId",
         "key": "legacyOrderId",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4571,7 +4390,6 @@
         "type": "variable",
         "label": "legacyMode",
         "key": "legacyMode",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4602,7 +4420,6 @@
         "type": "variable",
         "label": "contactEmail",
         "key": "contactEmail",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4633,7 +4450,6 @@
         "type": "variable",
         "label": "customerPick",
         "key": "customerPick",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4681,7 +4497,6 @@
         "type": "variable",
         "label": "amount",
         "key": "amount",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4731,7 +4546,6 @@
         "type": "variable",
         "label": "customer",
         "key": "customer",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4781,7 +4595,6 @@
         "type": "variable",
         "label": "orderTotal",
         "key": "orderTotal",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4822,7 +4635,6 @@
         "type": "variable",
         "label": "isSupervisor",
         "key": "isSupervisor",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -4853,7 +4665,6 @@
         "type": "variable",
         "label": "openOrderCount",
         "key": "openOrderCount",
-        "file": null,
         "data": {
           "scopes": [
             "page"
@@ -4884,7 +4695,6 @@
         "type": "variable",
         "label": "priority",
         "key": "priority",
-        "file": null,
         "data": {
           "scopes": [
             "page"
@@ -4915,7 +4725,6 @@
         "type": "variable",
         "label": "approved",
         "key": "approved",
-        "file": null,
         "data": {
           "scopes": [
             "decision"
@@ -4950,7 +4759,6 @@
         "type": "variable",
         "label": "contractType",
         "key": "contractType",
-        "file": null,
         "data": {
           "scopes": [
             "document"
@@ -4975,7 +4783,6 @@
         "type": "variable",
         "label": "orderTotalIndexed",
         "key": "orderTotalIndexed",
-        "file": null,
         "data": {
           "scopes": [
             "variableExtractor"
@@ -5008,7 +4815,6 @@
         "type": "variable",
         "label": "courierIndexed",
         "key": "courierIndexed",
-        "file": null,
         "data": {
           "scopes": [
             "variableExtractor"
@@ -5041,7 +4847,6 @@
         "type": "variable",
         "label": "legacyAction",
         "key": "legacyAction",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -5074,7 +4879,6 @@
         "type": "variable",
         "label": "orderNotes",
         "key": "orderNotes",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -5128,7 +4932,6 @@
         "type": "variable",
         "label": "orderId",
         "key": "orderId",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -5262,7 +5065,6 @@
         "type": "variable",
         "label": "subOrderId",
         "key": "subOrderId",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -5312,7 +5114,6 @@
         "type": "variable",
         "label": "notified",
         "key": "notified",
-        "file": null,
         "data": {
           "scopes": [
             "action",
@@ -5337,7 +5138,6 @@
               "model": "action:notifyCustomerAction",
               "element": "script-evaluation-bot",
               "dir": "in",
-              "source": null,
               "target": "notified",
               "kind": "signalVariable",
               "side": "target",
@@ -5385,7 +5185,6 @@
         "type": "variable",
         "label": "shippingStamp",
         "key": "shippingStamp",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -5444,7 +5243,6 @@
         "type": "variable",
         "label": "courierCode",
         "key": "courierCode",
-        "file": null,
         "data": {
           "scopes": [
             "process"
@@ -5489,7 +5287,6 @@
         "type": "variable",
         "label": "customerRecord",
         "key": "customerRecord",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -5532,7 +5329,6 @@
         "type": "variable",
         "label": "internalNote",
         "key": "internalNote",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -5575,7 +5371,6 @@
         "type": "variable",
         "label": "invoiceCopy",
         "key": "invoiceCopy",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -5618,7 +5413,6 @@
         "type": "variable",
         "label": "discountRate",
         "key": "discountRate",
-        "file": null,
         "data": {
           "scopes": [
             "form"
@@ -5661,7 +5455,6 @@
         "type": "variable",
         "label": "appVar",
         "key": "appVar",
-        "file": null,
         "data": {
           "scopes": [
             "app"
@@ -5686,7 +5479,6 @@
         "type": "string",
         "label": "strict",
         "key": "strict",
-        "file": null,
         "data": {
           "usages": [
             {
@@ -5706,7 +5498,6 @@
         "type": "serviceOperation",
         "label": "findAll",
         "key": "customerService#findAll",
-        "file": null,
         "data": {
           "service": "customerService",
           "operation": "findAll",
@@ -5729,14 +5520,10 @@
         "type": "serviceOperation",
         "label": "score",
         "key": "scoringService#score",
-        "file": null,
         "data": {
           "service": "scoringService",
           "operation": "score",
           "name": "Score an order",
-          "method": null,
-          "url": null,
-          "fullUrl": null,
           "params": [
             {
               "name": "total",
@@ -5773,7 +5560,6 @@
         "type": "external",
         "label": "courierProcess",
         "key": "courierProcess",
-        "file": null,
         "data": {
           "kind": "process",
           "missingModel": true
@@ -5787,7 +5573,6 @@
         "type": "external",
         "label": "notifierBean",
         "key": "notifierBean",
-        "file": null,
         "data": {
           "platform": false,
           "kind": "bean"
@@ -5801,7 +5586,6 @@
         "type": "external",
         "label": "/api/orders/{{legacyOrderId}}",
         "key": "/api/orders/{{legacyOrderId}}",
-        "file": null,
         "data": {
           "method": "GET",
           "external_url": true
@@ -5815,7 +5599,6 @@
         "type": "external",
         "label": "/api/orders?customer={{customerPick}}",
         "key": "/api/orders?customer={{customerPick}}",
-        "file": null,
         "data": {
           "method": "GET",
           "external_url": true
@@ -5829,7 +5612,6 @@
         "type": "external",
         "label": "/api/customers/{{customer}}/score",
         "key": "/api/customers/{{customer}}/score",
-        "file": null,
         "data": {
           "method": "GET",
           "external_url": true
@@ -5843,7 +5625,6 @@
         "type": "external",
         "label": "https://portal.example.com/{{customer}}",
         "key": "https://portal.example.com/{{customer}}",
-        "file": null,
         "data": {
           "link": true
         },
@@ -5856,7 +5637,6 @@
         "type": "bot",
         "label": "script-evaluation-bot",
         "key": "script-evaluation-bot",
-        "file": null,
         "data": {
           "platform": true
         },

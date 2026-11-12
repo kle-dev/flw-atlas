@@ -84,8 +84,20 @@ What it says, it says once and in the words that mean it:
   element no flow and no event reaches is marked *not reachable* — an event sub-process *starts on its
   event*.
 - **Cases.** The plan tree is a list under its heading, each criterion with what its sentry waits for —
-  the events and the condition — and each rule in words (*required*, *repeats while …*, *manual
-  activation*). Only the sentries no plan item uses are listed after the tree.
+  the transition and the plan item by name, and the condition (`entry on complete "Assessment" if …`) —
+  and each rule in words (*required*, *repeats while …*, *manual activation*). A name that repeats in
+  the case is said with its stage, or with its id where a sibling carries the same one. The line says
+  how its parts combine: the on-parts of one sentry are joined by *and*, a second criterion of the same
+  kind starts with *or* (`· entry on complete "A" · or entry if …`). `(triggerMode=onEvent)` marks a
+  sentry whose event and condition have to coincide, a sentry with neither reads *at once*, and an exit
+  says what it does to its stage where the model sets it (`exitEventType=forceComplete`). A process or
+  case task carries its in and out mappings, as a call activity does:
+  `in(orderId→reviewedOrder) in("express"→priority) out(total→total)` — a quoted source is a literal,
+  a bare one a variable. Only the sentries no plan item uses are listed after the tree.
+- **Assignments.** A task that initializes variables says what it assigns, in a case and in a process:
+  `set(approved=false) set(stage="Intake")` — a string quoted, a variable or an expression in a
+  code span, and the type alone where the model sets no value (`set(draft: jsonObject)`).
+- **Forms.** A data source several components share is listed once, with how many (`×3`).
 - **REST calls.** One line per method and URL, with who calls it. ⚠ marks only a call on the
   application's own base that no endpoint of the project serves; calls to Flowable's own REST API and to
   other systems are listed apart.
@@ -119,9 +131,10 @@ It is designed to make that easy:
   `{variables}` come first. The key is missing when Atlas could not read the handler's signature, and an
   empty list means the handler takes nothing.
 - The model bodies keep what Work does with them. In **`forms`**, a field keeps its **`validation`**
-  (`pattern`, `mask`, bounds, lengths, a date's `format`, `custom` checks) and, as **`containerGates`**,
-  the ids of the containers around it that can hide, disable or ignore it, nearest first — each described
-  once in the form's **`containers`**; an outcome keeps `visible`, `enabled`, `ignoreValidation`
+  (`pattern`, `mask`, bounds, lengths, a date's `format`, `custom` checks) and, as **`containerGate`**,
+  the id of the nearest container around it that can hide, disable or ignore it — each described once in
+  the form's **`containers`**, where a container's own `containerGate` names the next one out, so the
+  chain is followed from the field outwards; an outcome keeps `visible`, `enabled`, `ignoreValidation`
   and `navigationUrl`; a form keeps `outcomeVariableName`, `doNotCreateOutcomeVariable` and
   `designVersion`. In **`cases`**, `planModel.exitCriteria` holds what ends the whole case; a sentry keeps
   its `triggerMode` and the `events` its on-parts wait for; every criterion keeps its `planItemId`, and an
@@ -161,6 +174,9 @@ It is designed to make that easy:
   node pointing there via `data.dataIn` — a Liquibase changelog's too, in **`liquibase`**
   (`.liquibase[] | select(.key=="K")`). Together that roughly halves the file — 4.8 MB → 2.5 MB on a
   large real project. `--pretty` indents it when a human has to look.
+- A key whose value would be **null is not written**. `.file` or `.resultVariable` answers null either
+  way, so a query reads the same; test a value rather than `has(...)`. The key cost bytes in the file and
+  in every record cut from it — most of all in a form, whose fields each said `"value": null`.
 - **Java classes** are references. `javaByRole` lists the classes by role (`controller`, `service`,
   `bot`, …) and `javaGlue` the delegates and listeners, each as `{fqn, file, line}`; what Atlas read from
   a class — its roles, bean names, methods and endpoints — is on its node `java:<fqn>`. The parser's raw
@@ -322,8 +338,14 @@ One node with what it uses, **who uses it**, the findings that touch it, and its
 for an agent that has been asked to change exactly one model. A process, case, decision, form or page
 also gets its *Contents*, exactly as the overview lists them — the steps in execution order with what
 follows each, the plan tree, the rule rows, the fields — and its *Variables*, each with the elements of
-the model that set and read it. A variable's slice names every model that uses it, and under *Set by*
-and *Read by* the element and how. A bare key without a type matches any type and renders every match.
+the model that set and read it. A form's slice lists every field, where the overview stops at 40. A
+variable's slice names every model that uses it with what the model does (*sets*, *reads*, *sets and
+reads*), and under *Set by* and *Read by* the element, how, and the other end of a mapping: the value
+an assignment sets, the variable of the called model an out-parameter copies, the variable a read is
+copied to. A model's
+*Contents* are one line per step, plan item or field, each complete in itself, so one element of a
+large model is `… --stdout | grep -i '<its name>'`. A bare key without a type matches any type and
+renders every match.
 So does what an agent usually has in hand instead: the model's file path (`--slice processes/order.bpmn`,
 or its absolute path), a Java class's simple name, a label, or the key in another case — the slice then
 opens with a line saying what it matched by. A target that matches nothing names the nearest ids instead.

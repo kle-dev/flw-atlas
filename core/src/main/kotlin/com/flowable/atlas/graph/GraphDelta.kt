@@ -201,8 +201,8 @@ class GraphDelta(
             val elements = LinkedHashMap<String, MutableList<Part>>()
             for ((k, v) in model) {
                 val key = k.toString()
-                if (key in IGNORED) continue
-                if (!collect(key, v, elements)) properties[key] = canonical(v)
+                if (key in IGNORED || v == null) continue
+                if (!collect(key, v, elements)) properties[key] = comparable(v)
             }
             return Body(properties, elements)
         }
@@ -249,7 +249,7 @@ class GraphDelta(
                 if (x.size != y.size) { out.add(member); continue }
                 for ((p, q) in x.zip(y)) {
                     for (k in p.content.keys + q.content.keys) {
-                        if (canonical(p.content[k]) != canonical(q.content[k])) out.add(k)
+                        if (comparable(p.content[k]) != comparable(q.content[k])) out.add(k)
                     }
                 }
             }
@@ -261,6 +261,14 @@ class GraphDelta(
          * Kotlin types — a graph.json reads every number back as a Double — and MiniJson writes `3` for both.
          */
         private fun canonical(v: Any?): String = MiniJson.stringify(strip(v))
+
+        /**
+         * [canonical] for telling two sides apart, where a member that is null is one that is not there:
+         * graph.json does not write it, so read back, the side that was a file lacks what the side that was
+         * analysed holds as null. A fingerprint stays [canonical] — it is always taken from an analysed model,
+         * and one that changed its form would call every copy an older Atlas fingerprinted different.
+         */
+        private fun comparable(v: Any?): String = MiniJson.stringifyWithoutNulls(strip(v))
 
         private fun strip(v: Any?): Any? = when (v) {
             is Map<*, *> -> v.entries.filter { it.key.toString() !in IGNORED }.sortedBy { it.key.toString() }

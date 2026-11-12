@@ -1674,9 +1674,13 @@ object PlaywrightRenderer {
 
             // A disabled or ignored component is valid whatever its value, and so is everything inside a
             // disabled or ignored container: such a field blocks nothing, however `isRequired` reads.
+            // A field names the nearest gated container and each container the next one out, so the
+            // containers around a field are that chain, nearest first.
             val containers = f["containers"] as? Map<*, *>
             fun around(fl: Map<String, Any?>): List<Map<*, *>> =
-                (fl["containerGates"] as? List<*>).orEmpty().mapNotNull { containers?.get(it) as? Map<*, *> }
+                generateSequence(containers?.get(fl["containerGate"]) as? Map<*, *>) {
+                    containers?.get(it["containerGate"]) as? Map<*, *>
+                }.toList()
             fun gates(fl: Map<String, Any?>): List<Map<*, *>> =
                 listOfNotNull(fl["settings"] as? Map<*, *>) + around(fl)
             val required = fields.filter { fl ->

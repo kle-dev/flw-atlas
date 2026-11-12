@@ -478,12 +478,14 @@ object GraphBuilder {
                 addSite(v, k, Ctx.READ, "variablesFn")
             }
         }
+        // A custom function's namespace is the project's own frontend code, not a variable of that name.
+        val functionRoots = custom?.namespaces?.keys.orEmpty()
         for ((ph, keys) in ctx.mustacheUse) {
-            val head = varInMustache(ph)
+            val head = varInMustache(ph)?.takeIf { it !in functionRoots }
             val body = bindingBody(ph)
             // `{{root.x}}` / `{{parent.x}}`: Work hands the form the root and the parent instance's variables
             val scoped = Constants.hierarchyReads(body, Constants.FRONTEND_HIERARCHY_TOKENS)
-            val later = laterBindingNames(body, head)
+            val later = laterBindingNames(body, head) - functionRoots
             for (k in keys) {
                 if (contractScoped(k)) continue
                 if (head != null) {
@@ -577,13 +579,16 @@ object GraphBuilder {
                 linkedMapOf<String, Any?>("model" to kn(k), "snippets" to snips.sorted().take(10))
             }
             val data = linkedMapOf<String, Any?>("usedBy" to usedBy, "scopes" to scopes, "usages" to usages)
+            // Once each: a model that sits in the project twice — in an app archive and beside it — is
+            // parsed twice and kept once, but its mappings arrived here from both readings, so every
+            // variable of such a project listed each of them twice.
             val flows = (varParams[v] ?: emptyList()).filter { kn(it["model"]) != null }
-                .map { it + mapOf("model" to kn(it["model"])) }
+                .map { it + mapOf("model" to kn(it["model"])) }.distinct()
             if (flows.isNotEmpty()) data["ioParams"] = flows
             // Which scripts touch this variable, and on which element — the detail view lists them and
             // the explorer's search jumps straight to that script.
             val scripts = (varScripts[v] ?: emptyList()).filter { kn(it["model"]) != null }
-                .map { it + mapOf("model" to kn(it["model"])) }
+                .map { it + mapOf("model" to kn(it["model"])) }.distinct()
             if (scripts.isNotEmpty()) data["scriptSites"] = scripts
             // Where the name is written and where it is read — complete here, because UnusedVariables
             // decides on these lists (a silencing site must not fall off the end); capped for display only
@@ -1286,12 +1291,20 @@ object GraphBuilder {
         return "(${flow["dir"]} parameter" + (if (el != null) " on $el" else "") + ") $mapping"
     }
 
-    /** The bound variable name of a `{{…}}` binding, e.g. `{{order.x}}` -> `order`. */
+    /**
+     * The bound variable name of a `{{…}}` binding, e.g. `{{order.x}}` -> `order`.
+     *
+     * Not a variable: the runtime's own roots, a call (`{{round(total)}}`), and a word of JavaScript. The
+     * names past the head were held to the last two and the head was not, so `{{true}}`, `{{false}}` and
+     * `{{null}}` — what a script button assigns, what a hidden field is set to — gave a project three
+     * variables of those names, each "used" by every form that binds the literal.
+     */
     private fun varInMustache(ph: String): String? {
         val inner = ph.trim('{', '}', ' ').trim()
         val m = MUSTACHE_HEAD_RE.find(inner) ?: return null
         val root = m.groupValues[1]
-        if (root in MUSTACHE_IGNORE) return null
+        if (root in MUSTACHE_IGNORE || root in FRONTEND_JS_WORDS) return null
+        if (inner.substring(m.range.last + 1).trimStart().startsWith("(")) return null
         return root
     }
 

@@ -744,7 +744,7 @@ object OverviewRenderer {
             val impl = orAny(st["class"], st["delegateExpression"], st["expression"], st["type"], "?")
             val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
             row(st["id"], "- ⚙️ ${DesignTerms.label("el", "serviceTask")} `${pyStr(st["id"])}` " +
-                "${orE(st["name"])} → ${pyStr(impl)}$rv")
+                "${orE(st["name"])} → ${pyStr(impl)}$rv${ioSuffix(p, st["id"])}")
         }
         // Script tasks were missing from this report entirely — a process could run a script and
         // nothing in the Markdown said so.
@@ -786,13 +786,8 @@ object OverviewRenderer {
         }
         for (caAny in asList(p["callActivities"])) {
             val ca = asMap(caAny)
-            // `<flowable:in>`/`<flowable:out>` live in the model's flat `parameters` rollup, stamped
-            // with the element that declares them (see Ctx.addParams).
-            val io = asList(p["ioParameters"]).map { asMap(it) }
-                .filter { it["element"] == ca["id"] && it["kind"] in listOf("in", "out") }
-                .joinToString("") { " ${pyStr(it["dir"])}(${pyStr(it["source"])}→${pyStr(it["target"])})" }
             row(ca["id"], "- 📞 ${DesignTerms.label("el", "callActivity")} `${pyStr(ca["id"])}` " +
-                "→ process `${pyStr(ca["calledElement"])}`$io")
+                "→ process `${pyStr(ca["calledElement"])}`${ioSuffix(p, ca["id"])}")
         }
         for (miAny in asList(p["multiInstance"])) {
             val mi = asMap(miAny)
@@ -897,22 +892,19 @@ object OverviewRenderer {
         val sentryIndex = asList(c["sentries"]).map { asMap(it) }
             .mapNotNull { sen -> sen["id"]?.toString()?.ifEmpty { null }?.let { it to sen } }
             .toMap()
-        // The sentries a plan-tree line already spells out. Listing them again after the tree was 42% of a
-        // real report's case section; only the ones no criterion reaches are left to list.
-        val shown = HashSet<String>()
+        val tree = CaseTree(c, sentryIndex)
         if (truthy(c["planModel"])) {
             val plan = asMap(c["planModel"])
             // The plan model's own exit criteria end the whole case, and no plan item carries them.
-            val exits = asList(plan["exitCriteria"]).map { criterionText(asMap(it), sentryIndex, shown) }
+            val exits = criteriaText(asList(plan["exitCriteria"]).map { asMap(it) }, tree)
             // Depth 0: indented under the heading, the tree was a code block to any Markdown reader.
-            renderStage(plan, L, 0, sentryIndex, shown,
-                if (exits.isEmpty()) "" else " · " + exits.joinToString(" · "))
+            renderStage(plan, L, 0, tree, exits)
         }
-        val unused = asList(c["sentries"]).map { asMap(it) }.filter { it["id"]?.toString() !in shown }
+        val unused = asList(c["sentries"]).map { asMap(it) }.filter { it["id"]?.toString() !in tree.shown }
         if (unused.isNotEmpty()) {
             L.add("- 🚪 Sentries no plan item uses:")
             for (sen in unused) {
-                L.add("    - " + Fmt.join("`${pyStr(sen["id"])}`", sentryText(sen)))
+                L.add("    - " + Fmt.join("`${pyStr(sen["id"])}`", sentryText(sen, tree)))
             }
         }
         for (eAny in asList(c["eventListeners"])) {
@@ -958,12 +950,17 @@ object OverviewRenderer {
 
     /**
      * One form or page: its heading, its fields with what each button does, its outcomes and data
-     * sources. [graphRef] is where the fields past the cap can be looked up.
+     * sources. [graphRef] is where the fields past the cap can be looked up; [fieldsListed] is that cap,
+     * which the report needs to stay a report and a slice does not — it is the page of this one form, and
+     * sending its reader to the graph for the last seven fields defeats it.
      */
-    internal fun renderForm(f: Map<String, Any?>, L: MutableList<String>, graphRef: String, refs: FileRefs = FileRefs.NONE) {
+    internal fun renderForm(
+        f: Map<String, Any?>, L: MutableList<String>, graphRef: String, refs: FileRefs = FileRefs.NONE,
+        fieldsListed: Int = FORM_FIELDS_LISTED,
+    ) {
         L.add("### ${orE(f["name"])} (`${pyStr(f["key"])}`)" + refs.tail(f["file"]))
         val fields = asList(f["fields"])
-        for (fldAny in fields.take(FORM_FIELDS_LISTED)) {
+        for (fldAny in fields.take(fieldsListed)) {
             val fld = asMap(fldAny)
             val label = orE(fld["label"])
             // A link button's caption *is* its `value`, so printing both says it twice.
@@ -986,8 +983,8 @@ object OverviewRenderer {
             L.add("- " + Fmt.join("`${pyStr(fld["id"])}`", "[${pyStr(fld["type"])}]",
                 label, req, b, to, ex, gates(settings)))
         }
-        if (fields.size > FORM_FIELDS_LISTED) {
-            L.add("- … (+${fields.size - FORM_FIELDS_LISTED} more fields — `fields` on the form " +
+        if (fields.size > fieldsListed) {
+            L.add("- … (+${fields.size - fieldsListed} more fields — `fields` on the form " +
                 "node in $graphRef)")
         }
         val outcomes = asList(f["outcomes"])
@@ -997,8 +994,11 @@ object OverviewRenderer {
                     .joinToString(", ") { "`${pyStr(it["value"])}`" }
             )
         }
-        for (dsAny in asList(f["dataSources"])) {
-            L.add("- 🔌 data source: ${Fmt.dataSource(dsAny)}")
+        // Once each, with how many components share it: nine selects on one placeholder URL were nine
+        // identical lines, between which the eight real sources had to be found.
+        val sources = asList(f["dataSources"]).map { Fmt.dataSource(it) }
+        for ((source, n) in sources.groupingBy { it }.eachCount()) {
+            L.add("- 🔌 data source: $source" + if (n > 1) " ×$n" else "")
         }
         for (sfAny in asList(f["subforms"])) {
             L.add("- 📑 subform → `${pyStr(sfAny)}`")
@@ -1406,19 +1406,21 @@ object OverviewRenderer {
      * A CMMN case has no sequence flows: what makes a plan item start or stop is its criteria, and the
      * condition behind one lives in a separate `sentries` list keyed by `sentryRef`. Listing the two
      * apart (plan items here, sentries there) left the reader to join them by id — so the report showed
-     * a case's structure while withholding what actually drives it. [sentries] is that index.
+     * a case's structure while withholding what actually drives it. [tree] holds that index.
+     *
+     * A process or case task also carries its in/out mappings, as a call activity's line does: what the
+     * case hands to the model it starts and what it takes back is the other half of "what does this plan
+     * item do", and a reader had to fetch `ioParameters` from the graph for it.
      */
     private fun renderStage(
         node: Map<String, Any?>,
         L: MutableList<String>,
         depth: Int,
-        sentries: Map<String, Map<String, Any?>>,
-        shown: MutableSet<String>,
+        tree: CaseTree,
         titleSuffix: String = "",
     ) {
         val ind = "    ".repeat(depth)
-        L.add("$ind- 📁 **${DesignTerms.label("el", node["type"])}** " +
-            "${pyStr(orAny(node["name"], node["id"], ""))}$titleSuffix")
+        L.add("$ind- 📁 **${DesignTerms.label("el", node["type"])}** ${tree.own(node)}$titleSuffix")
         // criteria of *this* stage's plan items, keyed by the definition the plan item refers to
         val critByItem = LinkedHashMap<String, MutableList<Map<String, Any?>>>()
         for (cAny in asList(node["criteria"])) {
@@ -1435,14 +1437,14 @@ object OverviewRenderer {
                 val of = c["planItemId"]?.toString()
                 own == null || of == null || of == own
             }
-            return crits.joinToString("") { " · " + criterionText(it, sentries, shown) }
+            return criteriaText(crits, tree)
         }
         for (chAny in asList(node["children"])) {
             val ch = asMap(chAny)
             val rules = asMap(ch["rules"]).entries.mapNotNull { ruleText(it.key, it.value) }
                 .joinToString("") { " · $it" }
             if (ch.containsKey("children")) {
-                renderStage(ch, L, depth + 1, sentries, shown, rules + criteriaSuffix(ch))
+                renderStage(ch, L, depth + 1, tree, rules + criteriaSuffix(ch))
             } else {
                 var extra = ""
                 // the code a Java task runs and where its result goes, as a process's service task line says
@@ -1454,31 +1456,192 @@ object OverviewRenderer {
                     if (truthy(ch[k])) extra += " $k=`${pyStr(ch[k])}`"
                 }
                 L.add("$ind    - ${DesignTerms.label("el", ch["type"])} " +
-                    "${pyStr(orAny(ch["name"], ch["id"], ""))}$extra$rules${criteriaSuffix(ch)}")
+                    "${tree.own(ch)}$extra${ioSuffix(tree.case, ch["id"])}$rules${criteriaSuffix(ch)}")
             }
         }
     }
 
     /**
-     * A criterion as the gate and what opens it: `entry on complete reviewTask if ${ready}` (the
-     * condition in a code span). A sentry can wait for an event and a condition at once, and printing only
-     * the condition hid the event — readable only in the sentry list below the tree. [shown] collects the
-     * sentries spelled out this way, so that list can leave them out.
+     * The criteria of one plan item, each after its ` · `. Several of one kind are alternatives — the
+     * engine takes the first one that is satisfied — and every one after the first says so: `· entry on
+     * complete "A" · or entry if ${late}`. Side by side without the word, a reader could not tell whether
+     * all of them or any of them opens the gate, and one who greps a single line sees no legend.
      */
-    private fun criterionText(c: Map<String, Any?>, sentries: Map<String, Map<String, Any?>>, shown: MutableSet<String>): String {
-        val gate = if (c["type"] == "exitCriterion") "exit" else "entry"
-        val ref = c["sentryRef"]?.toString()
-        val sen = ref?.let { sentries[it] } ?: return gate
-        shown.add(ref)
-        return Fmt.join(gate, sentryText(sen))
+    private fun criteriaText(crits: List<Map<String, Any?>>, tree: CaseTree): String {
+        val gates = HashSet<Boolean>()
+        return crits.joinToString("") {
+            " · " + (if (gates.add(it["type"] == "exitCriterion")) "" else "or ") + criterionText(it, tree)
+        }
     }
 
-    /** `on a, b if <condition>` — what a sentry waits for; blank for an empty sentry. */
-    private fun sentryText(sen: Map<String, Any?>): String {
-        val on = Fmt.list(sen["onParts"])
-        val cond = Fmt.scalar(sen["condition"])?.ifBlank { null }
-        return Fmt.join(if (on.isEmpty()) "" else "on $on", cond?.let { "if ${Fmt.code(it)}" } ?: "")
+    /**
+     * A criterion as the gate and what opens it: `entry on complete "Review" if ${ready}` (the condition
+     * in a code span). A sentry can wait for an event and a condition at once, and printing only the
+     * condition hid the event — readable only in the sentry list below the tree. [CaseTree.shown] collects
+     * the sentries spelled out this way, so that list can leave them out.
+     *
+     * A sentry with neither event nor condition is satisfied the moment the engine evaluates it, so the
+     * item starts (or is exited) as soon as its stage is active. It printed as a bare `entry`, which reads
+     * as a criterion whose condition got lost. `exitEventType` and `exitType` follow where the model sets
+     * them: an exit that *completes* its stage fires every sentry waiting for that stage to complete, a
+     * plain one fires none of them.
+     */
+    private fun criterionText(c: Map<String, Any?>, tree: CaseTree): String {
+        val gate = if (c["type"] == "exitCriterion") "exit" else "entry"
+        val ref = c["sentryRef"]?.toString()
+        val sen = ref?.let { tree.sentries[it] } ?: return gate
+        tree.shown.add(ref)
+        val how = listOf("exitEventType", "exitType")
+            .mapNotNull { k -> Fmt.scalar(c[k])?.ifBlank { null }?.let { "$k=$it" } }
+        return Fmt.join(
+            gate, sentryText(sen, tree).ifEmpty { "at once (its sentry has no event and no condition)" },
+            if (how.isEmpty()) "" else "(${how.joinToString(", ")})",
+        )
     }
+
+    /**
+     * `on complete "Review" and occur "Skip" if <condition>` — what a sentry waits for; blank for an empty
+     * sentry. Each on-part is the transition it waits for, where the model names one, and the plan item
+     * by name (see [CaseTree.ref]). All of them have to happen, hence the *and*: a comma left that open.
+     *
+     * `(triggerMode=onEvent)` is said only where it changes something, which takes two things that have
+     * to meet — an on-part and a condition, or two on-parts: in that trigger mode a satisfied part is not
+     * remembered, so a condition that turns true after the event no longer opens the gate. Spelled as the
+     * attribute it is: a bare `(onEvent)` was read as part of the event before it.
+     */
+    private fun sentryText(sen: Map<String, Any?>, tree: CaseTree): String {
+        val events = asList(sen["events"]).map { asMap(it) }
+            .associate { Fmt.scalar(it["source"]) to Fmt.scalar(it["event"]) }
+        val parts = asList(sen["onParts"]).mapNotNull { Fmt.scalar(it)?.ifBlank { null } }
+        val on = parts.joinToString(" and ") { Fmt.join(events[it].orEmpty(), tree.ref(it)) }
+        val cond = Fmt.scalar(sen["condition"])?.ifBlank { null }
+        val onEvent = Fmt.scalar(sen["triggerMode"]).equals("onEvent", ignoreCase = true) &&
+            (parts.size >= 2 || (parts.isNotEmpty() && cond != null))
+        return Fmt.join(
+            if (on.isEmpty()) "" else "on $on", cond?.let { "if ${Fmt.code(it)}" } ?: "",
+            if (onEvent) "(triggerMode=onEvent)" else "",
+        )
+    }
+
+    /**
+     * One case's plan items by the id a sentry names them by, and what else its tree is rendered from.
+     *
+     * A sentry's on-part holds a plan item id (`planItemprocessTask14`), and the tree lists plan items by
+     * name. Printed as stored, a criterion read `entry on planItemprocessTask14`: an id no line of the tree
+     * carries, so a reader could not tell which item has to complete — and had to open the graph to learn
+     * it. [ref] says the item by the name its own line shows.
+     */
+    private class CaseTree(val case: Map<String, Any?>, val sentries: Map<String, Map<String, Any?>>) {
+        /**
+         * The sentries a plan-tree line already spells out. Listing them again after the tree was 42% of a
+         * real report's case section; only the ones no criterion reaches are left to list.
+         */
+        val shown = HashSet<String>()
+
+        private val plan = asMap(case["planModel"])
+        private val byRef = HashMap<String, Map<String, Any?>>()
+        private val parentOf = java.util.IdentityHashMap<Map<String, Any?>, Map<String, Any?>>()
+        private val nameCount = HashMap<String, Int>()
+
+        /** The plan items some on-part names — the only ones whose line may need an id to be told apart. */
+        private val named = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Map<String, Any?>, Boolean>())
+
+        init {
+            fun walk(node: Map<String, Any?>) {
+                for (ch in asList(node["children"]).map { asMap(it) }) {
+                    parentOf[ch] = node
+                    // The plan item's id is what an on-part holds; the definition's stands in for a model
+                    // that gives its plan items none, and never replaces one that was already found.
+                    (ch["id"] as? String)?.let { byRef.putIfAbsent(it, ch) }
+                    (ch["planItemId"] as? String)?.let { byRef[it] = ch }
+                    nameOf(ch)?.let { nameCount.merge(it, 1, Int::plus) }
+                    if (ch.containsKey("children")) walk(ch)
+                }
+            }
+            walk(plan)
+            for (sen in sentries.values) {
+                for (part in asList(sen["onParts"])) (part as? String)?.let { byRef[it] }?.let { named.add(it) }
+            }
+        }
+
+        private fun nameOf(rec: Map<String, Any?>): String? = (rec["name"] as? String)?.trim()?.ifEmpty { null }
+
+        private fun idOf(rec: Map<String, Any?>): String = (rec["planItemId"] ?: rec["id"])?.toString() ?: "?"
+
+        private fun hasTwin(rec: Map<String, Any?>): Boolean {
+            val name = nameOf(rec) ?: return false
+            val parent = parentOf[rec] ?: return false
+            return asList(parent["children"]).any { it !== rec && nameOf(asMap(it)) == name }
+        }
+
+        /**
+         * A plan item as a criterion names it: `"Review"`. Where the name repeats in the case it is
+         * qualified by the stage it sits in (`"Audit" in "Intake"`), and by its id where a sibling carries
+         * the same name — [own] then puts that id on the item's line. An item without a name is its id,
+         * as on its own line, and an id no plan item has stays as the model wrote it.
+         */
+        fun ref(id: String): String {
+            val rec = byRef[id] ?: return Fmt.code(id)
+            val name = nameOf(rec) ?: return Fmt.code(rec["id"]?.toString() ?: id)
+            val said = "\"$name\""
+            if ((nameCount[name] ?: 0) < 2) return said
+            val parent = parentOf[rec]
+            return when {
+                hasTwin(rec) -> "$said (${Fmt.code(idOf(rec))})"
+                parent == null || parent === plan -> "$said on the case plan"
+                else -> "$said in " + (nameOf(parent)?.let { "\"$it\"" } ?: Fmt.code(parent["id"]?.toString() ?: "?"))
+            }
+        }
+
+        /** A plan item's name on its own line, with its id only where a criterion tells it from a sibling by it. */
+        fun own(rec: Map<String, Any?>): String {
+            val name = pyStr(orAny(rec["name"], rec["id"], ""))
+            return if (rec in named && hasTwin(rec)) "$name (${Fmt.code(idOf(rec))})" else name
+        }
+    }
+
+    /**
+     * The mappings of one element as they follow its line: the `<flowable:in>`/`<flowable:out>` of a call
+     * (` in(orderId→subOrderId) out(subTotal→total)`) and what an Init-Variables task assigns
+     * (` set(approved=false)`). They live in the model's flat `ioParameters` rollup, stamped with the
+     * element that declares them (see Ctx.addParams).
+     *
+     * What a source is decides how it prints. A variable is bare. A literal `sourceExpression` is quoted
+     * (`in("express"→priority)`), because bare it read as a variable of that name being copied. An
+     * expression is a code span, as every other expression in the report. A mapping without a source or
+     * a target keeps its arrow (`in(→reviewTask)`), where it printed `None→reviewTask`.
+     *
+     * An assignment says its value by the type the model gives it: a string quoted, a variable or an
+     * expression — both are EL the task evaluates — in a code span, a boolean or a number as it is, and
+     * the type alone where the model sets no value (`set(draft: jsonObject)`). The line used to end at the
+     * task's delegate expression, which every such task of a project shares.
+     */
+    private fun ioSuffix(model: Map<String, Any?>, elementId: Any?): String =
+        asList(model["ioParameters"]).map { asMap(it) }
+            .filter { it["element"] == elementId && it["kind"] in listOf("in", "out", "variableMapping") }
+            .joinToString("") { io ->
+                val src = Fmt.scalar(io["source"])?.ifBlank { null }
+                val tgt = Fmt.scalar(io["target"]).orEmpty()
+                if (io["kind"] == "variableMapping") {
+                    // a mapping may write into a container: the `name` field of `contact`
+                    val into = Fmt.scalar(io["container"])?.ifBlank { null }?.takeIf { !tgt.startsWith("$it.") }
+                    val type = Fmt.scalar(io["type"])?.ifBlank { null }
+                    val value = when {
+                        src == null -> type?.let { ": $it" }.orEmpty()
+                        io["expression"] == true || type == "variable" -> "=" + Fmt.code(src)
+                        type == "string" -> "=\"$src\""
+                        else -> "=$src"
+                    }
+                    return@joinToString " set(${into?.let { "$it." }.orEmpty()}$tgt$value)"
+                }
+                val from = when {
+                    src == null -> ""
+                    io["expression"] != true -> src
+                    src.contains("\${") || src.contains("#{") -> Fmt.code(src)
+                    else -> "\"$src\""
+                }
+                " ${pyStr(io["dir"])}($from→$tgt)"
+            }
 
     /**
      * A plan item's rule as the few words it means: `required`, `repeats while <condition>`, `manual

@@ -32,6 +32,13 @@ import com.flowable.atlas.parsing.ModelKinds
  * `expression`/`binding` node). The in-memory result keeps all of it: the overview reads it in the same
  * run. `GraphSizeGuardTest` fails when a sub-tree is stored under two different paths again.
  *
+ * And a member that is null is not written. `.resultVariable` answers null whether the key is there or
+ * not, so a query cannot tell the difference, while the file and every record an agent cuts from it carry
+ * the key: 2 to 6 % of the projects it was measured on, and 11 % of a form of plain fields, each of which
+ * says `"value": null`. Only [render] leaves them out — [project] returns the members as the result has
+ * them — and `GraphDelta` reads a null and a missing member as the same, so a graph.json compared with
+ * the run that wrote it has not changed.
+ *
  * A `_schema` block up front states the node/edge shape, the `dataIn` rule and the file's own size, so a
  * consumer can learn the format from the file instead of from documentation it does not have.
  */
@@ -51,7 +58,7 @@ object GraphJsonRenderer {
         generatedAt: java.time.Instant = java.time.Instant.now(),
     ): String {
         val projected = project(result, generatedAt)
-        return if (pretty) MiniJson.stringify(projected, 2) else MiniJson.stringify(projected)
+        return MiniJson.stringifyWithoutNulls(projected, if (pretty) 2 else null)
     }
 
     /**
@@ -158,6 +165,8 @@ object GraphJsonRenderer {
             "runs to megabytes.",
         "node" to "{id: '<type>:<key>', type, label, key, file, data, usedBy?}",
         "edge" to "{s: <sourceNodeId>, t: <targetNodeId>, rel, suspect?, dynamic?}",
+        "absent" to "A key whose value would be null is not written, here and in every record below: " +
+            "`.file`, `.resultVariable` and the like answer null either way, so test a value, not `has(...)`.",
         "dataIn" to "A model or changelog node's data lives once in the named top-level bucket — find it " +
             "by matching type+key there (e.g. data.dataIn='processes' -> .processes[] | select(.key==\"<key>\"), " +
             "data.dataIn='liquibase' -> .liquibase[] | select(.key==\"<key>\")).",

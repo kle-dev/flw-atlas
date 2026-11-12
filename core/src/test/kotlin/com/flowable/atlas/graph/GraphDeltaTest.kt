@@ -52,6 +52,25 @@ class GraphDeltaTest {
         assertTrue(d.isEmpty)
     }
 
+    /**
+     * graph.json does not write a member that is null, so the side read back from a file lacks what the
+     * analysed side holds as null — on the model, on an element, and inside an element's own values.
+     */
+    @Test
+    fun aNullMemberAndAMissingOneAreTheSame() {
+        fun order(vararg assignee: Pair<String, Any?>) = result(processes = listOf(process("DEMO-order",
+            "userTasks" to listOf(linkedMapOf<String, Any?>("id" to "review", "name" to "Review",
+                "settings" to linkedMapOf<String, Any?>("enabled" to false, *assignee), *assignee)),
+            *assignee)))
+        val analysed = order("assignee" to null)
+        val readBack = order()
+        assertTrue(GraphDelta.of(readBack, analysed).isEmpty)
+        assertTrue(GraphDelta.of(analysed, readBack).isEmpty)
+        val set = GraphDelta.of(readBack, order("assignee" to "DEMO-clerk")).modelsChanged.single()
+        assertEquals("a value where there was none is still a change", listOf("assignee"), set.properties)
+        assertEquals(listOf("assignee", "settings"), set.changed.single().fields)
+    }
+
     @Test
     fun aTaskAddedIsAnElementAddedAndAFlowReroutedIsAChangedOne() {
         val head = result(

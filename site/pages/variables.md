@@ -52,6 +52,9 @@ Neither is anything that names another scope than a process or case variable:
 
 - a `{{$…}}` root — `$currentUser`, `$searchText`, `$route`, `$errors` and the rest belong to the forms
   runtime;
+- what a binding starts with when that is no name: a literal (`{{true}}`, `{{null}}`), a word of
+  JavaScript (`{{Math.max(a, b)}}`), a call (`{{round(total)}}`) or the namespace of one of the
+  project's own frontend functions (`{{acme.double(amount)}}`);
 - a `${x}` or `{{x}}` in a service, a query or an agent, which is a parameter of the call it defines —
   an operation's input, a query's request parameter, an agent operation's input;
 - an input or output parameter's `name`, which is the callee's field (its `value` side is the variable);

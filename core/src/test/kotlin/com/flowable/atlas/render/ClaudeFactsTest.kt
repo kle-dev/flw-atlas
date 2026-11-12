@@ -232,8 +232,33 @@ class ClaudeFactsTest {
     fun theSliceRecipeIsTheFormThatActuallyRuns() {
         // `./atlas <project> --slice …` fails: the launcher adds `--all`, which `--slice` refuses.
         val out = render()
-        assertTrue(out, out.contains("`java -jar <atlas-cli>.jar <project-dir> --slice process:<key> --stdout`"))
+        assertTrue(out, out.contains("`java -jar <atlas-cli>.jar <project-dir> --slice <type>:<key> --stdout`"))
         assertFalse(out, out.contains("`atlas <project-dir> --slice"))
+    }
+
+    /**
+     * The slice takes any node id, and the file says so. With `process:<key>` as its only example, agents
+     * asked about a form, a case or a class had to guess that it does, and one asked about a variable read
+     * the graph instead.
+     */
+    @Test
+    fun theSliceIsOfferedForEveryKindOfNodeNotOnlyAProcess() {
+        val step = render().lines().single { it.contains("--slice <type>:<key>") }
+        for (id in listOf("`process:<key>`", "`case:<key>`", "`form:<key>`", "`variable:<name>`", "`java:<fully.qualified.Class>`")) {
+            assertTrue("$id in: $step", step.contains(id))
+        }
+        val graph = render().lines().first { it.contains("stands for any node id") }
+        assertTrue(graph, graph.contains("`.forms[]`") && graph.contains("`| keys`"))
+    }
+
+    /**
+     * A large case's slice is tens of kilobytes, and an agent asked about one plan item read five of its
+     * lines. A line of a model's contents is complete in itself, so the step says how to take one.
+     */
+    @Test
+    fun theSliceStepSaysHowToTakeOneElementOutOfIt() {
+        val step = render().lines().single { it.contains("--slice <type>:<key>") }
+        assertTrue(step, step.contains("one line per step, plan item or field") && step.contains("`| grep -i '<its name>'`"))
     }
 
     /** An agent that edits a model is told how to see that it broke nothing: the run against the graph beside it. */

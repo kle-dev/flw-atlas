@@ -93,6 +93,25 @@ class OverviewRendererTest {
      * to print `(None, None rules) — in:  → out:`, `` `None` None `` and `implements []`; a script button
      * setting a variable to the literal `true` printed `= True`.
      */
+    /**
+     * Nine selects that share one placeholder URL were nine identical lines, between which a reader had
+     * to find the sources that differ. A source is said once, with how many components use it.
+     */
+    @Test
+    fun aDataSourceSeveralComponentsShareIsListedOnceWithItsCount() {
+        fun rest(url: String) = mapOf("kind" to "rest", "url" to url)
+        val out = render(mapOf("forms" to listOf(mapOf(
+            "key" to "DEMO-pick", "name" to "Pick", "file" to "pick.form", "fields" to emptyList<Any?>(),
+            "dataSources" to listOf(rest("/api/pods?type=a"), rest("/placeholder"), rest("/api/pods?type=b"),
+                rest("/placeholder"), rest("/placeholder")),
+        )))).lines().filter { it.contains("data source:") }
+        assertEquals(listOf(
+            "- 🔌 data source: rest `/api/pods?type=a`",
+            "- 🔌 data source: rest `/placeholder` ×3",
+            "- 🔌 data source: rest `/api/pods?type=b`",
+        ), out)
+    }
+
     @Test
     fun absentValuesLeaveNoTrace() {
         val text = render(mapOf(
