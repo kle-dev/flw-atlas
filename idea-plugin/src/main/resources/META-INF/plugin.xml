@@ -183,6 +183,61 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.31.1</h3>
+        <ul>
+          <li><b><code>graph.json</code> is smaller, and a nested form no longer grows with its depth.</b> A
+              key whose value would be <code>null</code> is not written: <code>.file</code> and
+              <code>.resultVariable</code> answer <code>null</code> either way, so a <code>jq</code> query
+              that tests a value reads the same, and one that tests <code>has(...)</code> should test the
+              value instead. A form field names only the nearest container that can hide, disable or ignore
+              it, as <code>containerGate</code>, and that container names the next one out;
+              <code>containerGates</code>, the list of every container around a field, is gone. And a model
+              that sits in the project twice, in an app archive and beside it, no longer gives its variables
+              each parameter mapping and script site twice. Together that is 3 to 6 % on the projects it was
+              measured on and a third on a form nested ten panels deep. A <code>--changes</code> run against
+              a <code>graph.json</code> written by 0.31.0 lists the forms with gated fields as changed once,
+              until the baseline is regenerated.</li>
+          <li><b>A case's plan tree says what each plan item waits for, by name.</b> A criterion read
+              <code>entry on planItemprocessTask14</code>: a plan item's id, which no line of the tree
+              carries, without the transition the sentry waits for. It now reads <code>entry on complete
+              "Assessment" if …</code>. A name that repeats in the case is said with its stage, or with its
+              id where a sibling carries the same one. The line says how its parts combine: the on-parts of
+              one sentry are joined by <i>and</i>, a second criterion of the same kind starts with
+              <i>or</i>. A sentry with neither an event nor a condition reads <i>at once</i> where it
+              printed a bare <code>entry</code>, <code>(triggerMode=onEvent)</code> marks a sentry whose
+              event and condition have to coincide, and an exit that completes its stage says so
+              (<code>exitEventType=forceComplete</code>). In the overview and in <code>--slice</code>.</li>
+          <li><b>A task says what it hands over and what it assigns.</b> A process or case task in a case
+              carries its in and out mappings, as a call activity does: <code>in(orderId→reviewedOrder)
+              in("express"→priority) out(total→total)</code>. A quoted source is a literal, a bare one a
+              variable, an expression is a code span, and a mapping without a source keeps its arrow where
+              it printed <code>None→target</code>. A task that initializes variables lists its assignments,
+              in a case and in a process: <code>set(approved=false) set(stage="Intake")</code>. Its line
+              used to end at the delegate expression every such task shares.</li>
+          <li><b>A variable's slice says who sets it, who reads it and what a mapping assigns.</b> <i>Used
+              by</i> listed a model that only ever sets the variable beside the ones that read it; each
+              model now carries <i>sets</i>, <i>reads</i> or <i>sets and reads</i>. <i>Set by</i> and
+              <i>Read by</i> show the other end of a mapping: the value an assignment sets, the variable of
+              the called model an out-parameter copies, the variable a read is copied to.</li>
+          <li><b>A form's slice lists every field, and a shared data source is listed once.</b> The overview
+              stops at 40 fields and points at the graph; a slice is the page of that one form and sent its
+              reader there for the last few. Nine selects on one URL were nine identical lines and are one,
+              with <code>×9</code>.</li>
+          <li><b>The generated <code>CLAUDE.md</code> offers the slice for every kind of node.</b> It showed
+              <code>--slice process:&lt;key&gt;</code> alone, so an agent given a form, a case or a Java
+              class had to guess that the slice takes it, and one asked about a variable read the graph
+              instead. The step names <code>case:</code>, <code>form:</code>, <code>variable:</code> and
+              <code>java:</code> ids, and says how to take one step, plan item or field out of a large
+              slice: its line is complete in itself, so <code>| grep -i '&lt;its name&gt;'</code> is the
+              answer. The graph step says where a model body of another type lives and that a body can run
+              to tens of kilobytes.</li>
+          <li><b>A literal in a form binding is no variable.</b> <code>{{true}}</code>,
+              <code>{{false}}</code> and <code>{{null}}</code> — what a script button assigns, what a hidden
+              field is set to — gave a project three variables of those names, each used by every form that
+              binds the literal. A word of JavaScript (<code>{{Math.max(a, b)}}</code>), a call
+              (<code>{{round(total)}}</code>) and the namespace of one of the project's own frontend
+              functions are no variables either.</li>
+        </ul>
         <h3>0.31.0</h3>
         <ul>
           <li><b>A gateway flow that can never be taken is a finding.</b> The new defect
@@ -543,52 +598,6 @@
               the diagrams folder, which only <code>--all</code> writes. They now name only what was written
               beside them, the plugin included, and otherwise say how to generate the rest. "Regenerate with
               <code>atlas &lt;project-dir&gt;</code>" now gives the jar command and the IDE menu.</li>
-          <li><b>The overview warns only about a REST call no endpoint of the project could serve.</b> Calls
-              are listed once per method and URL with the models that make them, and calls to Flowable's own
-              REST API (<code>{{endpoints.idm}}/users/…</code>, <code>platform-api/…</code>) and to other
-              systems are listed apart instead of as "no matching controller (external or unimplemented)" —
-              on a large real project that warning stood on 174 of 203 calls.</li>
-          <li><b>The overview lists a boundary event right after the activity it hangs on.</b> It names that
-              activity, says when it does not interrupt it, and is no longer called "not reachable"; an
-              embedded sub-process lists its contents before what follows it, an event sub-process "starts
-              on its event" and comes after the main flow, also when that flow loops back, and a
-              multi-instance step says whether it runs in parallel or one after the other. The Playwright
-              project map follows the same order, so a task reached through a boundary event no longer comes
-              first.</li>
-          <li><b>A case in the overview reads as a list, with each sentry said once.</b> The plan tree under
-              its heading showed as a code block in Markdown previews; each criterion now shows both the
-              events and the condition its sentry waits for, the case's own exit criteria sit on the plan
-              model's line, rules read as <i>required</i>, <i>repeats while …</i> or <i>manual
-              activation</i>, and only the sentries no plan item uses are listed after the tree.</li>
-          <li><b>The overview's variables are the ones shared by the most models, with who sets and reads
-              each.</b> Past 60 variables it showed the alphabetically first ones; it now picks the
-              variables that cross models, says so, and names the elements that set and read each one.</li>
-          <li><b>The overview names the interface every Java delegate and listener implements.</b> It
-              printed <code>implements []</code> for every glue class, and no delegate or listener row
-              carried its <code>[JavaDelegate]</code>. <code>graph.json</code> and the explorer always had
-              the interface.</li>
-          <li><b>The overview no longer prints <code>None</code>, <code>True</code> or <code>implements
-              []</code>.</b> A decision without a table, a database service operation, an unconditional
-              plan-item rule and a class with no glue interface printed Python placeholders, the published
-              sample included, and a script button that sets a variable to <code>true</code> or to an object
-              showed that value as Python (<code>True</code>, <code>{'regions': …}</code>) — it shows the
-              JSON now. Conditions, URLs and expressions sit in code spans on one line.</li>
-          <li><b>The overview is shorter on large projects.</b> A model inside a Design export is named
-              <code>Name-bar.zip!entry</code>, with one line under the header saying where each archive
-              lives; app membership is no longer repeated among the references, and the code map no longer
-              lists the services a second time — 12–14% less on the largest real projects.</li>
-          <li><b>The Playwright project map gives a guarded sub-process's condition to the task inside
-              it.</b> A task in an embedded sub-process was listed as unconditional while the condition in
-              front of the sub-process went to the task after it; the inner task now carries it, and the
-              task after reads "after sub-process …".</li>
-          <li><b>The Playwright guide's placeholders show in Markdown previews.</b> Texts such as
-              <code>Create New &lt;name&gt;?</code> lost their placeholder in GitHub and IDE previews, which
-              read <code>&lt;name&gt;</code> as an HTML tag; they are code spans now.</li>
-          <li><b><code>usedBy</code> in graph.json now answers for every node.</b> Variables, expressions,
-              bindings, strings, service operations and custom functions kept their users only in
-              <code>data.usedBy</code>, so the "who references it" recipe returned nothing for them. Their
-              users are now in the node's own <code>usedBy</code>, and <code>data.usedBy</code> is gone: a
-              script that read it reads <code>.usedBy</code> instead.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

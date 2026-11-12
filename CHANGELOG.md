@@ -12,6 +12,52 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.31.1
+
+- **`graph.json` is smaller, and a nested form no longer grows with its depth.** A key whose value would be
+  `null` is not written: `.file` and `.resultVariable` answer `null` either way, so a `jq` query that tests
+  a value reads the same, and one that tests `has(...)` should test the value instead. A form field names
+  only the nearest container that can hide, disable or ignore it, as `containerGate`, and that container
+  names the next one out; `containerGates`, the list of every container around a field, is gone. And a
+  model that sits in the project twice, in an app archive and beside it, no longer gives its variables
+  each parameter mapping and script site twice. Together that is 3 to 6 % on the projects it was measured
+  on and a third on a form nested ten panels deep. A `--changes` run against a `graph.json` written by
+  0.31.0 lists the forms with gated fields as changed once, until the baseline is regenerated.
+- **A case's plan tree says what each plan item waits for, by name.** A criterion read
+  `entry on planItemprocessTask14`: a plan item's id, which no line of the tree carries, without the
+  transition the sentry waits for. It now reads `entry on complete "Assessment" if …`. A name that
+  repeats in the case is said with its stage, or with its id where a sibling carries the same one. The
+  line says how its parts combine: the on-parts of one sentry are joined by *and*, a second criterion of
+  the same kind starts with *or*. A sentry with neither an event nor a condition reads *at once* where it
+  printed a bare `entry`, `(triggerMode=onEvent)` marks a sentry whose event and condition have to
+  coincide, and an exit that completes its stage says so (`exitEventType=forceComplete`). In the overview
+  and in `--slice`.
+- **A task says what it hands over and what it assigns.** A process or case task in a case carries its
+  in and out mappings, as a call activity does: `in(orderId→reviewedOrder) in("express"→priority)
+  out(total→total)`. A quoted source is a literal, a bare one a variable, an expression is a code span,
+  and a mapping without a source keeps its arrow where it printed `None→target`. A task that initializes
+  variables lists its assignments, in a case and in a process: `set(approved=false)
+  set(stage="Intake")`. Its line used to end at the delegate expression every such task shares.
+- **A variable's slice says who sets it, who reads it and what a mapping assigns.** *Used by* listed a
+  model that only ever sets the variable beside the ones that read it; each model now carries *sets*,
+  *reads* or *sets and reads*. *Set by* and *Read by* show the other end of a mapping: the value an
+  assignment sets, the variable of the called model an out-parameter copies, the variable a read is
+  copied to.
+- **A form's slice lists every field, and a shared data source is listed once.** The overview stops at 40
+  fields and points at the graph; a slice is the page of that one form and sent its reader there for the
+  last few. Nine selects on one URL were nine identical lines and are one, with `×9`.
+- **The generated `CLAUDE.md` offers the slice for every kind of node.** It showed `--slice process:<key>`
+  alone, so an agent given a form, a case or a Java class had to guess that the slice takes it, and one
+  asked about a variable read the graph instead. The step names `case:`, `form:`, `variable:` and `java:`
+  ids, and says how to take one step, plan item or field out of a large slice: its line is complete in
+  itself, so `| grep -i '<its name>'` is the answer. The graph step says where a model body of another
+  type lives and that a body can run to tens of kilobytes.
+- **A literal in a form binding is no variable.** `{{true}}`, `{{false}}` and `{{null}}` — what a script
+  button assigns, what a hidden field is set to — gave a project three variables of those names, each
+  used by every form that binds the literal. A word of JavaScript (`{{Math.max(a, b)}}`), a call
+  (`{{round(total)}}`) and the namespace of one of the project's own frontend functions are no variables
+  either.
+
 ## 0.31.0
 
 - **A gateway flow that can never be taken is a finding.** The new defect `shadowedFlow` reports the
