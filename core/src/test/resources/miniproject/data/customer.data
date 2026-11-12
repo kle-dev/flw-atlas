@@ -6,6 +6,8 @@
   "fieldMappings": [
     {"name": "id", "label": "Id", "type": "string"},
     {"name": "customerName", "label": "Name", "type": "string"},
+    {"name": "deliveryCity", "label": "Delivery city", "type": "string"},
+    {"name": "deliveryZip", "label": "Delivery ZIP", "type": "string"},
     {"name": "priority", "label": "Priority", "type": "DATA-OBJECT",
      "dataObjectModelKey": "priorityMD", "dataObjectModelRelationshipType": "one-to-one"}
   ],

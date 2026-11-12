@@ -1,15 +1,21 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.explorer.AtlasExplorerFiles
+import com.flowable.atlas.explorer.AtlasExplorerNotifier
 import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
-import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.LocalFileSystem
 import java.nio.file.Path
@@ -21,35 +27,48 @@ import java.nio.file.Path
  * from the menu instead of hunting for the file in the Project view or switching to a browser.
  *
  * Discovery (see [AtlasExplorerFiles]) looks under the configured output folder first, falling back
- * to a bounded scan of the project. Zero matches offers to generate one; one opens directly; several show a chooser.
+ * to a bounded scan of the project. Zero matches says so in a balloon that offers to generate one; one
+ * opens directly; several show a chooser.
  */
-class OpenAtlasExplorerAction : AnAction() {
+class OpenAtlasExplorerAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val base = AtlasProjectRootService.getInstance(project).activeProjectDir()
         if (base == null) {
-            Messages.showErrorDialog(project, "This action needs a project directory on disk.", "Flowable Atlas")
+            AtlasNotifications.info(project, message("explorer.noProjectDir"))
             return
         }
 
-        val files = AtlasExplorerFiles.find(base, FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir)
-        when (files.size) {
-            0 -> offerToGenerate(project, e)
-            1 -> openExplorer(project, files.first())
-            else -> chooseAndOpen(project, base, files)
-        }
+        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
+        // The search walks the project six levels deep when the output folder is empty — on a cold
+        // filesystem cache over a monorepo that is a visible freeze from a menu click, so it runs in
+        // the background and comes back to the EDT with what it found.
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
+            private var files: List<Path> = emptyList()
+
+            override fun run(indicator: ProgressIndicator) {
+                files = AtlasExplorerFiles.find(base, outputDir)
+            }
+
+            override fun onSuccess() {
+                if (project.isDisposed) return
+                when (files.size) {
+                    0 -> AtlasExplorerNotifier.notifyNoExplorer(project, outputDir)
+                    1 -> openExplorer(project, files.first())
+                    else -> chooseAndOpen(project, base, files)
+                }
+            }
+        })
     }
 
     /** Resolve [path] to a (freshly refreshed) VirtualFile and show it in the embedded viewer. */
     private fun openExplorer(project: Project, path: Path) {
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
         if (vf == null) {
-            Messages.showErrorDialog(
-                project,
-                "Could not open $path — the file may have been moved or deleted.",
-                "Flowable Atlas",
-            )
+            AtlasNotifications.group()
+                .createNotification(message("explorer.missing.title"), message("explorer.missing", path.toString()), NotificationType.WARNING)
+                .notify(project)
             return
         }
         AtlasExplorerOpener.openInIde(project, vf)
@@ -72,24 +91,9 @@ class OpenAtlasExplorerAction : AnAction() {
             .showCenteredInCurrentWindow(project)
     }
 
-    private fun offerToGenerate(project: Project, e: AnActionEvent) {
-        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
-        val choice = Messages.showYesNoDialog(
-            project,
-            "No generated Atlas explorer (a *.explorer.html) was found under $outputDir/ or in the " +
-                "project.\n\nGenerate one now?",
-            "Flowable Atlas",
-            "Generate…",
-            "Cancel",
-            Messages.getQuestionIcon(),
-        )
-        if (choice == Messages.YES) {
-            ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                ?.let { ActionUtil.performAction(it, e) }
-        }
-    }
-
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
+import com.flowable.atlas.environment.auth.AuthContext
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.junit.After
@@ -39,9 +40,7 @@ class InspectClientHttpTest {
             expression = "\${amount > 5}",
             scopeType = InspectClient.ScopeType.BPMN,
             scopeId = "pi-1",
-            username = username,
-            password = password,
-            sessionHeaders = session,
+            auth = AuthContext.basic(username, password, session.orEmpty()),
         )
 
     /** Stub the endpoint: record the inbound headers, then answer [code] with [body]. */

@@ -1,15 +1,16 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.FlowableAtlasBundle.message
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
-import com.intellij.codeInsight.daemon.LineMarkerProvider
+import com.intellij.codeInsight.daemon.LineMarkerProviderDescriptor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
-import com.intellij.openapi.util.IconLoader
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiIdentifier
@@ -25,7 +26,13 @@ import javax.swing.Icon
  * files that use the symbol. The reference set comes from the (already cached) model index — the
  * highlight pass does only O(1) set lookups; the (potentially slow) file scan is deferred to the click.
  */
-class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
+class FlowableModelReferenceLineMarkerProvider : LineMarkerProviderDescriptor() {
+
+    // A descriptor, not a bare provider: Settings → Editor → General → Gutter Icons lists it by this
+    // name with its icon, so a team that finds one kind of mark noisy can switch that one off.
+    override fun getName(): String = message("linemarker.reference.name")
+    override fun getIcon(): Icon = AtlasIcons.GutterReference
+
 
     // The fast per-element pass contributes nothing; everything is done in the slow batch pass so the
     // index lookups never delay the first highlighting pass.
@@ -38,52 +45,55 @@ class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
         if (elements.isEmpty()) return
         // cachedOrNull() only — never build the index from a highlighting pass. Markers appear once the
         // index exists (it is built lazily by completion / implicit-usage / Rebuild).
-        val index = elements.first().project.service<FlowableModelIndexService>().cachedOrNull() ?: return
+        val service = elements.first().project.service<FlowableModelIndexService>()
+        val index = service.cachedOrRequest() ?: return
         for (element in elements) {
             if (element !is PsiIdentifier) continue
-            val names = referencedNames(element, index) ?: continue
-            result.add(buildMarker(element, names))
+            val ref = referenced(element, index) ?: continue
+            result.add(buildMarker(element, ref))
         }
     }
 
-    /** Names the (leaf) [identifier]'s method/class is referenced by from a model, or null when it isn't. */
-    private fun referencedNames(identifier: PsiIdentifier, index: FlowableIndex): Set<String>? {
-        val names = when (val parent = identifier.parent) {
-            is PsiMethod -> if (parent.nameIdentifier === identifier) ModelReferenceScan.namesOf(parent) else return null
-            is PsiClass -> if (parent.nameIdentifier === identifier) ModelReferenceScan.namesOf(parent) else return null
+    /** How a model uses the (leaf) [identifier]'s method/class, or null when no model does. */
+    private fun referenced(identifier: PsiIdentifier, index: FlowableIndex): ModelReferenceScan.JavaRef? {
+        val parent = identifier.parent
+        val owner = when {
+            parent is PsiMethod && parent.nameIdentifier === identifier -> parent
+            parent is PsiClass && parent.nameIdentifier === identifier -> parent
             else -> return null
         }
-        val referenced = names.any { it in index.referencedIdentifiers || it in index.referencedClassFqns }
-        return if (referenced) names else null
+        return ModelReferenceScan.refOf(owner)?.takeIf { it.usedIn(index) }
     }
 
-    private fun buildMarker(identifier: PsiIdentifier, names: Set<String>): LineMarkerInfo<PsiElement> =
+    private fun buildMarker(identifier: PsiIdentifier, ref: ModelReferenceScan.JavaRef): LineMarkerInfo<PsiElement> =
         LineMarkerInfo(
             identifier,
             identifier.textRange,
             ICON,
             { _ -> TOOLTIP },
-            { event, elt -> navigate(event, elt, names) },
+            { event, elt -> navigate(event, elt, ref) },
             GutterIconRenderer.Alignment.RIGHT,
             Supplier { TOOLTIP },
         )
 
-    private fun navigate(event: MouseEvent, element: PsiElement, names: Set<String>) {
+    private fun navigate(event: MouseEvent, element: PsiElement, ref: ModelReferenceScan.JavaRef) {
         val project = element.project
-        object : Task.Backgroundable(project, "Finding Flowable model references", true) {
+        object : Task.Backgroundable(project, message("linemarker.reference.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
-                val files = ModelReferenceScan.affectedModelFiles(project, names)
+                val usages = ModelReferenceScan.affectedModelUsages(project, ref)
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, "Flowable Models", at)
+                    ModelReferenceNavigator.show(project, usages, message("linemarker.reference.popup", symbolName(element)), at)
                 }
             }
         }.queue()
     }
 
+    /** The identifier's text — what the popup title names. */
+    private fun symbolName(element: PsiElement): String = element.text
+
     companion object {
-        private const val TOOLTIP = "Referenced by Flowable models"
-        private val ICON: Icon =
-            IconLoader.getIcon("/META-INF/atlas-hub.svg", FlowableModelReferenceLineMarkerProvider::class.java)
+        private val TOOLTIP: String = message("linemarker.reference.tooltip")
+        private val ICON: Icon = AtlasIcons.GutterReference
     }
 }

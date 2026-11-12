@@ -3,9 +3,12 @@
      variable checks real: the caller maps `orderId` in as `subOrderId`, and nothing here ever reads that
      name (the `unreadInputs` check), while `orderNotes` is declared as a `<dataObject>` and *is* read, so
      the declaration path is covered without adding a second finding. -->
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+<definitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
-             targetNamespace="http://flowable.org/test">
+             targetNamespace="http://flowable.org/test"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
   <process id="fulfilmentProcess" name="Fulfilment Process">
     <documentation>Ships an approved order and reports the shipping total back to its caller.</documentation>
     <dataObject id="orderNotes" name="orderNotes" itemSubjectRef="xsd:string"/>
@@ -14,14 +17,76 @@
     <scriptTask id="packTask" name="Pack shipment" scriptFormat="groovy">
       <script>
         def label = "pack:" + orderNotes
+        // read here, passed by no caller: the call contract on this page shows it
+        def priority = execution.getVariable('shippingPriority')
         execution.setVariable('subTotal', 10)
       </script>
     </scriptTask>
-    <sequenceFlow id="ff2" sourceRef="packTask" targetRef="callCourier"/>
+    <sequenceFlow id="ff2" sourceRef="packTask" targetRef="gwShip"/>
+    <!-- The express flow lost its condition (`${shippingPriority == 'express'}`) and comes first, so the
+         gateway always leaves through it and the default never runs: every order goes by courier. Nothing
+         fails, which is why the shadowedFlow check exists for exactly this shape. -->
+    <exclusiveGateway id="gwShip" name="Express?" default="ffStandard"/>
+    <sequenceFlow id="ffExpress" name="express" sourceRef="gwShip" targetRef="callCourier"/>
+    <sequenceFlow id="ffStandard" name="standard" sourceRef="gwShip" targetRef="postTask"/>
     <!-- Deliberately dangling: `courierProcess` is not modelled here, which keeps the missing-model
          check exercised end to end (it used to rest on `fulfilmentProcess` itself being absent). -->
     <callActivity id="callCourier" name="Book courier" calledElement="courierProcess"/>
+    <manualTask id="postTask" name="Send by post"/>
     <sequenceFlow id="ff3" sourceRef="callCourier" targetRef="fEnd"/>
+    <sequenceFlow id="ff4" sourceRef="postTask" targetRef="fEnd"/>
     <endEvent id="fEnd"/>
   </process>
+
+  <!-- Layout. One row, the post branch below the gateway — the call activity draws with its thick
+       border, which is how the dangling `courierProcess` reference is visible on the canvas and not only
+       in the checks. -->
+  <bpmndi:BPMNDiagram id="dia_fulfilmentProcess">
+    <bpmndi:BPMNPlane id="plane_fulfilmentProcess" bpmnElement="fulfilmentProcess">
+      <bpmndi:BPMNShape id="s_fStart" bpmnElement="fStart">
+        <omgdc:Bounds x="100" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_packTask" bpmnElement="packTask">
+        <omgdc:Bounds x="180" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_gwShip" bpmnElement="gwShip">
+        <omgdc:Bounds x="320" y="110" width="40" height="40"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_callCourier" bpmnElement="callCourier">
+        <omgdc:Bounds x="400" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_postTask" bpmnElement="postTask">
+        <omgdc:Bounds x="400" y="200" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_fEnd" bpmnElement="fEnd">
+        <omgdc:Bounds x="560" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_ff1" bpmnElement="ff1">
+        <omgdi:waypoint x="130" y="130"/>
+        <omgdi:waypoint x="180" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ff2" bpmnElement="ff2">
+        <omgdi:waypoint x="280" y="130"/>
+        <omgdi:waypoint x="320" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ffExpress" bpmnElement="ffExpress">
+        <omgdi:waypoint x="360" y="130"/>
+        <omgdi:waypoint x="400" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ffStandard" bpmnElement="ffStandard">
+        <omgdi:waypoint x="340" y="150"/>
+        <omgdi:waypoint x="340" y="230"/>
+        <omgdi:waypoint x="400" y="230"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ff3" bpmnElement="ff3">
+        <omgdi:waypoint x="500" y="130"/>
+        <omgdi:waypoint x="560" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ff4" bpmnElement="ff4">
+        <omgdi:waypoint x="500" y="230"/>
+        <omgdi:waypoint x="575" y="230"/>
+        <omgdi:waypoint x="575" y="145"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>

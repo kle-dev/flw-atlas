@@ -22,6 +22,10 @@
           "type": "bpmn"
         },
         {
+          "key": "customerWelcomeProcess",
+          "type": "bpmn"
+        },
+        {
           "key": "DEMO-reviewCase",
           "type": "cmmn"
         },

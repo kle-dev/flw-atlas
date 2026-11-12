@@ -8,6 +8,7 @@ enum class ScriptContext(val display: String) {
     CMMN_SCRIPT_TASK("Script task (CMMN)"),
     CMMN_TASK_LISTENER("Task listener (CMMN)"),
     ACTION_BOT("Action bot"),
+    SERVICE_OPERATION("Service operation"),
     UNKNOWN("Unknown context"),
 }
 
@@ -29,6 +30,9 @@ data class ScriptRoot(
     /** Resolves as a Spring bean (Work platform), not an engine binding — completion shows it as
      *  such, and the chips leave it out to stay readable. */
     val bean: Boolean = false,
+    /** Further members the bound runtime object has — the entity behind the delegate interface
+     *  ([ScriptEntityMembers]): valid calls the typo check accepts, never offered by completion. */
+    val accepted: Set<String> = emptySet(),
 )
 
 /**
@@ -40,10 +44,10 @@ data class ScriptRoot(
  *    `execution` for an ExecutionEntity XOR `task` for a TaskEntity — never both) and
  *    `CmmnVariableScopeResolver` (`caseInstance` / `planItemInstance` / `task`), plus the service
  *    bindings each registers; member surfaces from `VariableScope`, `DelegateExecution`,
- *    `DelegateTask`, `DelegatePlanItemInstance`/`PlanItemInstance` and `CaseInstance`;
- *  - commercial `flowable-platform` 2026.2.0-SNAPSHOT — `FlowableApiResolver` binds the script
- *    `flw` (`FlowableApiInstance`) into BPMN/CMMN/bot/service-registry scripts; the bot context
- *    (`ScriptEvaluationBot`) additionally binds `flwActionContext`.
+ *    `DelegateTask`, `DelegatePlanItemInstance`/`PlanItemInstance` and `CaseInstance` — plus, accepted
+ *    but not advertised, the methods of the entity each resolver binds ([ScriptEntityMembers]);
+ *  - the commercial platform — it binds the script `flw` root into BPMN/CMMN/bot/service-registry
+ *    scripts; the bot context additionally binds `flwActionContext`.
  *
  * The member sets are the UNION across supported versions (3.17 has no `flw.error`/`flw.cmmn`);
  * combined with the typo-gate (only near-miss members are flagged) that can hide a
@@ -182,7 +186,7 @@ object ScriptBindingsCatalog {
     private fun flwSub(name: String, doc: String, vararg members: String) =
         ScriptRoot(name, doc, derive(members.toSet(), FLW_SIGS))
 
-    /** Script `flw` (`FlowableApiInstance`) — NOT the EL `flw` (see [EL_ONLY_FLW_MEMBERS]). */
+    /** Script `flw` — NOT the EL `flw` (see [EL_ONLY_FLW_MEMBERS]). */
     private val FLW = ScriptRoot(
         "flw", "Flowable platform script API (Work/Engage)",
         members = mapOf(
@@ -238,7 +242,7 @@ object ScriptBindingsCatalog {
         ))
 
     private val FLW_ACTION_CONTEXT = ScriptRoot(
-        "flwActionContext", "bot invocation context (ScriptBotInvocationContext)",
+        "flwActionContext", "bot invocation context",
         members = derive(setOf("getHistoricActionInstance", "getActionDefinition", "getActionDefinitionModel",
             "getPayload", "getIntent", "setIntent"), overrides = mapOf("setIntent" to "intent")),
     )
@@ -279,13 +283,17 @@ object ScriptBindingsCatalog {
         service("cmmnTaskService", "CMMN task service", ScriptServiceApis.CMMN_TASK_SERVICE),
     )
 
+    // The delegate interfaces are what completion offers; the entity each resolver actually binds adds
+    // the rest of what a dynamically dispatched call can reach.
     private val EXECUTION = ScriptRoot("execution",
-        "the current execution (DelegateExecution)", EXECUTION_MEMBERS)
-    private val DELEGATE_TASK = ScriptRoot("task", "the current task (DelegateTask)", TASK_MEMBERS)
+        "the current execution (DelegateExecution)", EXECUTION_MEMBERS, accepted = ScriptEntityMembers.EXECUTION_ENTITY)
+    private val DELEGATE_TASK = ScriptRoot("task", "the current task (DelegateTask)", TASK_MEMBERS,
+        accepted = ScriptEntityMembers.TASK_ENTITY)
     private val PLAN_ITEM = ScriptRoot("planItemInstance",
-        "the current plan item (DelegatePlanItemInstance)", PLAN_ITEM_MEMBERS)
+        "the current plan item (DelegatePlanItemInstance)", PLAN_ITEM_MEMBERS,
+        accepted = ScriptEntityMembers.PLAN_ITEM_INSTANCE_ENTITY)
     private val CASE_INSTANCE = ScriptRoot("caseInstance",
-        "the case instance (CaseInstance)", CASE_INSTANCE_MEMBERS)
+        "the case instance (CaseInstance)", CASE_INSTANCE_MEMBERS, accepted = ScriptEntityMembers.CASE_INSTANCE_ENTITY)
 
     /** In a CMMN *script task* the `task` binding is a `List<TaskEntity>` (usually empty), not a
      *  task — member checks are off for it, only its existence is catalogued. */
@@ -346,6 +354,10 @@ object ScriptBindingsCatalog {
         ScriptContext.CMMN_TASK_LISTENER to
             (listOf(DELEGATE_TASK, PLAN_ITEM, CASE_INSTANCE) + FLW_ROOTS + CMMN_SERVICES + PLATFORM_BEAN_ROOTS),
         ScriptContext.ACTION_BOT to (FLW_ROOTS + FLW_ACTION_CONTEXT + PLATFORM_BEAN_ROOTS),
+        // The service registry's script invoker binds the operation's inputs by name and the flw API, and no
+        // scope: an operation is called from a process, a case, a form or Java alike, so `execution` there
+        // is exactly the wrong-context mistake the check exists for.
+        ScriptContext.SERVICE_OPERATION to (FLW_ROOTS + PLATFORM_BEAN_ROOTS),
         ScriptContext.UNKNOWN to emptyList(),
     ).mapValues { (_, roots) -> roots.associateBy { it.name } }
 

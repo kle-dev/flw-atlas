@@ -2,8 +2,18 @@ package com.flowable.atlas.navigation
 
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
+import com.flowable.atlas.completion.Vocabulary
+import com.flowable.atlas.completion.VocabularyScope
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.index.ModelEntry
+import com.flowable.atlas.navigation.se.ArchivePaths
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VfsUtilCore
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.JarFileSystem
+import com.intellij.openapi.project.Project
+import com.intellij.lang.documentation.DocumentationMarkup
 import com.intellij.lang.documentation.AbstractDocumentationProvider
 import com.intellij.openapi.components.service
 import com.intellij.psi.PsiElement
@@ -13,25 +23,111 @@ import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.util.PsiTreeUtil
 
 /**
- * Shows the model type, name and file when hovering (or Ctrl-Q) over a Flowable key literal at a
- * public-API call site.
+ * Shows the model type, name, backing table and file when hovering (or Ctrl-Q) over a Flowable key —
+ * a literal at a public-API call site in Java, a cross-reference or the file's own key inside a model
+ * file (BPMN/CMMN XML, or the JSON models) — as a documentation card, the platform's own shape. A
+ * message, signal, task key, activity id or outcome literal gets a card too: what it is, and in which model.
  */
 class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
-    override fun getQuickNavigateInfo(element: PsiElement?, originalElement: PsiElement?): String? =
-        doc(element, originalElement)
+    // The one-line popup (Ctrl+hover): key, type and name — the card is for Ctrl-Q.
+    override fun getQuickNavigateInfo(element: PsiElement?, originalElement: PsiElement?): String? {
+        vocabularyName(element, originalElement)?.let { n ->
+            return "<b>" + escape(n.value) + "</b> — " + n.at.site.vocabulary.display + " · in " + escape(n.ownerKeys())
+        }
+        return resolve(element, originalElement)?.let { (entries, key) ->
+            val first = entries.first()
+            buildString {
+                append("<b>").append(escape(key)).append("</b> — ").append(first.type.display)
+                if (first.name != key) append(" · ").append(escape(first.name))
+            }
+        }
+    }
 
-    override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? =
-        doc(element, originalElement)
+    override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
+        vocabularyName(element, originalElement)?.let { n ->
+            return buildString {
+                append(DocumentationMarkup.DEFINITION_START)
+                append("<b>").append(escape(n.value)).append("</b> — ").append(n.at.site.vocabulary.display)
+                append(DocumentationMarkup.DEFINITION_END)
+                append(DocumentationMarkup.CONTENT_START).append("in ").append(escape(n.ownerKeys())).append(DocumentationMarkup.CONTENT_END)
+                append(DocumentationMarkup.SECTIONS_START)
+                section("File", escape(presentablePath(n.project, n.owners.first().file)))
+                if (n.owners.size > 1) section("Also in", "${n.owners.size - 1} more file(s)")
+                append(DocumentationMarkup.SECTIONS_END)
+            }
+        }
+        val (entries, key, service, project) = resolve(element, originalElement) ?: return null
+        val first = entries.first()
+        // The platform's own card shape — definition, content, a table of sections — so the hover reads
+        // like the one over a Java symbol instead of a hand-built stack of <br>s.
+        return buildString {
+            append(DocumentationMarkup.DEFINITION_START)
+            append("<b>").append(escape(key)).append("</b> — ").append(first.type.display)
+            append(DocumentationMarkup.DEFINITION_END)
+            if (first.name != key) {
+                append(DocumentationMarkup.CONTENT_START).append(escape(first.name)).append(DocumentationMarkup.CONTENT_END)
+            }
+            append(DocumentationMarkup.SECTIONS_START)
+            tableLine(service, first.type, key)?.let { section("Table", it) }
+            section("File", escape(presentablePath(project, first.file)))
+            if (entries.size > 1) section("Also in", "${entries.size - 1} more file(s)")
+            append(DocumentationMarkup.SECTIONS_END)
+        }
+    }
 
-    private fun doc(element: PsiElement?, originalElement: PsiElement?): String? {
+    private fun StringBuilder.section(title: String, html: String) {
+        append(DocumentationMarkup.SECTION_HEADER_START).append(title).append(':')
+        append(DocumentationMarkup.SECTION_SEPARATOR).append("<p>").append(html)
+        append(DocumentationMarkup.SECTION_END)
+    }
+
+    /** Project-relative for a loose file, `app.zip → entry` for a packed one; never an absolute path. */
+    private fun presentablePath(project: Project, file: VirtualFile): String {
+        if (file.fileSystem is JarFileSystem) return ArchivePaths.displayPath(file)
+        val base = project.basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
+        return base?.let { VfsUtilCore.getRelativePath(file, it) } ?: file.presentableUrl
+    }
+
+    /** A message, signal, task key, activity id or outcome literal, and the models declaring it. */
+    private data class VocabularyName(val value: String, val at: VocabularyScope.At, val owners: List<ModelEntry>, val project: Project) {
+        fun ownerKeys(): String = owners.joinToString(", ") { it.key }
+    }
+
+    /** The name under the caret at a vocabulary site — what Ctrl+click on it resolves to; never a variable. */
+    private fun vocabularyName(element: PsiElement?, originalElement: PsiElement?): VocabularyName? {
+        val literal = literalOf(originalElement) ?: literalOf(element) ?: return null
+        val at = VocabularyScope.siteForLiteral(literal) ?: return null
+        if (at.site.vocabulary == Vocabulary.VARIABLE) return null
+        val value = literal.value as? String ?: return null
+        val project = literal.project
+        val service = project.service<FlowableModelIndexService>()
+        // the cached index or nothing: a hover must never build the index under the read lock
+        val index = service.cachedOrNull() ?: run { service.ensureBuilding(); return null }
+        val owners = VocabularyScope.declaringModels(index, at.site, VocabularyScope.scopeKey(at.call, at.site, project), value)
+        return owners.ifEmpty { null }?.let { VocabularyName(value, at, it, project) }
+    }
+
+    private data class Resolved(val entries: List<ModelEntry>, val key: String, val service: FlowableModelIndexService, val project: Project)
+
+    private fun resolve(element: PsiElement?, originalElement: PsiElement?): Resolved? {
         // literal at a key site, or a constant reference used as the key argument
-        val service = (originalElement ?: element)?.project?.service<FlowableModelIndexService>() ?: return null
+        val project = (originalElement ?: element)?.project ?: return null
+        val service = project.service<FlowableModelIndexService>()
         val (targetTypes, key, _) = run {
+            // Inside a model file: a cross-reference (calledElement, an eventType's text, a data object's
+            // backing service, …) or the file's own key. The leaf under the caret first — the element the
+            // platform passes is the reference's *target*, a token in another file.
+            val fileSite = ModelFileKeySites.at(originalElement) ?: ModelFileKeySites.at(element)
+            if (fileSite != null) {
+                if (service.cachedOrNull() == null) service.ensureBuilding()   // hover again once it exists
+                return@run Triple(fileSite.types.toSet(), fileSite.key, (originalElement ?: element) as PsiElement)
+            }
             val literal = literalOf(originalElement) ?: literalOf(element)
             if (literal != null) {
                 val k = literal.value as? String ?: return null
                 val site = SiteMatching.keySiteForLiteral(literal)
+                if (service.cachedOrNull() == null) service.ensureBuilding()   // hover again once it exists
                 when {
                     site != null -> Triple(site.targetTypes, k, literal as PsiElement)
                     // Fallback: a plain data-object key string (a constant's value / bare literal),
@@ -51,17 +147,10 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
             }
         }
 
-        val entries = service.find(key).filter { it.type in targetTypes }
+        // the cached index or nothing: a hover must never build the index under the read lock
+        val entries = (service.cachedOrNull() ?: return null).find(key).filter { it.type in targetTypes }
         if (entries.isEmpty()) return null
-
-        val first = entries.first()
-        return buildString {
-            append("<b>").append(escape(key)).append("</b> &mdash; ").append(first.type.display)
-            if (first.name != key) append("<br/>").append(escape(first.name))
-            tableLine(service, first.type, key)?.let { append("<br/>").append(it) }
-            append("<br/><small>").append(escape(first.file.presentableUrl)).append("</small>")
-            if (entries.size > 1) append("<br/><small>+ ").append(entries.size - 1).append(" more file(s)</small>")
-        }
+        return Resolved(entries, key, service, project)
     }
 
     /**
@@ -70,15 +159,15 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
      */
     private fun tableLine(service: FlowableModelIndexService, type: ModelType, key: String): String? {
         val table = when (type) {
-            ModelType.SERVICE -> service.serviceTableOf(key)
-            ModelType.DATA_OBJECT -> service.dataObjectInfoOf(key)
-                ?.referencedServiceDefinitionModelKey?.let { service.serviceTableOf(it) }
+            ModelType.SERVICE -> service.cachedServiceTableOf(key)
+            ModelType.DATA_OBJECT -> service.cachedDataObjectInfoOf(key)
+                ?.referencedServiceDefinitionModelKey?.let { service.cachedServiceTableOf(it) }
             else -> null
         } ?: return null
         val name = table.tableName ?: return null
         return buildString {
-            append("Table: <b>").append(escape(name)).append("</b>")
-            table.type?.let { append(" <small>(").append(escape(it)).append(")</small>") }
+            append("<b>").append(escape(name)).append("</b>")
+            table.type?.let { append(" (").append(escape(it)).append(')') }
         }
     }
 

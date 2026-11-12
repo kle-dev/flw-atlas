@@ -44,6 +44,17 @@ class FlowableExpressionInjectionTest : BasePlatformTestCase() {
         assertTrue("frontend expr injected", injectedLanguages(host!!).contains(FlowableFrontendExprLanguage.id))
     }
 
+    fun testFrontendExpressionInjectedIntoPageJson() {
+        myFixture.configureByText(
+            "start.page",
+            """{ "key": "PG1", "label": "Hi {{ flw.sum(items) }}" }""",
+        )
+        val host = PsiTreeUtil.findChildrenOfType(myFixture.file, JsonStringLiteral::class.java)
+            .firstOrNull { it.text.contains("flw") }
+        assertNotNull("json string host must be found", host)
+        assertTrue("frontend expr injected", injectedLanguages(host!!).contains(FlowableFrontendExprLanguage.id))
+    }
+
     private fun injectedLanguages(host: com.intellij.psi.PsiElement): List<String> {
         val injected = InjectedLanguageManager.getInstance(project).getInjectedPsiFiles(host) ?: return emptyList()
         return injected.mapNotNull { (it.first as? PsiFile)?.language?.id }

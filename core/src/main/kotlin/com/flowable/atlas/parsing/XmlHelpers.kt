@@ -1,5 +1,6 @@
 package com.flowable.atlas.parsing
 
+import com.flowable.atlas.graph.Callee
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.parsing.AtlasXml.El
 import com.flowable.atlas.script.ScriptContext
@@ -29,6 +30,11 @@ object XmlHelpers {
     val BPMN_GW_TAGS = listOf(
         "exclusiveGateway", "parallelGateway", "inclusiveGateway", "eventBasedGateway", "complexGateway",
     )
+    /** The sub-process kinds, which scope the elements inside them. Tags compare case-sensitively, and the
+     *  engine spells the ad-hoc one `adHocSubProcess` (BpmnXMLConstants.ELEMENT_ADHOC_SUBPROCESS): written
+     *  `adhocSubProcess` in three places, it matched nothing, so an ad-hoc sub-process was not listed, its
+     *  tasks had no `parent`, and the error boundary on it guarded none of them. */
+    val BPMN_SUB_PROCESS_TAGS = setOf("subProcess", "transaction", "adHocSubProcess")
 
     fun extEl(el: El): El? = el.findChild("extensionElements")
 
@@ -46,11 +52,15 @@ object XmlHelpers {
         return out
     }
 
-    /** Literal form keys pushed into a child scope via an in/out mapping onto `formKey`. */
+    /** Form keys pushed into a child scope via a mapping onto `formKey`. An `in`/`out` mapping's `source`
+     *  names a *variable* holding the key, not the key: only its `sourceExpression` is a value. */
     fun inoutFormKeys(mappings: List<Map<String, Any?>>?): List<Any?> =
         (mappings ?: emptyList()).filter {
-            it["source"] != null && (it["target"] as? String)?.lowercase()?.contains("formkey") == true
+            it["source"] != null && (it["target"] as? String)?.lowercase()?.contains("formkey") == true &&
+                (it["kind"] !in VARIABLE_SOURCE_KINDS || it["expression"] == true)
         }.map { it["source"] }
+
+    private val VARIABLE_SOURCE_KINDS = setOf("in", "out", "eventInParameter", "eventOutParameter")
 
     /**
      * The `<extensionElements>` children that carry a variable mapping, and the direction each implies.
@@ -69,9 +79,16 @@ object XmlHelpers {
         "errorOutputParameter" to "error-out",
         "eventInParameter" to "in",
         "eventOutParameter" to "out",
+        // `<flowable:eventCorrelationParameter name="caseId" value="${root.id}"/>`: the value is read to
+        // correlate, the name is the event's own parameter — half the correlation contract, and the
+        // other half of what a send/receive-event task sends (19 on the real projects, none recorded).
+        "eventCorrelationParameter" to "in",
         "variableMapping" to "in",
         "outputVariableName" to "out",
     )
+
+    /** The same tags by lower-cased name: Design has emitted both spellings (see [designFormKeys]). */
+    private val IO_PARAM_CANON: Map<String, String> = IO_PARAM_TAGS.keys.associateBy { it.lowercase() }
 
     /**
      * Every in/out parameter mapping declared on `el`, normalised to `{dir, kind, source, target}`.
@@ -95,13 +112,14 @@ object XmlHelpers {
         val ext = extEl(el) ?: return emptyList()
         val out = ArrayList<Map<String, Any?>>()
         for (c in ext.children) {
-            val dir = IO_PARAM_TAGS[c.tag] ?: continue
+            val tag = IO_PARAM_CANON[c.tag.lowercase()] ?: continue
+            val dir = IO_PARAM_TAGS[tag] ?: continue
             var source: String? = null
             var target: String? = null
             var type: String? = null
             var container: String? = null
             var expression = false
-            when (c.tag) {
+            when (tag) {
                 "in", "out" -> {
                     val srcExpr = c.attr("sourceExpression")
                     source = c.attr("source") ?: srcExpr
@@ -122,6 +140,10 @@ object XmlHelpers {
                     source = c.attr("source") ?: c.attr("sourceExpression")
                     target = c.attr("target")
                 }
+                "eventCorrelationParameter" -> {
+                    source = c.attr("value")
+                    target = c.attr("name")
+                }
                 "variableMapping" -> {
                     val valExpr = c.attr("valueExpression")
                     source = c.attr("value") ?: valExpr
@@ -137,7 +159,7 @@ object XmlHelpers {
                 "outputVariableName" -> target = c.text?.trim()?.ifEmpty { null }
             }
             if (source == null && target == null) continue
-            val rec = linkedMapOf<String, Any?>("dir" to dir, "kind" to c.tag, "source" to source, "target" to target)
+            val rec = linkedMapOf<String, Any?>("dir" to dir, "kind" to tag, "source" to source, "target" to target)
             if (!type.isNullOrEmpty()) rec["type"] = type
             if (!container.isNullOrEmpty()) rec["container"] = container
             if (c.attr("transient") == "true") rec["transient"] = true
@@ -149,43 +171,97 @@ object XmlHelpers {
     }
 
     /**
-     * The model this element calls, as `(kind, key)` — what its in/out parameters are actually mapped onto.
+     * The model this element calls — what its in/out parameters are actually mapped onto — and, for a
+     * service, agent or data object, the operation they feed.
      *
      * A parameter list without its callee is half a story: "3 params on Lookup" says nothing about *which*
      * service the values go to. Stamped onto every record by the parsers so both the element's own detail
      * view and the callee's "Called with" view can name (and link) the other side.
      */
-    fun calleeOf(el: El): Pair<String, String>? {
+    fun callee(el: El): Callee? {
         val ext = extEl(el)
         if (ext != null) {
-            ext.findChild("serviceMapping")?.attr("serviceModelKey").nonEmpty()?.let { return "service" to it }
-            ext.findChild("agentMapping")?.attr("agentModelKey").nonEmpty()?.let { return "agent" to it }
-            ext.findChild("dataObjectMapping")?.attr("definitionKey").nonEmpty()?.let { return "dataObject" to it }
+            ext.findChild("serviceMapping")?.let { sm ->
+                sm.attr("serviceModelKey").nonEmpty()?.let { return Callee("service", it, sm.attr("operationKey").nonEmpty()) } }
+            ext.findChild("agentMapping")?.let { am ->
+                am.attr("agentModelKey").nonEmpty()?.let { return Callee("agent", it, am.attr("operationKey").nonEmpty()) } }
+            ext.findChild("dataObjectMapping")?.let { dom ->
+                dom.attr("definitionKey").nonEmpty()?.let { return Callee("dataObject", it, dom.attr("operationKey").nonEmpty()) } }
+            fieldCallee(el)?.let { return it }
         }
         when (el.tag) {
-            "callActivity" -> el.attr("calledElement").nonEmpty()?.let { return "process" to it }
+            "callActivity" -> el.attr("calledElement").nonEmpty()?.let { return Callee("process", it) }
             "processTask" ->
                 (el.textOfDescendant("processRefExpression") ?: el.attr("processRef")).nonEmpty()
-                    ?.let { return "process" to it }
+                    ?.let { return Callee("process", it) }
             "caseTask" ->
                 (el.textOfDescendant("caseRefExpression") ?: el.attr("caseRef")).nonEmpty()
-                    ?.let { return "case" to it }
+                    ?.let { return Callee("case", it) }
         }
         // a BPMN "case" service task starts a case by definition key (attribute, or an older field injection)
         if (el.attr("type") == "case") {
             (el.attr("caseDefinitionKey") ?: readFields(el)["caseDefinitionKey"] as? String).nonEmpty()
-                ?.let { return "case" to it }
+                ?.let { return Callee("case", it) }
         }
         // send/receive-event tasks and event-registry events map their payload onto an event model
-        ext?.childText("eventType").nonEmpty()?.let { return "event" to it }
+        ext?.childText("eventType").nonEmpty()?.let { return Callee("event", it) }
         // an HTTP task's callee is a URL rather than a model — still worth naming, just not linkable
         if (el.attr("type") == "http") {
-            (readFields(el)["requestUrl"] as? String).nonEmpty()?.let { return "rest" to it }
+            (readFields(el)["requestUrl"] as? String).nonEmpty()?.let { return Callee("rest", it) }
         }
         return null
     }
 
+    /**
+     * A service-registry or agent task configured by field injection — `<flowable:field name="serviceKey">`
+     * and `operationKey`, or `agentModelKey` — instead of by a `serviceMapping` / `agentMapping` element.
+     * Only a task whose type says it is one: a plain delegate with a field called `operationKey` is not a
+     * service call.
+     */
+    private fun fieldCallee(el: El): Callee? {
+        val type = taskType(el) ?: return null
+        if (type != "service-registry" && type != "agent") return null
+        val f = readFields(el)
+        fun str(vararg names: String) = names.firstNotNullOfOrNull { (f[it] as? String).nonEmpty() }
+        return if (type == "service-registry") str("serviceModelKey", "serviceKey")?.let { Callee("service", it, str("operationKey")) }
+        else str("agentModelKey", "agentKey")?.let { Callee("agent", it, str("agentOperationKey", "operationKey")) }
+    }
+
+    /** `flowable:type` on a BPMN service task; the `serviceTaskType` extension on a CMMN task. */
+    private fun taskType(el: El): String? =
+        el.attr("type").nonEmpty() ?: extEl(el)?.childText("serviceTaskType").nonEmpty() ?: el.childText("serviceTaskType").nonEmpty()
+
     private fun String?.nonEmpty(): String? = this?.trim()?.ifEmpty { null }
+
+    /**
+     * Whether an element with an event-registry `eventType` publishes the event (`send`) or consumes it
+     * (`receive`). Direction follows the element, not only a `type` attribute: a send-event task and throw /
+     * end events publish; start, catch and boundary events and receive tasks consume. [serviceTaskType] is
+     * the CMMN spelling of the task type.
+     */
+    fun eventRole(el: El, serviceTaskType: Any? = null): String {
+        val type = el.attr("type") ?: serviceTaskType as? String
+        return if (type == "send-event" || type == "sendEvent" || el.tag == "intermediateThrowEvent" || el.tag == "endEvent") "send"
+        else "receive"
+    }
+
+    /**
+     * The event and channel an element uses, for its own record: `eventType` (from the extension element,
+     * or a send-event task's field injection), which way it goes, the `triggerEventType` that resumes a
+     * send-and-receive task, and the `channelKey` it travels over. What the contract tables on an event's
+     * page join on — the refs alone said a model used the event, not which element did.
+     */
+    fun eventKeys(el: El, serviceTaskType: Any? = null): Map<String, Any?> {
+        val ext = extEl(el) ?: return emptyMap()
+        val out = LinkedHashMap<String, Any?>()
+        val type = el.attr("type") ?: serviceTaskType as? String
+        val ev = ext.childText("eventType").nonEmpty()
+            ?: if (type == "send-event" || type == "sendEvent") (readFields(el)["eventType"] as? String).nonEmpty() else null
+        if (ev != null) { out["eventType"] = ev; out["eventRole"] = eventRole(el, serviceTaskType) }
+        ext.childText("triggerEventType").nonEmpty()?.let { out["triggerEventType"] = it }
+        ext.childText("channelKey").nonEmpty()?.let { out["channelKey"] = it }
+        return out
+    }
 
     /** An attribute-derived out-parameter, for the `resultVariable`-style attributes that have no element. */
     fun resultVariableParam(kind: String, name: String?): Map<String, Any?>? =
@@ -195,7 +271,28 @@ object XmlHelpers {
     private fun looksLikeExpression(v: String?): Boolean =
         v != null && (v.contains("\${") || v.contains("#{") || v.contains("{{"))
 
-    /** Field-injection values on a delegate/listener element (`<flowable:field>`). */
+    /**
+     * Only the field injections written as a literal — `<string>` or `stringValue` — and never the ones
+     * given as an expression. [readFields] merges the two, which is right for reading configuration and
+     * wrong for judging it: a `${secret}` is exactly what a literal password should have been.
+     */
+    fun readLiteralFields(el: El): LinkedHashMap<String, String> {
+        val fields = LinkedHashMap<String, String>()
+        val ext = extEl(el) ?: return fields
+        for (fld in ext.findChildren("field")) {
+            val name = fld.attr("name") ?: continue
+            val s = fld.findChild("string")?.text?.trim()?.takeIf { it.isNotEmpty() } ?: fld.attr("stringValue")
+            if (s != null) fields[name] = s
+        }
+        return fields
+    }
+
+    /**
+     * Field-injection values on a delegate/listener element (`<flowable:field>`), as the artifacts may carry
+     * them: a literal password is `***` and a URL's credentials are masked (see [SecretScan.redactFieldValue]).
+     * Every reader of a key, a topic or a bean name gets the value unchanged — none of those is named like a
+     * secret. The `hardcodedSecrets` finding reads [readLiteralFields], which this does not touch.
+     */
     fun readFields(el: El): LinkedHashMap<String, Any?> {
         val fields = LinkedHashMap<String, Any?>()
         val ext = extEl(el) ?: return fields
@@ -203,11 +300,11 @@ object XmlHelpers {
             val name = fld.attr("name") ?: continue
             val s = fld.findChild("string")
             val e = fld.findChild("expression")
-            fields[name] = when {
+            fields[name] = SecretScan.redactFieldValue(name, when {
                 s?.text?.trim()?.isNotEmpty() == true -> s.text!!.trim()
                 e?.text?.trim()?.isNotEmpty() == true -> e.text!!.trim()
                 else -> fld.attr("stringValue") ?: fld.attr("expression")
-            }
+            })
         }
         return fields
     }
@@ -233,11 +330,28 @@ object XmlHelpers {
             info["dataObjectKey"] = dom.attr("definitionKey")
             dom.attr("operationKey")?.ifEmpty { null }?.let { info["dataObjectOperationKey"] = it }
             ctx.addRef(frm, ftype, ffile, "dataObjectMapping", "dataObject", dom.attr("definitionKey"))
+            // the operation the task runs is used — resolved through the data object's backing service,
+            // as a form's data-object operation key already was
+            ctx.addOpUse(frm, "dataObject", dom.attr("definitionKey"), dom.attr("operationKey"))
         }
         ext.findChild("agentMapping")?.let { am ->
             info["agentModelKey"] = am.attr("agentModelKey")
             am.attr("operationKey")?.ifEmpty { null }?.let { info["agentOperationKey"] = it }
             ctx.addRef(frm, ftype, ffile, "agentMapping", "agent", am.attr("agentModelKey"))
+        }
+        // the same call configured by field injection: recorded under the same relations, so a reader —
+        // and the operation's "unused" verdict — cannot tell the two spellings apart
+        if (info["serviceModelKey"] == null && info["agentModelKey"] == null) fieldCallee(el)?.let { c ->
+            if (c.kind == "service") {
+                info["serviceModelKey"] = c.key
+                c.op?.let { info["operationKey"] = it }
+                ctx.addRef(frm, ftype, ffile, "serviceMapping", "service", c.key)
+                ctx.addOpUse(frm, "service", c.key, c.op)
+            } else {
+                info["agentModelKey"] = c.key
+                c.op?.let { info["agentOperationKey"] = it }
+                ctx.addRef(frm, ftype, ffile, "agentMapping", "agent", c.key)
+            }
         }
         return info
     }
@@ -250,7 +364,31 @@ object XmlHelpers {
         "static-form-key" to ("form" to "static-form"),
         "static-manual-start-form-key" to ("form" to "manual-start-form"),
         "static-decision-table-key" to ("decision" to "static-decision"),
+        // Design's own namespace, lower-cased the way it writes them: the security policy an element is
+        // governed by, the process or case a task starts, the channel a start event listens on. 34 such
+        // references on the real projects were read by nothing.
+        "securitypolicy" to ("securityPolicy" to "security-policy-model"),
+        "processdefinitionkey" to ("process" to "starts-process"),
+        "casedefinitionkey" to ("case" to "starts-case"),
+        "inboundchannelreference" to ("channel" to "via-channel"),
+        // The policy and the SLA as the platform reads them: a case's policy from the plan model, a task's
+        // policy and SLA from the user task or human task itself (AbstractPlatformSecurityService,
+        // PlatformCreate*TaskInterceptor) — which is where Design writes them. Read from `<process>` and
+        // `<case>` only, every one of them was invisible and a wrong key could not be reported missing. The
+        // kind and relation are the ones the process-level read records, so its copy of a process's own
+        // policy collapses into one reference.
+        "security-policy-model" to ("securityPolicy" to "security-policy-model"),
+        "sla-definition-key" to ("sla" to "sla-definition-key"),
     )
+
+    /** The SLA and the security policy an element names for itself, for its own record. */
+    fun governance(el: El): Map<String, String> {
+        val ext = extEl(el) ?: return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        ext.childText("sla-definition-key")?.let { out["sla"] = it }
+        ext.childText("security-policy-model")?.let { out["securityPolicy"] = it }
+        return out
+    }
 
     /** Group-permission extension elements → the access action they grant. */
     private val PERMISSION_GROUP_TAGS: Map<String, String> = linkedMapOf(
@@ -276,12 +414,13 @@ object XmlHelpers {
         }
     }
 
-    /** Execution/task/plan-item listeners declared on an element. [cmmn] decides which script
-     *  bindings a task-listener script is validated against (BPMN and CMMN differ). */
+    /** Execution/task/plan-item/case listeners declared on an element. [cmmn] decides which script
+     *  bindings a task-listener script is validated against (BPMN and CMMN differ). A case's own
+     *  `caseLifecycleListener` sits on the `<case>` element (CaseExport writes it there). */
     fun readListeners(el: El, cmmn: Boolean = false): List<Map<String, Any?>> {
         val ext = extEl(el) ?: return emptyList()
         val out = ArrayList<Map<String, Any?>>()
-        for (tag in listOf("executionListener", "taskListener", "planItemLifecycleListener")) {
+        for (tag in listOf("executionListener", "taskListener", "planItemLifecycleListener", "caseLifecycleListener")) {
             for (lst in ext.findChildren(tag)) {
                 val entry = linkedMapOf<String, Any?>(
                     "kind" to tag,
@@ -297,8 +436,9 @@ object XmlHelpers {
                     ?.let { entry["scriptFormat"] = it }
                 if (entry["script"] != null || scriptEl != null) {
                     entry["problems"] = when (tag) {
-                        // the CMMN listener factory has no script branch — such a listener is a no-op
-                        "planItemLifecycleListener" -> ScriptValidator.unsupportedLifecycleListenerDicts()
+                        // the CMMN listener factory has no script branch for either lifecycle listener —
+                        // such a listener is a no-op
+                        "planItemLifecycleListener", "caseLifecycleListener" -> ScriptValidator.unsupportedLifecycleListenerDicts()
                         else -> ScriptValidator.problemDicts(
                             entry["script"] as? String, entry["scriptFormat"] as? String,
                             context = when {
@@ -335,7 +475,7 @@ object XmlHelpers {
                 val exStr = ex as? String ?: continue
                 for (mm in LISTENER_BEAN_RE.findAll(exStr)) {
                     val b = mm.groupValues[1]
-                    if (b !in Constants.FLOWABLE_CONTEXT) ctx.addRef(frm, ftype, ffile, rel, "bean", b)
+                    if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) ctx.addRef(frm, ftype, ffile, rel, "bean", b)
                 }
             }
             // throw-event listeners publish by name/code — same shared node as event throws
@@ -356,6 +496,8 @@ object XmlHelpers {
                 val value = c.childText("timeDuration") ?: c.childText("timeCycle")
                     ?: c.childText("timeDate") ?: c.attr("messageRef") ?: c.attr("signalRef")
                     ?: c.attr("errorRef") ?: c.attr("escalationRef")
+                    // a conditional event's whole meaning is its condition body
+                    ?: c.textOfDescendant("condition")
                 return kind to value
             }
         }

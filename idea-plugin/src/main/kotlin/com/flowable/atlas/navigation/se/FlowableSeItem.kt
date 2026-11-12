@@ -1,11 +1,13 @@
 package com.flowable.atlas.navigation.se
 
 import com.flowable.atlas.index.ModelEntry
+import com.flowable.atlas.navigation.ModelElements
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
- * One row in the "Flowable Model" Search Everywhere tab: either an indexed model (matched by key or
- * by file path) or a live full-text hit inside a model's content.
+ * One row in the "Flowable Model" Search Everywhere tab: an indexed model (matched by key or by file
+ * path), a named element inside one (a user task, a variable, a message — matched by id), or a live
+ * full-text hit inside a model's content.
  *
  * Both variants are `data class`es on purpose — Search Everywhere de-duplicates accumulated results
  * by `equals`, so two searches that surface the same hit must produce equal items.
@@ -22,11 +24,22 @@ sealed interface FlowableSeItem {
      */
     val displayPath: String
 
+    /** What the row leaves out, for the status line and the tooltip: type, name, archive-qualified path. */
+    val description: String
+
     data class Model(
         val entry: ModelEntry,
         override val displayPath: String,
     ) : FlowableSeItem {
         override val file: VirtualFile get() = entry.file
+        override val description: String
+            get() = listOf(entry.type.display, entry.name.takeIf { it != entry.key }, displayPath).filterNotNull().joinToString(" · ")
+    }
+
+    /** A named element inside a model — a user task, a variable, a message — found by its id. */
+    data class Element(val element: ModelElements.Element, override val displayPath: String) : FlowableSeItem {
+        override val file: VirtualFile get() = element.owner.file
+        override val description: String get() = "${element.location} · $displayPath"
     }
 
     /**
@@ -42,5 +55,7 @@ sealed interface FlowableSeItem {
         val lineText: String,
         val matchStart: Int,
         val matchLength: Int,
-    ) : FlowableSeItem
+    ) : FlowableSeItem {
+        override val description: String get() = displayPath
+    }
 }

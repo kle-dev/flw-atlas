@@ -1,13 +1,13 @@
 package com.flowable.atlas.generate.dto
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.intention.DataObjectBeanGenerator
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.DataField
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
-import com.flowable.atlas.settings.GenerationConfigurable
+import com.flowable.atlas.settings.GenerationDtoConfigurable
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
@@ -192,8 +192,7 @@ class DataObjectDtoService(private val project: Project) {
         if (project.isDisposed) return
         written.firstOrNull()?.let { FileEditorManager.getInstance(project).openFile(it, true) }
         val skippedNote = if (skipped > 0) " $skipped file(s) already existed and were kept." else ""
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.results()
             .createNotification(
                 "Generated ${written.size} data-object DTO(s)",
                 "Written under $target.$skippedNote Each class maps its data object's fields and carries " +
@@ -201,8 +200,8 @@ class DataObjectDtoService(private val project: Project) {
                 NotificationType.INFORMATION,
             )
         notification.addAction(
-            NotificationAction.createSimple("Open Generation settings") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationConfigurable::class.java)
+            NotificationAction.createSimple("Open DTO Settings") {
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationDtoConfigurable::class.java)
             },
         )
         notification.notify(project)
@@ -210,8 +209,7 @@ class DataObjectDtoService(private val project: Project) {
 
     private fun notify(title: String, message: String, type: NotificationType) {
         if (project.isDisposed) return
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        AtlasNotifications.groupFor(type)
             .createNotification(title, message, type)
             .notify(project)
     }
@@ -220,7 +218,6 @@ class DataObjectDtoService(private val project: Project) {
         ApplicationManager.getApplication().invokeLater { notify(title, message, type) }
 
     companion object {
-        private const val GROUP_ID = "Flowable Atlas"
 
         fun getInstance(project: Project): DataObjectDtoService = project.service()
     }

@@ -3,9 +3,11 @@ package com.flowable.atlas.navigation.se
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.Processor
+import java.awt.event.InputEvent
 
 /**
  * The "Flowable Model" Search Everywhere tab finds a model by its key and by its file name, finds a
@@ -49,6 +51,20 @@ class FlowableModelSeContributorTest : BasePlatformTestCase() {
         assertEquals("demo-invoice.bpmn", hits[0].displayPath)
     }
 
+    fun testAUserTaskIsFoundAsAnElementOfItsModel() {
+        val elements = search("approve").mapNotNull { it.item as? FlowableSeItem.Element }
+        assertEquals("the task id, once: ${elements.map { it.element.id }}", listOf("approve"), elements.map { it.element.id })
+        val e = elements.single()
+        assertEquals("DEMO-P001", e.element.owner.key)
+        assertEquals("User task · in DEMO-P001", e.element.location)
+        assertEquals("User task · in DEMO-P001 · demo-invoice.bpmn", e.description)
+        // ranked under the model and over the text hit for the same word
+        val found = search("approve")
+        val element = found.single { it.item is FlowableSeItem.Element }.weight
+        assertTrue(found.filter { it.item is FlowableSeItem.TextHit }.all { it.weight < element })
+        assertTrue(found.filter { it.item is FlowableSeItem.Model }.all { it.weight > element })
+    }
+
     fun testModelsOutrankTextHits() {
         // "invoice" matches the file name (a model hit) and the content (text hits).
         val found = search("invoice")
@@ -73,6 +89,20 @@ class FlowableModelSeContributorTest : BasePlatformTestCase() {
             "needleWord",
             hit.lineText.substring(hit.matchStart, hit.matchStart + hit.matchLength),
         )
+    }
+
+    fun testShiftEnterRoutesToTheListWhilePlainEnterOpensTheResult() {
+        // The popup closes on the first result you open, which is why a search that matched thirty
+        // places needed a list of its own. Only the routing is asserted here — the list itself is
+        // ModelSearchUsagesTest's subject.
+        val contributor = FlowableModelSeContributor(project)
+        assertTrue(contributor.handsOverToList(InputEvent.SHIFT_DOWN_MASK, "DEMO-P001"))
+        assertFalse("plain Enter still goes to the result", contributor.handsOverToList(0, "DEMO-P001"))
+        assertFalse("one character is not a search", contributor.handsOverToList(InputEvent.SHIFT_DOWN_MASK, "D"))
+
+        val item = search("DEMO-P001").models().first()
+        assertTrue(contributor.processSelectedItem(item, 0, "DEMO-P001"))
+        assertEquals("plain Enter opens the model", 1, FileEditorManager.getInstance(project).openFiles.size)
     }
 
     fun testShortPatternDoesNotTriggerTheGrep() {

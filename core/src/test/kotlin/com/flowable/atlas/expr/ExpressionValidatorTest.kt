@@ -19,6 +19,53 @@ class ExpressionValidatorTest {
     }
 
     @Test
+    fun aVariablesCallTheEngineCannotBindIsAnError() {
+        // the engine inserts the variable container only when an argument is missing: two arguments to
+        // `get` make the first one the container, and too few leave a parameter unbound
+        for (e in listOf(
+            "\${vars:get('route', 'A')}", "\${vars:equals(x)}", "\${variables:getOrDefault('a','b','c','d')}",
+            "\${var:isEmpty()}", "\${vars:contains()}", "\${vars:eq(a, 1) && vars:get('x', 2)}",
+        )) {
+            val p = backend(e).filter { it.kind == ExprProblemKind.ARITY }
+            assertEquals(e, 1, p.size)
+            assertEquals(e, ExprSeverity.ERROR, p.single().severity)
+            assertEquals(e, null, p.single().subject)
+        }
+        assertEquals("'vars:get' takes 1 argument (the variable name), got 2 — with 2 the engine reads 'route' " +
+            "as the variable container and fails at runtime", backend("\${vars:get('route', 'A')}").single().message)
+        assertEquals("'vars:equals' takes 2 arguments (the variable name and a value), got 1",
+            backend("\${vars:equals(x)}").single().message)
+        // the name form, the explicit container form, varargs and nested calls all bind
+        for (e in listOf(
+            "\${vars:get('x')}", "\${vars:get(x)}", "\${vars:get(execution, 'x')}", "\${vars:equals(status, 'open')}",
+            "\${vars:contains(tags, 'a', 'b', 'c')}", "\${vars:contains(tags)}", "\${vars:eq(a, 1) && vars:gt(b, 2)}",
+            "\${vars:getOrDefault('a', vars:get('b'))}", "\${date:format(d, 'x', 'y')}",
+        )) assertEquals(e, emptyList<ExprProblem>(), backend(e))
+        // a frontend expression has no `variables:` functions to bind
+        assertTrue(frontend("{{vars:get('a', 'b')}}").none { it.kind == ExprProblemKind.ARITY })
+    }
+
+    @Test
+    fun aPropertyBeforeATernaryColonIsNotANamespace() {
+        // `IDENT : IDENT (` is also what `… ? user.displayName : findUser(x)` looks like around the colon;
+        // real models were flagged "Unknown function namespace 'displayName'" for it.
+        for (e in listOf(
+            "x != null ? findUser(x).displayName : findUser(y).displayName",
+            "vars:exists(a) ? a : vars:get('b')",
+            "f(a ? b.x : g(c))",
+        )) assertEquals(e, emptyList<ExprProblem>(), backend(e))
+        // …and a real namespace call right after a ternary is still checked.
+        val p = backend("flag ? 1 : daate:now()")
+        assertTrue(p.single().message.contains("Unknown function namespace"))
+        // A bare name before the colon is different: JUEL's own parser reads `name : fmt(` as the
+        // function `name:fmt`, so the ternary loses its colon — one syntax error, and no second finding
+        // about a namespace on top of it.
+        val bare = backend("flag ? name : fmt(y)")
+        assertEquals(bare.toString(), 1, bare.size)
+        assertEquals(ExprSeverity.ERROR, bare.single().severity)
+    }
+
+    @Test
     fun validFrontendExpressionsHaveNoProblems() {
         assertTrue(frontend("flw.sum(items)").isEmpty())
         assertTrue(frontend("total |> flw.round(2)").isEmpty())
@@ -27,7 +74,7 @@ class ExpressionValidatorTest {
 
     @Test
     fun workInjectedFlwMembersAreValid() {
-        // Work/platform-injected flw.* members (useGlobalResolver + Form.tsx), not base @flowable/forms.
+        // Work/platform-injected flw.* members (merged by the Work runtime), not base @flowable/forms.
         assertTrue(frontend("flw.getUser('userId').displayName").isEmpty())
         assertTrue(frontend("flw.getMasterDataInstance('id').name").isEmpty())
         assertTrue(frontend("flw.getMasterDataInstanceByKey('k', 'd').name").isEmpty())

@@ -1,7 +1,9 @@
 package com.flowable.atlas.parsing
 
+import com.flowable.atlas.graph.Callee
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.parsing.AtlasXml.El
 import com.flowable.atlas.script.ScriptContext
 import com.flowable.atlas.script.ScriptValidator
 
@@ -11,8 +13,9 @@ import com.flowable.atlas.script.ScriptValidator
  * project-relative path; it returns the parsed model as an ordered map (or a list of them, for XML
  * containers that may declare several definitions).
  *
- * Ported incrementally (TDD, one family at a time, each verified against the golden). [PARSERS] maps a
- * model type to its parser; types without an entry are still discovered/indexed but not yet parsed.
+ * [PARSERS] maps a model type to its structured parser. A type without an entry (dashboard components,
+ * palettes — no corpus to design a parser against yet) goes through [parseGeneric], which registers it by
+ * key, name and description so it is indexed, searchable and navigable all the same.
  */
 object ModelParsers {
 
@@ -30,20 +33,19 @@ object ModelParsers {
         "event" to ::parseEvent,
         "dataDictionary" to ::parseDictionary,
         "dataObject" to ::parseDataObject,
+        "masterData" to ::parseDataObject,
         "securityPolicy" to ::parsePolicy,
         "action" to ::parseAction,
+        "query" to ::parseQuery,
+        "sequence" to ::parseSequence,
+        "sla" to ::parseSla,
+        "template" to ::parseTemplate,
+        "knowledgeBase" to ::parseKnowledgeBase,
+        "variableExtractor" to ::parseVariableExtractor,
+        "document" to ::parseDocumentModel,
     )
 
     private val GENERIC_KEYS = listOf("key", "name", "description", "type", "subType", "modelType")
-
-    /** Form component types that render/act but never bind a variable of their own. */
-    private val NON_BINDING_FIELD_TYPES = setOf(
-        "text", "headline", "horizontalLine", "image", "html", "link", "spacer", "expression",
-        "container", "panel", "tabs", "tab", "workAction", "outcomeButton",
-    )
-
-    /** Field-id roots that are frontend scratch space, never process/case variables. */
-    private val FIELD_ID_IGNORE = setOf("temp", "response", "payload", "root", "item", "self")
 
     // A data-source / link / navigation URL can invoke a service operation with the target and operation
     // keys as *literal* query params even though the host is a dynamic `{{endpoints.*}}` placeholder — e.g.
@@ -78,12 +80,67 @@ object ModelParsers {
         }
     }
 
+    /**
+     * [url] with the literal entries of a REST data source's `queryParams` — `[{name, value, defaultValue}]`
+     * — appended the way the forms runtime appends them (`value`, else `defaultValue`). An entry the form
+     * fills in at run time (`{{$temp.search}}`) is left out: it names nothing a reader could follow.
+     */
+    private fun withQueryParams(url: String, params: Any?): String {
+        val literal = listOfObjs(params).mapNotNull { p ->
+            val name = (p["name"] as? String)?.trim()?.takeIf { it.isNotEmpty() && !it.contains("{{") } ?: return@mapNotNull null
+            val value = ((p["value"] as? String)?.takeIf { it.isNotBlank() } ?: p["defaultValue"] as? String)
+                ?.trim()?.takeIf { it.isNotEmpty() && !it.contains("{{") } ?: return@mapNotNull null
+            "$name=$value"
+        }
+        if (literal.isEmpty()) return url
+        return url + (if ('?' in url) "&" else "?") + literal.joinToString("&")
+    }
+
+    private val INSTANCE_PARAM_RE = Regex("[?&](caseDefinitionKey|processDefinitionKey|scopeDefinitionKey|rootScopeDefinitionKey)=([^&#\\s\"']+)")
+
+    /**
+     * A data table or select over a platform search (`…/search/case-instances?caseDefinitionKey=X`) lists
+     * the instances of one definition, exactly like a work list naming it on `scopeDefinitionKey` — and a
+     * renamed case left it showing nothing. A scope key says which kind only through a `scopeType` beside it
+     * or the index the path searches; otherwise it is left alone, because `lists-instances` is strict.
+     */
+    private fun instanceListRefs(url: String, key: Any?, mtype: String, ffile: String, ctx: Ctx) {
+        if (!url.contains("DefinitionKey=")) return
+        val path = url.substringBefore('?').lowercase()
+        for (m in INSTANCE_PARAM_RE.findAll(url)) {
+            val param = m.groupValues[1]
+            val kind = when (param) {
+                "caseDefinitionKey" -> "case"
+                "processDefinitionKey" -> "process"
+                else -> {
+                    val typeParam = if (param.startsWith("root")) "rootScopeType" else "scopeType"
+                    val type = Regex("[?&]$typeParam=([^&#\\s\"']+)").find(url)?.groupValues?.get(1)?.lowercase()
+                    when {
+                        type == "cmmn" -> "case"
+                        type == "bpmn" -> "process"
+                        "case-instances" in path -> "case"
+                        "process-instances" in path -> "process"
+                        else -> null
+                    }
+                }
+            } ?: continue
+            ctx.addRef(key, mtype, ffile, "lists-instances", kind, m.groupValues[2])
+        }
+    }
+
+    /**
+     * The Oryx editor's bookkeeping maps: `{"id": "id", "url": "extraSettings.url", …}`, a property name
+     * → JSON path table on every legacy form body. Walked as content, the map *is* a component — it has an
+     * `id` and a `url` — and produced 59 REST calls to `GET extraSettings.url` across five real projects.
+     */
+    internal val ORYX_METADATA_KEYS = setOf("pathProperties", "pathMappingProperties", "outputmappingproperties", "xmlProperties")
+
     /** Recursively visit every JSON object in a tree (ElementTree-free `_walk_json`). */
     private fun walkJson(node: Any?, fn: (Map<String, Any?>) -> Unit) {
         when (node) {
             is Map<*, *> -> {
                 @Suppress("UNCHECKED_CAST") fn(node as Map<String, Any?>)
-                node.values.forEach { walkJson(it, fn) }
+                for ((k, v) in node) if (k !in ORYX_METADATA_KEYS) walkJson(v, fn)
             }
             is List<*> -> node.forEach { walkJson(it, fn) }
         }
@@ -97,21 +154,93 @@ object ModelParsers {
     @Suppress("UNCHECKED_CAST")
     private fun objOf(v: Any?): Map<String, Any?>? = v as? Map<String, Any?>
 
+    /**
+     * A Design workspace wrapper `{id, key, name, description, editorJson}` → its body, carrying the
+     * wrapper's identity; any other document unchanged.
+     *
+     * The extractor unwraps a `<type>-models/x.json` before a parser sees it, but a Design export keeps a
+     * query as `query-models/x.query` and a variable extractor as `variable-extractor-models/x.extractor`:
+     * the extension routes them straight here, wrapper and all, and every parameter, filter and extracted
+     * variable sat one level below where the parser looked. Unwrapping in the parser, not by routing on
+     * the folder, also covers a loose wrapper-shaped `.tpl` in a folder Design never uses.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun designBody(doc: Map<String, Any?>): Map<String, Any?> {
+        val ej = when (val raw = doc["editorJson"]) {
+            is Map<*, *> -> raw as Map<String, Any?>
+            // how Design persists it: the body as an escaped JSON string
+            is String -> try { MiniJson.parse(raw) as? Map<String, Any?> } catch (e: Exception) { null }
+            else -> null
+        } ?: return doc
+        return LinkedHashMap(ej).apply { for (k in listOf("key", "name", "description")) doc[k]?.let { putIfAbsent(k, it) } }
+    }
+
+    /**
+     * Carry Design's model **Description** into the parsed record.
+     *
+     * Design keeps a Description on the model itself, beside its key and name — usually the only
+     * sentence in a model that says *why* it exists. Every parser builds its own result map, so every
+     * one of them dropped it: the explorer could render it for apps and could find it nowhere. Called
+     * on the way out of a parser rather than spelled into eleven map literals, so a parser added later
+     * inherits it by calling one function.
+     *
+     * Written only when the model has one — a `"description": null` on every model of every project is
+     * noise in the goldens and a byte on every node of the explorer payload. [from] is tried in order,
+     * because a form/page keeps its metadata in a `metadata` header rather than at the top level.
+     */
+    private fun withDesc(
+        info: MutableMap<String, Any?>,
+        vararg from: Map<String, Any?>,
+    ): MutableMap<String, Any?> {
+        for (src in from) if (truthy(src["description"])) {
+            info["description"] = src["description"]
+            break
+        }
+        return info
+    }
+
     private fun listOfObjs(v: Any?): List<Map<String, Any?>> =
         (v as? List<*>).orEmpty().mapNotNull { objOf(it) }
 
+    /** Hit policies whose result is a list of rows, whatever matched. */
+    private val MULTI_HIT_POLICIES = setOf("RULE ORDER", "OUTPUT ORDER")
+
     /** How many decision-table rows are kept per decision; beyond that `rulesTruncated` records the real count. */
     private const val DMN_RULE_LIMIT = 500
+
+    /** The decisions a `<decisionService>` runs, as the element ids its hrefs name. */
+    private fun serviceMembers(ds: El): List<String> =
+        (ds.findChildren("outputDecision") + ds.findChildren("encapsulatedDecision"))
+            .mapNotNull { it.attr("href")?.removePrefix("#") }
 
     /** `.dmn` — one entry per `<decision>`, with its decision-table shape when present. */
     fun parseDmn(data: ByteArray, ctx: Ctx, ffile: String): List<Map<String, Any?>> {
         val root = AtlasXml.parse(data)
         val out = ArrayList<Map<String, Any?>>()
+        // A file with a decision service is a DRD. The engine deploys only its services (DmnParse), so the
+        // decisions in it are the service's own, callable by no key of theirs — and a DRD Design exports
+        // holds *copies* of decision tables under generated ids (`decisionElement_1`, `decision1`), each
+        // naming the table it copies in `flowable:decisionKey` (or, in an older export, only in the
+        // service's JSON twin). Each one says which service it belongs to and, when it says so, which
+        // table it copies; DecisionServiceCopies merges a copy into that table once every model is read.
+        val services = root.iter("decisionService").toList()
+        val memberOf = HashMap<String, String>()
+        for (ds in services) for (m in serviceMembers(ds)) memberOf.putIfAbsent(m, ds.attr("id") ?: continue)
         for (dec in root.iter("decision")) {
             val key = dec.attr("id")
             val info = linkedMapOf<String, Any?>(
                 "key" to key, "name" to dec.attr("name"), "file" to ffile,
             )
+            val service = if (services.isEmpty() || key == null) null else memberOf[key] ?: services.first().attr("id")
+            if (service != null) {
+                info["embeddedIn"] = service
+                dec.attr("decisionKey")?.trim()?.takeIf { it.isNotEmpty() && it != key }
+                    ?.let { ctx.addDecisionCopy(service, key!!, it) }
+            }
+            val sitesBefore = ctx.varSites.size
+            // The decision's own child element — `textOfDescendant` would have found the first rule's
+            // description instead, which is the annotation and belongs to the row, not the table.
+            dec.childText("description")?.let { info["description"] = it }
             val t = dec.findDescendant("decisionTable")
             if (t != null) {
                 info["hitPolicy"] = t.attr("hitPolicy") ?: "UNIQUE"
@@ -139,19 +268,52 @@ object ModelParsers {
                 // that expression is what a reader looks for when tracing a variable into a decision.
                 val inputExprs = t.findChildren("input").mapNotNull { it.textOfDescendant("text") }
                 if (inputExprs.isNotEmpty()) info["inputExpressions"] = inputExprs
+                // Column metadata beyond the label lists: declared type and allowed values. A separate
+                // record list, so `inputs`/`outputs` stay the plain label lists search and describe read.
+                val inputDefs = t.findChildren("input").map { inp ->
+                    val rec = linkedMapOf<String, Any?>("label" to inp.attr("label"))
+                    inp.findChild("inputExpression")?.let { ie ->
+                        ie.childText("text")?.let { rec["expression"] = it }
+                        ie.attr("typeRef")?.ifEmpty { null }?.let { rec["type"] = it }
+                    }
+                    inp.findChild("inputValues")?.childText("text")?.let { rec["allowed"] = it }
+                    rec
+                }
+                if (inputDefs.any { it.containsKey("type") || it.containsKey("allowed") }) info["inputDefs"] = inputDefs
+                val outputDefs = t.findChildren("output").map { o ->
+                    val rec = linkedMapOf<String, Any?>("label" to (o.attr("label") ?: o.attr("name")))
+                    o.attr("name")?.ifEmpty { null }?.let { rec["name"] = it }
+                    o.attr("typeRef")?.ifEmpty { null }?.let { rec["type"] = it }
+                    o.findChild("outputValues")?.childText("text")?.let { rec["allowed"] = it }
+                    rec
+                }
+                if (outputDefs.any { it.containsKey("type") || it.containsKey("allowed") }) info["outputDefs"] = outputDefs
                 // A decision table reads its input variables from, and writes its output names back
                 // into, the calling scope — index both so decisions join the variable graph.
                 for (inp in t.findChildren("input")) {
-                    val v = inp.textOfDescendant("text")?.trim()?.substringBefore('.')
+                    // `root.amount` reads `amount` of the root instance: the scope token is no variable
+                    val v = inp.textOfDescendant("text")?.trim()?.let(Constants::withoutScopePrefix)?.substringBefore('.')
                     ctx.addVar(key, v)
                     ctx.addVarSite(key, v, Ctx.READ, "dmnInput", inp.attr("id"), inp.attr("label"), "dmnInput")
                 }
-                for (outp in t.findChildren("output")) {
+                // A single-result table writes each output as a variable. A multi-hit table — RULE ORDER,
+                // OUTPUT ORDER, COLLECT without an aggregation — writes one variable named after the decision,
+                // an array of the matched rows, and none of its outputs (the engine's DmnActivityBehavior).
+                val hit = (t.attr("hitPolicy") ?: "UNIQUE").uppercase()
+                val multiHit = hit in MULTI_HIT_POLICIES || (hit == "COLLECT" && t.attr("aggregation").isNullOrEmpty())
+                if (multiHit) {
+                    ctx.addVar(key, key)
+                    ctx.addVarSite(key, key, Ctx.WRITE, "dmnResult", t.attr("id"), dec.attr("name"), "dmnResult")
+                } else for (outp in t.findChildren("output")) {
                     ctx.addVar(key, outp.attr("name"))
                     ctx.addVarSite(key, outp.attr("name"), Ctx.WRITE, "dmnOutput",
                         outp.attr("id"), outp.attr("label"), "dmnOutput")
                 }
             }
+            // A service's decision writes its outputs as the table it copies does, through other element
+            // ids: marked, so the copy's sites can go with it when it merges into that table — left in,
+            // every output of the table was written twice.
+            if (service != null) for (s in ctx.varSites.subList(sitesBefore, ctx.varSites.size)) s[Ctx.DRD_FILE] = ffile
             // DRD: a decision may require other decisions (informationRequirement/requiredDecision)
             for (req in dec.findChildren("informationRequirement")) {
                 val href = req.findChild("requiredDecision")?.attr("href")
@@ -161,10 +323,9 @@ object ModelParsers {
         }
         // Decision services are resolvable targets too — a serviceTask type=dmn may reference one
         // via decisionServiceReferenceKey, exactly like a plain decision key.
-        for (ds in root.iter("decisionService")) {
+        for (ds in services) {
             val dsKey = ds.attr("id")
-            val members = (ds.findChildren("outputDecision") + ds.findChildren("encapsulatedDecision"))
-                .mapNotNull { it.attr("href")?.removePrefix("#") }
+            val members = serviceMembers(ds)
             for (m in members) ctx.addRef(dsKey, "dmn", ffile, "contains-decision", "decision", m)
             out.add(linkedMapOf(
                 "key" to dsKey, "name" to ds.attr("name"), "file" to ffile,
@@ -194,20 +355,46 @@ object ModelParsers {
             ctx.addRef(doc["key"], "event", ffile, "typed-by-dictionary", "dataDictionary",
                 objOf(p["extensionProperties"])?.get("dataDictionaryModelKey"))
         }
-        return linkedMapOf(
+        return withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "correlation" to correlation,
-            "payload" to payload.map { it["name"] },
-        )
+            // the whole payload contract, not just the names — a payload field's type and whether it
+            // correlates is what a consumer has to match
+            "payload" to payload.map { p ->
+                val rec = linkedMapOf<String, Any?>("name" to p["name"])
+                p["type"]?.let { rec["type"] = it }
+                if (truthy(p["required"])) rec["required"] = true
+                if (p["correlationParameter"] == true) rec["correlation"] = true
+                rec
+            },
+        ), doc)
     }
 
     /** `.service` — connector metadata, column mappings and operations; records REST calls in [Ctx]. */
     fun parseService(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
         val cfg = objOf(doc["config"]) ?: emptyMap()
-        val base = (cfg["baseUrl"] ?: cfg["url"]) as? String
-        val columns = listOfObjs(doc["columnMappings"]).map {
-            linkedMapOf("name" to (it["name"] ?: it["columnName"]), "columnName" to it["columnName"], "type" to it["type"])
+        // Credentials in the base URL are the finding below (read from the raw document); the record, every
+        // operation URL built on it and the REST calls carry the URL with them masked.
+        val base = ((cfg["baseUrl"] ?: cfg["url"]) as? String)?.let(SecretScan::redactUrl)
+        val mappings = listOfObjs(doc["columnMappings"])
+        val columns = mappings.map { cm ->
+            linkedMapOf<String, Any?>("name" to (cm["name"] ?: cm["columnName"]), "columnName" to cm["columnName"], "type" to cm["type"]).also { col ->
+                // A relation (`object-relation`, `list-relation`) is no column of this table: Design keeps it in
+                // a join table of two columns — `owningColumnName` holds this row's lookup id,
+                // `referenceColumnName` the referenced row's — and the runtime joins through it, whatever else
+                // the mapping says (it has no other way). The ER designer proposes the relations over exactly
+                // those columns. The referenced service is named only now and then; otherwise the runtime takes
+                // it from the data object field of the same name, and so does the designer.
+                val rel = objOf(cm["relation"])
+                val join = (rel?.get("joinTableName") as? String)?.takeIf { it.isNotBlank() }
+                if (rel != null && join != null) {
+                    col["relation"] = linkedMapOf<String, Any?>("joinTable" to join,
+                        "owningColumn" to rel["owningColumnName"], "referenceColumn" to rel["referenceColumnName"]).also { r ->
+                        (rel["referenceServiceDefinitionKey"] as? String)?.takeIf { it.isNotBlank() }?.let { r["service"] = it }
+                    }
+                }
+            }
         }
         val operations = ArrayList<Any?>()
         val info = linkedMapOf<String, Any?>(
@@ -216,10 +403,18 @@ object ModelParsers {
             "tableName" to doc["tableName"], "referencedLiquibaseModelKey" to doc["referencedLiquibaseModelKey"],
             "referenceKey" to doc["referenceKey"], "columns" to columns, "operations" to operations,
         )
-        // Cross-model references (parity with the platform's ServiceModelReferenceExtractor):
+        // The column a relation's join table refers to this table by. `lookupId` names a mapping, whose column
+        // it is — or, naming none, the column itself — which is how the runtime reads it. Only where it is set.
+        (doc["lookupId"] as? String)?.takeIf { it.isNotBlank() }?.let { id ->
+            info["lookupColumn"] = mappings.firstOrNull { it["name"] == id }?.get("columnName") as? String ?: id
+        }
+        withDesc(info, doc)
+        // Where a password or a key is written down rather than resolved — paths, never values.
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
+        // Cross-model references (the same ones Design itself extracts from a service model):
         // referenceKey → data object; typeReference.modelKey → data dictionary (output and
         // per-operation input/output parameters); operation body templates → template model;
-        // a column relation joins to the table of another service model.
+        // a relation that names the service it refers to joins to that service's table.
         ctx.addRef(doc["key"], "service", ffile, "service-dataObject", "dataObject", doc["referenceKey"])
         for (cm in listOfObjs(doc["columnMappings"])) {
             ctx.addRef(doc["key"], "service", ffile, "relates-to-service", "service",
@@ -234,20 +429,25 @@ object ModelParsers {
         dictionaryRefs(doc["outputParameters"])
         for (op in listOfObjs(doc["operations"])) {
             val oc = objOf(op["config"]) ?: emptyMap()
-            val rawUrl = oc["url"] as? String
+            val rawUrl = (oc["url"] as? String)?.let(SecretScan::redactUrl)
             var full = rawUrl
             if (base != null && full != null && !full.startsWith("http")) {
                 full = base.trimEnd('/') + "/" + full.trimStart('/')
             }
-            operations.add(linkedMapOf(
-                "key" to op["key"], "name" to op["name"], "method" to oc["method"],
-                "url" to oc["url"], "fullUrl" to full,
+            val opRec = linkedMapOf(
+                // `lookup`/`create`/`update`/`delete`/`search`: the engine invokes the first four itself for
+                // every data object bound to the service, which is what tells a generated CRUD operation
+                // that nothing *names* from one that nothing *uses*.
+                "key" to op["key"], "name" to op["name"], "type" to op["type"], "method" to oc["method"],
+                "url" to (rawUrl ?: oc["url"]), "fullUrl" to full,
                 "params" to operationParams(op["inputParameters"]),
                 // An operation's declared outputs are the other half of its contract — what the caller
                 // gets back and can map into a variable. Falls back to the service-level list, which
                 // Flowable shares across operations that declare none of their own.
                 "outParams" to operationParams(op["outputParameters"] ?: doc["outputParameters"]),
-            ))
+            )
+            operations.add(opRec)
+            scriptOperation(oc, op, opRec)
             dictionaryRefs(op["inputParameters"])
             dictionaryRefs(op["outputParameters"])
             ctx.addRef(doc["key"], "service", ffile, "body-template", "template",
@@ -256,19 +456,53 @@ object ModelParsers {
             // graph edge to draw, and a null `url` would violate the invariant every other restCalls
             // producer upholds (and break GraphBuilder's non-null cast).
             if (full != null) {
-                ctx.restCalls.add(linkedMapOf(
-                    "source" to doc["key"], "sourceFile" to ffile, "where" to op["key"],
-                    "method" to (oc["method"] ?: "?"), "url" to full, "kind" to "service-op",
-                ))
+                // the service invoker's default verb when the operation names none
+                ctx.addRestCall(doc["key"], ffile, op["key"], oc["method"] ?: "GET", full, "service-op")
             }
         }
         return info
     }
 
-    /** Parameters a service operation declares (its contract towards a caller), name + type. */
+    /** Parameters a service operation declares (its contract towards a caller): name, type, and —
+     *  only when stated — whether the caller must pass it and what it defaults to. */
     private fun operationParams(params: Any?): List<Map<String, Any?>> =
         listOfObjs(params).filter { it["name"] != null }
-            .map { linkedMapOf("name" to it["name"], "type" to it["type"]) }
+            .map { p ->
+                val rec = linkedMapOf<String, Any?>("name" to p["name"], "type" to p["type"])
+                if (truthy(p["required"])) rec["required"] = true
+                p["defaultValue"]?.let { rec["default"] = it }
+                rec
+            }
+
+    /**
+     * A script-type operation's body (`config.script` in `config.scriptLanguage`), on the operation's record
+     * with what the script validator says about it. The service registry evaluates it only when something
+     * calls the operation, so an unclosed bracket otherwise surfaced in production, on the first call.
+     *
+     * Validated without `formatRequired`: the invoker falls back to `juel` when no language is given, which
+     * is expression territory, not a missing setting. A wrong-context finding on a name the operation
+     * declares as an input is dropped, because the invoker binds each input under its own name — an input
+     * called `task` is that input, not the task the context lacks. The body is deliberately not harvested
+     * for variables: its names are the call's parameters, which belong to no process or case.
+     */
+    private fun scriptOperation(oc: Map<String, Any?>, op: Map<String, Any?>, rec: MutableMap<String, Any?>) {
+        // A URL's literal credentials in the body are a hardcodedSecrets finding on `config.script` (read from
+        // the raw document), so the record carries them masked. Masked before validating, not after: a
+        // problem's offsets then point into the body the explorer shows, and the credential sits inside a
+        // string literal, where `***` changes no structure.
+        val script = (oc["script"] as? String)?.let(SecretScan::redactUserInfo) ?: return
+        val lang = oc["scriptLanguage"] as? String
+        rec["script"] = script
+        if (lang != null) rec["scriptLanguage"] = lang
+        val inputs = listOfObjs(op["inputParameters"]).mapNotNull { it["name"] as? String }.toSet()
+        ScriptValidator.problemDicts(script, lang, formatRequired = false, context = ScriptContext.SERVICE_OPERATION)
+            .filterNot { p ->
+                p["kind"] == "wrong-context-root" &&
+                    script.substring((p["start"] as Int).coerceIn(0, script.length), (p["end"] as Int).coerceIn(0, script.length)) in inputs
+            }
+            // named scriptProblems, as on an action: `problems` already means expression problems to the explorer
+            .ifEmpty { null }?.let { rec["scriptProblems"] = it }
+    }
 
     /** `.policy` — a security policy's permission → roles mapping (dict or list shape). */
     fun parsePolicy(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
@@ -291,10 +525,10 @@ object ModelParsers {
             ctx.addAccess(doc["key"], "securityPolicy", "policy", pk?.toString() ?: "permission",
                 roles.joinToString(","))
         }
-        return linkedMapOf(
+        return withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "type" to doc["type"], "permissions" to perms,
-        )
+        ), doc)
     }
 
     /** `.app` — the app's metadata, variables, pages and child-model list; records access + contains. */
@@ -304,21 +538,39 @@ object ModelParsers {
         val variables = objOf(doc["variables"]) ?: emptyMap()
         val key = doc["key"]
         val childModels = (design["childModels"] as? List<*>) ?: emptyList<Any?>()
+        // A deployed `.app` lists its pages under `pageModels`; a Design-workspace app body (the legacy
+        // export) under `pages`, with the same `key` / `label` / `url` per page.
+        val pageList = listOfObjs(doc["pageModels"]).ifEmpty { listOfObjs(doc["pages"]) }
         val info = linkedMapOf<String, Any?>(
             "key" to key, "name" to doc["name"], "file" to ffile,
             "description" to doc["description"], "theme" to doc["theme"],
             "paletteDefinitionCategory" to doc["paletteDefinitionCategory"],
             "usersAccess" to doc["usersAccess"], "groupsAccess" to doc["groupsAccess"],
             "variables" to variables.entries.map { linkedMapOf("key" to it.key, "type" to objOf(it.value)?.get("type")) },
-            "pages" to listOfObjs(doc["pageModels"]).map { linkedMapOf("key" to it["key"], "access" to it["accessPermissions"]) },
+            // What a user sees and types: the sidebar shows a page's `label`, and the route is
+            // `#/<app url>/<page url>` — each segment the model's `url`, else its key.
+            "pages" to pageList.map { p ->
+                linkedMapOf<String, Any?>("key" to p["key"], "access" to p["accessPermissions"]).apply {
+                    for (k in listOf("label", "url")) (p[k] as? String)?.trim()?.ifEmpty { null }?.let { put(k, it) }
+                }
+            },
             "childModels" to childModels,
         )
+        // Only a `flowApp` is a sidebar entry in Work (the platform's flow-apps list filters on it); the
+        // others are deployment units whose cases and processes are reached through the create dialog.
+        // `url` is the app's route segment, `order` its place in the sidebar. Recorded only when set.
+        when (val fa = doc["flowApp"]) {
+            is Boolean -> info["flowApp"] = fa
+            is String -> fa.trim().lowercase().takeIf { it == "true" || it == "false" }?.let { info["flowApp"] = it == "true" }
+        }
+        (doc["url"] as? String)?.trim()?.ifEmpty { null }?.let { info["url"] = it }
+        doc["order"]?.takeIf { it is Number || (it is String && it.isNotBlank()) }?.let { info["order"] = it }
         for (cm in childModels.mapNotNull { objOf(it) }) {
             val modelKind = if (truthy(cm["type"])) cm["type"].toString() else "?"
             ctx.addRef(key, "app", ffile, "contains", "model:$modelKind", cm["key"])
         }
         ctx.addAccess(key, "app", "app", "open-app", doc["groupsAccess"], doc["usersAccess"])
-        for (p in listOfObjs(doc["pageModels"])) {
+        for (p in pageList) {
             ctx.addAccess(p["key"] ?: key, "page", "page", "view", p["accessPermissions"])
             // pages listed only under pageModels (not in extension.design.childModels) still
             // belong to the app — dedupe/edge-dedupe absorbs the overlap when both are present
@@ -334,6 +586,8 @@ object ModelParsers {
         val key = meta["key"]
         val defaultType = if (ffile.lowercase().endsWith(".page")) "page" else "form"
         val mtype = (meta["modelType"] as? String) ?: defaultType
+        // the metadata, not the extension, says which node this is — see Extractor.dispatch
+        if (mtype == "form" || mtype == "page") ctx.currentModel = mtype
         val fields = ArrayList<Any?>()
         val outcomes = ArrayList<Any?>()
         val dataSources = ArrayList<Any?>()
@@ -345,44 +599,131 @@ object ModelParsers {
             "fields" to fields, "outcomes" to outcomes, "dataSources" to dataSources, "subforms" to subforms,
             "ioParameters" to ioParameters, "restCalls" to restCalls,
         )
+        withDesc(info, doc, meta)
+        // The Design version the form was saved with. The form runtime greys outcomes out on an invalid
+        // form only from 3080 (Design 3.8) on; below that, or without a version — a hand-written form —
+        // an outcome is as enabled as its own `enabled` says. MiniJson reads every number as a Double, and
+        // a deployment may carry it as a string, hence the two shapes.
+        when (val v = meta["flowableDesignVersion"]) {
+            is Number -> v.toInt()
+            is String -> v.trim().toIntOrNull()
+            else -> null
+        }?.let { info["designVersion"] = it }
+        // No outcome variable at all: pressing an outcome then steers nothing a sentry or gateway can read.
+        if (doc["doNotCreateOutcomeVariable"] == true || (doc["doNotCreateOutcomeVariable"] as? String)?.trim()?.equals("true", true) == true) {
+            info["doNotCreateOutcomeVariable"] = true
+        }
         for (oc in listOfObjs(doc["outcomes"])) {
-            outcomes.add(linkedMapOf("value" to oc["value"], "label" to oc["label"]))
+            val rec = linkedMapOf("value" to oc["value"], "label" to oc["label"])
+            // An outcome is greyed out until the form is valid unless it says otherwise: its own `enabled`
+            // replaces that gate, `ignoreValidation` lifts it, and `visible` can hide it. Kept only when set.
+            for ((k, default) in listOf("visible" to true, "enabled" to null, "ignoreValidation" to false)) {
+                val v = oc[k]?.let { if (it is String && it.trim().lowercase() in setOf("true", "false")) it.trim().toBoolean() else it }
+                if (v != null && v != "" && v != default) rec[k] = v
+            }
+            // where Work goes after the outcome was pressed — the next screen is then not the next task
+            (oc["navigationUrl"] as? String)?.trim()?.ifEmpty { null }?.let { rec["navigationUrl"] = it }
+            outcomes.add(rec)
             ctx.addRef(key, mtype, ffile, "outcome-form", "form", oc["outcomeFormKey"])
         }
         // the variable the chosen outcome is stored in (the key is all-lowercase in the model JSON)
+        // — on the record too: a gateway or sentry that branches on the outcome reads this name, and
+        // whoever has to pick the outcome that leads somewhere needs to know which name to look for
+        if (truthy(doc["outcomevariablename"])) info["outcomeVariableName"] = doc["outcomevariablename"]
         ctx.addVar(key, doc["outcomevariablename"])
         ctx.addVarSite(key, doc["outcomevariablename"], Ctx.WRITE, "formOutcome", elementType = "form")
         // Which button the user pressed is what the Work UI shows in a task list and what a query filters
         // on, so an outcome variable no flow condition reads is not evidence of anything. Recording the
         // write but not claiming to know its readers is the honest half.
         ctx.markReadsUnknown(doc["outcomevariablename"])
+        // the date format a date field without its own falls back to
+        (doc["defaultDateFormat"] as? String)?.trim()?.ifEmpty { null }?.let { info["defaultDateFormat"] = it }
+        val (containers, containerGate) = containerGatesOf(doc)
+        if (containers.isNotEmpty()) info["containers"] = containers
         fun visit(n: Map<String, Any?>) {
+            // The component's own record, kept mutable: what a *button* does lives in `extraSettings`,
+            // which this walk only reaches further down.
+            var component: MutableMap<String, Any?>? = null
             if (ModelJsonReader.isFormComponent(n)) {
-                // A button has no `label`; its caption is `extraSettings.text` (see [isFormComponent]).
-                val label = pyOr(n["label"], objOf(n["extraSettings"])?.get("text"))
-                fields.add(linkedMapOf(
+                val ftype = (n["type"] as? String) ?: ""
+                val label = componentCaption(n)
+                component = linkedMapOf(
                     "id" to n["id"], "type" to n["type"], "label" to label,
-                    "required" to (n["isRequired"] ?: false), "value" to n["value"],
-                ))
+                    // A link keeps its target in `value`: its credentials are masked like any other URL's. A
+                    // password field's literal `value` is a password the form ships with, prefilled.
+                    "required" to (n["isRequired"] ?: false),
+                    "value" to if (ftype == "password" && (n["value"] as? String)?.let(SecretScan::isLiteral) == true) SecretScan.REDACTED
+                        else SecretScan.redactAnyUrl(n["value"]),
+                )
+                // What the modeller wrote about this component for whoever reads the form next — the
+                // form equivalent of a BPMN element's documentation, and just as much the answer to "why
+                // is this here" ("Disabled for privileged users, because …").
+                if (truthy(n["description"])) component["description"] = n["description"]
+                // Every localised caption, not just the one that names the component: each entry keeps
+                // its text under `label`, which is what the search index treats as a caption — so a
+                // German caption finds the form as well as the English one does.
+                val i18nLabels = ArrayList<Map<String, Any?>>()
+                for ((loc, ov) in objOf(n["i18n"]).orEmpty()) {
+                    val m = objOf(ov) ?: continue
+                    val t = pyOr(m["label"], objOf(m["extraSettings"])?.get("text"))
+                    if (truthy(t) && t != label) i18nLabels.add(linkedMapOf("locale" to loc, "label" to t))
+                }
+                if (i18nLabels.isNotEmpty()) component["i18nLabels"] = i18nLabels
+                paletteVariant(ftype, objOf(n["extraSettings"]))?.let { component["variant"] = it }
+                // A select/radio's static options are the values the field can take — read both
+                // persisted homes (component-level and extraSettings; either may hold the list).
+                val opts = (n["options"] as? List<*> ?: objOf(n["extraSettings"])?.get("options") as? List<*>)
+                    ?.mapNotNull { o ->
+                        if (o is Map<*, *>) pyOr(pyOr(o["text"], o["label"]), o["value"]) else o
+                    }?.filter { truthy(it) }
+                if (!opts.isNullOrEmpty()) component["options"] = opts
+                (objOf(n["extraSettings"])?.get("optionsExpression") as? String)?.takeIf { it.isNotBlank() }
+                    ?.let { component["optionsExpression"] = it }
+                // Whether it renders at all, whether it can be pressed, whether its value is submitted —
+                // recorded for every component, not just buttons: a hidden input matters as much as a
+                // hidden button, and 252 of 338 buttons in one real project are `visible: false` (the
+                // auto-executing worker pattern), which a reader has no way to guess.
+                gatingOf(n)?.let { component["settings"] = it }
+                // The rules a value must pass besides `required` — a pattern, a range, a length, a date
+                // window, a custom check. Without them the only way to learn that a policy number must
+                // look like `AB-123456` is to type a guess and read the error.
+                validationOf(n)?.let { component["validation"] = it }
+                // The form runtime validates a component whatever its visibility, but skips a disabled or
+                // ignored one, and a container passes both down to everything inside it. So whether a
+                // required field can block the form depends on the panels around it as much as on itself.
+                containerGate[n]?.let { component["containerGate"] = it }
+                fields.add(component)
                 if (n["type"] == "outcomeButton" && truthy(n["value"])) {
                     outcomes.add(linkedMapOf("value" to n["value"], "label" to label))
                 }
                 // A data-entry field's id is the variable path the form reads/writes at runtime — index
                 // its root so the form joins the variable graph. Buttons don't bind a variable, and a
                 // display component whose value is a {{…}} binding reads through the expression pass.
-                val ftype = (n["type"] as? String) ?: ""
-                val bound = (n["value"] as? String)?.contains("{{") == true
-                if (!bound && !NON_BINDING_FIELD_TYPES.contains(ftype) && !ftype.lowercase().contains("button")) {
-                    val root = n["id"].toString().trimStart('$').substringBefore('.').substringBefore('[')
-                    if (root !in FIELD_ID_IGNORE) {
+                // [FormBindings] holds the rule, so the IDE's vocabulary names the same variables.
+                FormBindings.idVariable(n)?.let { root ->
+                    ctx.addVar(key, root, "form_field_use")
+                    // A Work form field is prefilled *from* the variable and writes it back on
+                    // submit, and nothing in the model says which of the two a given field is for.
+                    // Recording both is the honest answer — and it means a field alone never makes a
+                    // variable look unread.
+                    for (d in listOf(Ctx.READ, Ctx.WRITE)) {
+                        ctx.addVarSite(key, root, d, "formField", n["id"], label, ftype)
+                    }
+                }
+                // An expression button computes a value, a REST button takes one out of its response, and
+                // both hand it to their own `value` binding — that is where the result is stored, and it
+                // is measurably always a binding on those two (178 of 178 and 87 of 87 in one real
+                // project), while a `workAction` carries a placeholder `"."` there and stores nothing.
+                // Buttons are excluded from the binding pass above because they bind no input, so without
+                // this the target looked neither read nor written. The read side needs nothing: whoever
+                // renders `{{x}}` is picked up already.
+                if (ftype in FormBindings.RESULT_BINDING_TYPES) {
+                    val target = (n["value"] as? String)?.takeIf { it.contains("{{") }
+                    if (target != null) component["stores"] = target
+                    if (replacesPayload(ftype, n)) component["replacesPayload"] = true
+                    FormBindings.storedVariable(n)?.let { root ->
                         ctx.addVar(key, root, "form_field_use")
-                        // A Work form field is prefilled *from* the variable and writes it back on
-                        // submit, and nothing in the model says which of the two a given field is for.
-                        // Recording both is the honest answer — and it means a field alone never makes a
-                        // variable look unread.
-                        for (d in listOf(Ctx.READ, Ctx.WRITE)) {
-                            ctx.addVarSite(key, root, d, "formField", n["id"], label, ftype)
-                        }
+                        ctx.addVarSite(key, root, Ctx.WRITE, ftype, n["id"], label, ftype)
                     }
                 }
             }
@@ -391,31 +732,76 @@ object ModelParsers {
             val es = objOf(n["extraSettings"])
             if (es != null) {
                 if (truthy(es["formRef"])) {
-                    subforms.add(es["formRef"]); ctx.addRef(key, mtype, ffile, "subform", "form", es["formRef"])
+                    // a bare key or, from a newer export, a `{id, key}` reference — the list shows the key
+                    subforms.add(modelRefKey(es["formRef"])); ctx.addRef(key, mtype, ffile, "subform", "form", es["formRef"])
+                    // and the component says which form it embeds, so its row and its box can open it
+                    component?.set("subform", modelRefKey(es["formRef"]))
                 }
-                if (truthy(es["dataObjectDefinitionKey"])) {
+                // Design's palettes share one `extraSettings` bag, so switching a select or table from one
+                // data source to another leaves the old source's keys behind; the runtime reads only the
+                // source `dataSource` names (see [sourceLive]). Read as live, a static select still
+                // "called" its old REST URL and a REST select still "showed" a master-data table.
+                if (truthy(es["dataObjectDefinitionKey"]) && sourceLive(es, n["type"], "DataObject")) {
                     dataSources.add(linkedMapOf("kind" to "dataObject", "key" to es["dataObjectDefinitionKey"], "op" to es["dataObjectOperationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-dataObject", "dataObject", es["dataObjectDefinitionKey"])
                     ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es["dataObjectOperationKey"])
+                    // The data table's own create/edit/delete operations name what its row actions call
+                    // (75 such keys across the real projects, none of them recorded before) — each only
+                    // while its action is switched on.
+                    for ((ok, flag) in DATA_TABLE_OPERATIONS) {
+                        if (enabled(es[flag])) ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es[ok])
+                    }
+                }
+                // A select over a master-data table names the table, which is a data object of the
+                // master-data kind (9 on the real projects, only one of them reached the graph — and that
+                // one by accident, through a URL scan).
+                if (truthy(es["tableKey"]) && sourceLive(es, n["type"], "Master")) {
+                    dataSources.add(linkedMapOf("kind" to "masterData", "key" to es["tableKey"]))
+                    ctx.addRef(key, mtype, ffile, "field-masterData", "dataObject", es["tableKey"])
+                }
+                // A work list on a page shows the instances of one process or case definition.
+                if (truthy(es["scopeDefinitionKey"])) {
+                    val scopeKind = if ((es["scopeType"] as? String)?.lowercase() == "case") "case" else "process"
+                    ctx.addRef(key, mtype, ffile, "lists-instances", scopeKind, es["scopeDefinitionKey"])
                 }
                 // A select/table reads its options over REST: `queryUrl` for the list, `lookupUrl` to
                 // resolve a stored id back to a label. Both are plain GETs.
                 for (uk in listOf("queryUrl", "lookupUrl")) {
-                    if (!truthy(es[uk])) continue
-                    dataSources.add(linkedMapOf("kind" to "rest", "url" to es[uk]))
-                    ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to "GET", "url" to es[uk], "kind" to "form-query"))
+                    // a data-object source's generated query URL gives way to one the model sets
+                    if (!truthy(es[uk]) || !sourceLive(es, n["type"], "Rest", "DataObject")) continue
+                    val raw = es[uk] as? String
+                    // The forms runtime's REST source appends `queryParams` to the list URL — not to the
+                    // lookup URL, which it builds from `lookupUrl` alone — so that is where Design keeps the
+                    // definition a table lists. Read only from the URL, a table over
+                    // `…/data-object-instances` with its keys in that list was an external call to nowhere.
+                    val url = if (uk == "queryUrl" && raw != null && sourceLive(es, n["type"], "Rest")) {
+                        withQueryParams(raw, es["queryParams"])
+                    } else raw ?: es[uk]
+                    dataSources.add(linkedMapOf("kind" to "rest", "url" to SecretScan.redactAnyUrl(url)))
+                    ctx.addRestCall(key, ffile, n["id"], "GET", url, "form-query")
+                    // the raw URL is scanned with every other extraSettings value below
+                    if (url is String && url != raw) recordUrlOpUses(url, key, mtype, ffile, ctx)
+                    if (url is String) instanceListRefs(url, key, mtype, ffile, ctx)
                 }
                 val sm = objOf(es["serviceModel"])
-                if (sm != null && truthy(sm["serviceModelKey"])) {
+                if (sm != null && truthy(sm["serviceModelKey"]) && sourceLive(es, n["type"], "ServiceModel")) {
                     dataSources.add(linkedMapOf("kind" to "service", "key" to sm["serviceModelKey"], "op" to sm["operationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-service", "service", sm["serviceModelKey"])
                     ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["operationKey"])
+                    // a select's list and its stored-id lookup are two more operations the component names
+                    ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["searchOperationKey"])
+                    ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["lookupOperationKey"])
                 }
-                for (fk in listOf("dataObjectDataTableCreateFormKey", "dataObjectDataTableEditFormKey", "dataObjectDataTableViewFormKey")) {
-                    if (truthy(es[fk])) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
+                // the four form keys a data-object data table carries (the platform's useDataObjectDT)
+                for ((fk, flag) in DATA_TABLE_FORMS) {
+                    if (truthy(es[fk]) && enabled(es[flag]) && sourceLive(es, n["type"], "DataObject")) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
                 }
                 if (truthy(es["expandablePanel"])) ctx.addRef(key, mtype, ffile, "datatable-detail-form", "form", es["expandablePanel"])
-                if (truthy(es["actionDefinitionKey"])) ctx.addRef(key, mtype, ffile, "triggers-action", "action", es["actionDefinitionKey"])
+                // Like the process/case references below, the newer Design editor writes the action
+                // reference as `{key, id}` rather than a bare key.
+                if (truthy(es["actionDefinitionKey"])) {
+                    ctx.addRef(key, mtype, ffile, "triggers-action", "action", modelRefKey(es["actionDefinitionKey"]))
+                }
                 // An agent button references an agent model the same way a service button references a
                 // service — this was the one model reference on a form that went unrecorded.
                 val am = objOf(es["agentModel"])
@@ -424,10 +810,14 @@ object ModelParsers {
                 }
                 // A create-instance button starts a process/case; a query data source runs a query
                 // model. The reference is a bare key or a {key: …} object, depending on the version.
-                fun refKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
-                ctx.addRef(key, mtype, ffile, "starts-process", "process", refKey(es["processReference"]))
-                ctx.addRef(key, mtype, ffile, "starts-case", "case", refKey(es["caseReference"]))
-                ctx.addRef(key, mtype, ffile, "runs-query", "query", refKey(es["query"]))
+                // A create-instance button starts one of the two, by `instanceType`; the other reference
+                // is a leftover of the button's previous setting.
+                val startsCase = (es["instanceType"] as? String)?.equals("case", ignoreCase = true) == true
+                if (!startsCase) ctx.addRef(key, mtype, ffile, "starts-process", "process", modelRefKey(es["processReference"]))
+                if (startsCase || es["instanceType"] == null && es["processReference"] == null) {
+                    ctx.addRef(key, mtype, ffile, "starts-case", "case", modelRefKey(es["caseReference"]))
+                }
+                if (sourceLive(es, n["type"], "Query")) ctx.addRef(key, mtype, ffile, "runs-query", "query", modelRefKey(es["query"]))
                 // A button/section can be gated to groups: ["group1"] or [{"permission-group": "group1"}].
                 val pgs = (es["permissionGroups"] as? List<*> ?: emptyList<Any?>())
                     .map { if (it is Map<*, *>) it["permission-group"] else it }
@@ -439,30 +829,73 @@ object ModelParsers {
                 // carries the callee, which is what lets the invoked action/agent/service turn around and
                 // show the values its callers actually pass.
                 val (refKind, refKey) = calleeOf(es, n)
-                val payload = payloadParams(es, refKind, refKey)
+                // A REST button's response lands under its own `value` binding: the platform's REST button
+                // calls `onChange({$path: name})` on the component, so `{name: "deploymentId"}` on a button
+                // bound to `{{$temp.info}}` writes `$temp.info.deploymentId` — a form-local value, read in
+                // the same form as `{{$temp.info.deploymentId}}` — and on a button bound to `{{customer}}`
+                // a field of `customer`, whose write the binding pass already records. Neither is a
+                // variable called `deploymentId`; eleven "written but never read" on two real projects were.
+                val stores = if ((n["type"] as? String) in FormBindings.RESULT_BINDING_TYPES) (n["value"] as? String)?.takeIf { it.contains("{{") } else null
+                val refOp = calleeOp(es, refKind)
+                val payload = payloadParams(es, refKind, refKey, refOp).map { p ->
+                    if (stores == null || p["kind"] !in RESPONSE_MAPPINGS) p
+                    else LinkedHashMap(p).apply {
+                        val inner = stores.removeSurrounding("{{", "}}").trim()
+                        put("target", "$inner.${p["target"]}")
+                        put("storedUnder", inner)
+                    }
+                }
                 if (payload.isNotEmpty()) {
                     ctx.addParams(
                         ioParameters, key, n["id"], pyOr(n["label"], es["text"]),
                         (n["type"] as? String) ?: "button", payload, refKind,
                     )
                 }
+                // What this component *does*, on the component's own record — the model it calls, the
+                // settings that decide what pressing it sends, and which payload side is in force. The
+                // form's reference list said an action was triggered; only this says by which button,
+                // with what, and under which condition.
+                component?.let { c ->
+                    if (refKind != null && truthy(refKey)) {
+                        c["callee"] = linkedMapOf<String, Any?>("kind" to refKind, "key" to refKey)
+                            .apply { if (refOp != null) put("op", refOp) }
+                    }
+                    buttonSettings(n, es)?.let { flavour ->
+                        @Suppress("UNCHECKED_CAST")
+                        val gates = c["settings"] as? MutableMap<String, Any?>
+                        if (gates == null) c["settings"] = flavour else gates.putAll(flavour)
+                    }
+                    payloadModes(es)?.let { c["payloadMode"] = it }
+                }
                 // Data-source / lookup / navigation URLs (queryUrl, lookupUrl, navigationUrl, …) can embed a
                 // dataObject/service operation as literal query params — pick those up as op-uses.
-                for (v in es.values) if (v is String) recordUrlOpUses(v, key, mtype, ffile, ctx)
+                for ((k, v) in es) {
+                    if (v !is String || (k == "queryUrl" || k == "lookupUrl") && !sourceLive(es, n["type"], "Rest", "DataObject")) continue
+                    recordUrlOpUses(v, key, mtype, ffile, ctx)
+                }
             }
-            // A REST/link button's endpoint. Real Design keeps it on `extraSettings.url` (palette
-            // `rest-button-url`); only hand-written and legacy models put it on the component itself.
-            // Reading `extraSettings` here — rather than wherever the walk happens to land — is what
-            // gives the call a `where`: on the bare `extraSettings` map there is no id to attribute it to.
-            // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback.
+            // A component's `url`. Real Design keeps it on `extraSettings.url` (palette `rest-button-url`);
+            // only hand-written and legacy models put it on the component itself. Reading `extraSettings`
+            // here — rather than wherever the walk happens to land — is what gives the call a `where`: on
+            // the bare `extraSettings` map there is no id to attribute it to. What the URL *is* depends on
+            // the component: see [urlRole]. Every `url` used to be a GET call, so a link button to a
+            // customer page and a data table's row link were listed as REST calls the form never makes.
             val url = (pyOr(es?.get("url"), n["url"]) as? String)?.trim()
-            if (truthy(n["id"]) && !url.isNullOrEmpty()) {
-                val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
-                restCalls.add(linkedMapOf(
-                    "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),
-                ))
-                ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to method, "url" to url, "kind" to "form-button"))
-                recordUrlOpUses(url, key, mtype, ffile, ctx)
+            // a component has a type; a map that merely has an `id` and a `url` key is not one
+            if (truthy(n["id"]) && n["type"] is String && !url.isNullOrEmpty()) {
+                when (urlRole(n["type"] as String, es)) {
+                    UrlRole.CALL -> {
+                        // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback
+                        val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
+                        restCalls.add(linkedMapOf(
+                            "where" to n["id"], "method" to method, "url" to SecretScan.redactUrl(url), "path" to es?.get("path"),
+                        ))
+                        ctx.addRestCall(key, ffile, n["id"], method, url, "form-button")
+                        recordUrlOpUses(url, key, mtype, ffile, ctx)
+                    }
+                    UrlRole.LINK -> ctx.addLink(key, ffile, n["id"], url)
+                    null -> {}
+                }
             }
             // Link components carry their target URL in `value`.
             (n["value"] as? String)?.let { recordUrlOpUses(it, key, mtype, ffile, ctx) }
@@ -481,6 +914,9 @@ object ModelParsers {
      * `extraSettings` path is used by every button flavour — Action, REST, Service, Agent, Create-Instance,
      * Data-Object table — so one reader covers them all.
      */
+    /** The mapping kinds that write a call's response back into the form. */
+    private val RESPONSE_MAPPINGS = setOf("responsePayloadMapping", "errorResponsePayloadMapping")
+
     private val PAYLOAD_MAPPINGS: Map<String, String> = linkedMapOf(
         "sendPayloadMapping" to "in",
         "dataObjectDataTableCreatePayloadMapping" to "in",
@@ -498,13 +934,17 @@ object ModelParsers {
      * REST button, a bare string that is the whole request body as one expression. `headerPropertyMapping`
      * uses `{name, value}` instead and describes HTTP headers, so it keeps its own `kind`.
      */
-    private fun payloadParams(es: Map<String, Any?>, refKind: String?, refKey: Any?): List<Map<String, Any?>> {
+    private fun payloadParams(es: Map<String, Any?>, refKind: String?, refKey: Any?, refOp: String? = null): List<Map<String, Any?>> {
         val out = ArrayList<Map<String, Any?>>()
+        // a data table's create payload feeds the table's own create operation, not the lookup the
+        // component reads its rows with
+        val createOp = (es["dataObjectDataTableCreateOperationKey"] as? String)?.takeIf { it.isNotBlank() }
         fun rec(dir: String, kind: String, source: Any?, target: Any?, expression: Boolean = false) {
             val r = linkedMapOf<String, Any?>("dir" to dir, "kind" to kind, "source" to source, "target" to target)
             if (expression) r["expression"] = true
             if (refKind != null) r["refKind"] = refKind
             if (refKey != null) r["refKey"] = refKey
+            (if (kind == "dataObjectDataTableCreatePayloadMapping") createOp ?: refOp else refOp)?.let { r["refOp"] = it }
             out.add(r)
         }
         for ((k, dir) in PAYLOAD_MAPPINGS) {
@@ -523,18 +963,345 @@ object ModelParsers {
         return out
     }
 
+    /**
+     * The `extraSettings` keys worth showing per button flavour — the ones that change what pressing it
+     * does.
+     *
+     * Per flavour on purpose: the palettes share one `extraSettings` bag and a stencil inherits keys its
+     * runtime never reads. `script` is honoured by the expression button alone, yet 32 of 53 action
+     * buttons in one real project carry a non-empty one — listing it there would state a behaviour that
+     * does not exist. A button's endpoint is not here either: it is already a [restCalls] entry keyed by
+     * the same element id.
+     */
+    private val BUTTON_SETTINGS: Map<String, List<String>> = mapOf(
+        "scriptButton" to listOf("script", "timer", "autoExecute", "executeAlways"),
+        "restButton" to listOf("method", "path", "valueExpression", "autoExecute", "executeAlways"),
+        "workAction" to listOf("navigationUrl", "scopeType", "scopeId", "scopeDefinitionId",
+            "invokeActionUrl", "autoExecute", "executeAlways"),
+        "workInvokeService" to listOf("invokeServiceUrl", "autoExecute", "executeAlways"),
+        "workAgentButton" to listOf("autoExecute", "executeAlways"),
+        "createInstanceButton" to listOf("navigationUrl", "autoExecute", "executeAlways"),
+        "workUserEventListenerButton" to listOf("autoExecute", "executeAlways"),
+        "linkButton" to listOf("target"),
+        "outcomeButton" to listOf("keepInForm"),
+    )
+
+    /** Node-level (not `extraSettings`) flags a reader cares about, on any button. */
+    private val BUTTON_NODE_FLAGS = listOf("primary", "ignoreValidation", "ignorePayload")
+
+    /**
+     * The flavour settings of one button, or null when it has none worth naming. `false` is the palette
+     * default on almost every flag, so only truthy values survive.
+     */
+    private fun buttonSettings(n: Map<String, Any?>, es: Map<String, Any?>): Map<String, Any?>? {
+        val type = (n["type"] as? String)?.takeIf { it in ModelJsonReader.BUTTON_TYPES } ?: return null
+        val out = linkedMapOf<String, Any?>()
+        for (k in BUTTON_SETTINGS[type].orEmpty()) if (truthy(es[k])) out[k] = es[k]
+        for (k in BUTTON_NODE_FLAGS) if (truthy(n[k])) out[k] = n[k]
+        return out.ifEmpty { null }
+    }
+
+    /**
+     * What a form/page component is called. A button has no `label`; its caption is
+     * `extraSettings.text` (see [ModelJsonReader.isFormComponent]), failing that a localised override,
+     * failing that — on an icon-only REST or link button — its literal `value`. A `{{…}}` value is a
+     * binding, not a caption: on an expression button it is where the *result* lands.
+     */
+    internal fun componentCaption(n: Map<String, Any?>): Any? {
+        val isButton = n["type"] in ModelJsonReader.BUTTON_TYPES
+        return pyOr(
+            pyOr(pyOr(n["label"], objOf(n["extraSettings"])?.get("text")), i18nCaption(n)),
+            if (isButton) (n["value"] as? String)?.takeIf { !it.contains("{{") } else null,
+        )
+    }
+
+    /**
+     * Whether a component renders, can be used, and is submitted — recorded whenever the model departs
+     * from the default (`visible`/`enabled` true, `ignore` false), never when it agrees with it.
+     *
+     * All three are `boolean | string` in the form runtime: a literal settles the question (`visible:
+     * false` is a component that is simply never there), an expression makes it conditional. Both are
+     * worth saying and they are not the same statement, so the value is kept as the model spells it.
+     * `ignore` excludes the component's binding from the payload — the value is computed and discarded.
+     */
+    internal fun gatingOf(n: Map<String, Any?>): MutableMap<String, Any?>? {
+        val out = linkedMapOf<String, Any?>()
+        fun gate(field: String, default: Boolean) {
+            val raw = n[field] ?: return
+            // Design sometimes writes the literal as a string (`"enabled": "true"`); it is the same literal,
+            // not an expression, so it must neither read as "visible if true" nor hide a `"false"`.
+            val v = when ((raw as? String)?.trim()?.lowercase()) { "true" -> true; "false" -> false; else -> raw }
+            if (v != default) out[field] = v
+        }
+        gate("visible", true)
+        gate("enabled", true)
+        gate("ignore", false)
+        return out.ifEmpty { null }
+    }
+
+    /** `extraSettings` validation keys the form runtime checks (its `validate/` rules), by the name kept. */
+    private val VALIDATION_SETTINGS = listOf(
+        "min", "max", "minLength", "maxLength", "minDate", "maxDate", "minItems", "maxItems",
+        "minFiles", "maxFiles", "fractionSize", "matchTo",
+    )
+
+    /**
+     * The rules a component's value has to pass besides `required`, as the form runtime reads them, or
+     * null when there are none: `pattern` (`validationRegExp`, matched against the whole value), `mask`
+     * (`validationMask`), the `extraSettings` bounds in [VALIDATION_SETTINGS], `format` (a date field's
+     * display and entry format) and `custom` — `{expression, errorMsg}` per custom validation. Values are
+     * kept as the model spells them, expressions included; a whole number read as `10.0` is `10` again.
+     */
+    internal fun validationOf(n: Map<String, Any?>): Map<String, Any?>? {
+        val out = linkedMapOf<String, Any?>()
+        fun put(k: String, v: Any?) {
+            val x = when (v) {
+                null -> return
+                is String -> v.trim().ifEmpty { return }
+                is Double -> if (v % 1.0 == 0.0 && kotlin.math.abs(v) < 1e15) v.toLong() else v
+                is Number, is Boolean -> v
+                else -> return
+            }
+            out[k] = x
+        }
+        put("pattern", n["validationRegExp"])
+        put("mask", n["validationMask"])
+        val es = objOf(n["extraSettings"]).orEmpty()
+        for (k in VALIDATION_SETTINGS) put(k, es[k])
+        if ((n["type"] as? String)?.lowercase()?.let { "date" in it || "time" in it } == true) put("format", es["format"])
+        val custom = listOfObjs(n["customValidations"]).mapNotNull { cv ->
+            val expr = (cv["expression"] as? String)?.trim()?.ifEmpty { null }
+            val msg = (cv["errorMsg"] as? String)?.trim()?.ifEmpty { null }
+            if (expr == null && msg == null) null else linkedMapOf("expression" to expr, "errorMsg" to msg)
+        }
+        if (custom.isNotEmpty()) out["custom"] = custom
+        return out.ifEmpty { null }
+    }
+
+    /**
+     * The form's gated containers and, for every component inside one, the nearest of them.
+     *
+     * The first half is the form's `containers` record: each container that is hidden, disabled or ignored,
+     * or may be, once — `{id, type, label?, visible?, enabled?, ignore?, containerGate?}`, the gate values as
+     * [gatingOf] keeps them — under its id; its `containerGate` is the key of the next gated container
+     * around it. The second maps each component inside one, by identity (the walk in [parseForm] meets the
+     * very same maps), to the key of the nearest. What can hide, disable or ignore a field is therefore its
+     * `containerGate` and then each container's own, outwards.
+     *
+     * Why it matters: the form runtime skips a disabled or ignored component when it validates, and a
+     * disabled or ignored container takes everything inside it along; visibility it ignores entirely. A
+     * required field in a hidden-but-enabled panel therefore keeps the form invalid with no error shown,
+     * and one in a disabled panel blocks nothing — neither is visible on the field's own record.
+     *
+     * Why a field names one container instead of carrying them: a copy per field grows with fields ×
+     * nesting depth × condition length, and on large, deeply nested forms that multiplied the whole graph's
+     * size and slowed everything that reads it. Why it names only the nearest: a list of every container
+     * around it still grows with fields × nesting depth, and which containers surround a container is a
+     * fact about the container, so it is stored there.
+     */
+    private fun containerGatesOf(
+        doc: Map<String, Any?>,
+    ): Pair<Map<String, Map<String, Any?>>, java.util.IdentityHashMap<Map<*, *>, String>> {
+        val containers = LinkedHashMap<String, Map<String, Any?>>()
+        // A gated component enters the table only once something inside it is met — a gated button or
+        // input is no container — and under one key however many fields name it.
+        val refs = java.util.IdentityHashMap<Map<String, Any?>, String>()
+        fun ref(g: Map<String, Any?>): String = refs.getOrPut(g) {
+            // Ids are unique in a form Design saved; a hand-edited one may repeat one, and two different
+            // containers must not share a record.
+            var r = g["id"] as String
+            var n = 2
+            while (containers[r].let { it != null && it != g }) r = "${g["id"]}#${n++}"
+            containers[r] = g
+            r
+        }
+        val out = java.util.IdentityHashMap<Map<*, *>, String>()
+        // `gate` is the nearest gated container around `node`, or null outside every one.
+        fun walk(node: Any?, gate: Map<String, Any?>?) {
+            when (node) {
+                is List<*> -> node.forEach { walk(it, gate) }
+                is Map<*, *> -> {
+                    @Suppress("UNCHECKED_CAST") val m = node as Map<String, Any?>
+                    val component = m["id"] is String && m["type"] is String
+                    if (gate != null && component) out[m] = ref(gate)
+                    val own = if (component) gatingOf(m) else null
+                    val inner = if (own == null) gate else {
+                        val g = linkedMapOf<String, Any?>("id" to m["id"], "type" to m["type"])
+                        componentCaption(m)?.let { g["label"] = it }
+                        g.putAll(own)
+                        out[m]?.let { g["containerGate"] = it }
+                        g
+                    }
+                    for ((k, v) in m) if (k !in ORYX_METADATA_KEYS) walk(v, inner)
+                }
+            }
+        }
+        walk(doc, null)
+        return containers to out
+    }
+
+    /**
+     * The caption a localised component carries. Design keeps per-locale overrides of `label` /
+     * `extraSettings.text` under `i18n.<locale>`, and on many buttons that is the *only* place a caption
+     * exists (166 of 178 expression buttons in one real project carry one). The first locale wins: Atlas
+     * is naming the component for a reader, not rendering it for an end user.
+     */
+    private fun i18nCaption(n: Map<String, Any?>): Any? {
+        for (loc in objOf(n["i18n"])?.values.orEmpty()) {
+            val m = objOf(loc) ?: continue
+            val t = pyOr(m["label"], objOf(m["extraSettings"])?.get("text"))
+            if (truthy(t)) return t
+        }
+        return null
+    }
+
+    /**
+     * Which of a button's two payload sides is actually in force, when a flag overrides the mapping.
+     *
+     * The Work runtime picks exactly one on each side: `sendFullPayload` (the whole form payload) beats
+     * `sendFullScope` (the surrounding scope) beats the explicit `sendPayloadMapping`; coming back,
+     * `mapFullResponse` (every response key, into the scope when `mapResponseInsideScope`) beats
+     * `responsePayloadMapping`. An overridden mapping is never read — so Atlas must not present it as the
+     * contract. Recorded only when a flag *is* set; otherwise the mappings speak for themselves.
+     */
+    private fun payloadModes(es: Map<String, Any?>): Map<String, Any?>? {
+        val send = when {
+            truthy(es["sendFullPayload"]) -> "full-payload"
+            truthy(es["sendFullScope"]) -> "full-scope"
+            else -> null
+        }
+        val receive = when {
+            !truthy(es["mapFullResponse"]) -> null
+            truthy(es["mapResponseInsideScope"]) -> "full-response-in-scope"
+            else -> "full-response"
+        }
+        if (send == null && receive == null) return null
+        return linkedMapOf<String, Any?>().apply {
+            if (send != null) put("send", send)
+            if (receive != null) put("receive", receive)
+        }
+    }
+
+    /** A model reference: a bare key, or the `{key, id}` object the newer Design editor writes. */
+    internal fun modelRefKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
+
+    /** The variable root a `{{binding}}` names, or null when the value is an expression, not a target. */
+    /**
+     * Which of two palette entries a component came from, where both save the same `type`: Design's Number
+     * and Decimal are both `number` (`numberType` integer / float), Select (single) and Select (multiple)
+     * both `select`. Without it every decimal field reads as a Number, and "which forms have a decimal?"
+     * has no answer. Null for every other component.
+     */
+    private fun paletteVariant(type: String, es: Map<String, Any?>?): String? = when (type) {
+        "number" -> (es?.get("numberType") as? String)?.takeIf { it == "integer" || it == "float" }
+        "select" -> if (es?.get("multi") == true || es?.get("multi") == "true") "multi" else null
+        else -> null
+    }
+
+    /**
+     * The binding the forms runtime turns into the path a component writes to: braces around nothing but a
+     * path. It is the runtime's own test, character class included — `{{a + b}}` and `{{my-total}}` fail it.
+     */
+    private val PLAIN_BINDING = Regex("^\\{\\{[\$\\w.\\[\\]\\s]+\\}\\}$")
+
+    /**
+     * Whether pressing this result-storing button writes over the whole payload rather than one value in it.
+     *
+     * The runtime derives the write path from `value`, and only from a plain binding with something inside
+     * it. `{{}}`, `{{ }}`, an expression, a literal or no value at all name no path, so the result is
+     * written to the root of whatever the button sits in: the form's whole payload, or a bound panel's or
+     * subform's whole value — replaced, not merged, even when the result is `undefined`. A button meant
+     * only to *do* something still stores what it computed, so `{{}}` there deletes the form's data. A REST
+     * button with a response map is the exception: it writes each mapped name instead of its response, and
+     * an empty map writes nothing.
+     */
+    private fun replacesPayload(type: String, n: Map<String, Any?>): Boolean {
+        val responseMap = objOf(n["extraSettings"])?.get("responsePayloadMapping")
+        if (type == "restButton" && (responseMap is List<*> || responseMap is String && responseMap.isNotEmpty())) return false
+        val value = n["value"] as? String ?: return true
+        return !PLAIN_BINDING.matches(value) || value.removeSurrounding("{{", "}}").isBlank()
+    }
+
+    /** The operation of the service, agent or data object a component calls — null for any other callee. */
+    private fun calleeOp(es: Map<String, Any?>, kind: String?): String? = when (kind) {
+        "service" -> objOf(es["serviceModel"])?.get("operationKey")
+        "agent" -> objOf(es["agentModel"])?.get("operationKey")
+        "dataObject" -> es["dataObjectOperationKey"]
+        else -> null
+    }?.toString()?.trim()?.takeIf { it.isNotEmpty() && !it.contains("\${") && !it.contains("#{") && !it.contains("{{") }
+
     /** What a button invokes, as `(kind, key)` — the callee its payload is mapped onto. */
     private fun calleeOf(es: Map<String, Any?>, n: Map<String, Any?>): Pair<String?, Any?> {
-        if (truthy(es["actionDefinitionKey"])) return "action" to es["actionDefinitionKey"]
+        if (truthy(es["actionDefinitionKey"])) return "action" to modelRefKey(es["actionDefinitionKey"])
         objOf(es["agentModel"])?.get("agentModelKey")?.let { if (truthy(it)) return "agent" to it }
-        objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it)) return "service" to it }
-        if (truthy(es["dataObjectDefinitionKey"])) return "dataObject" to es["dataObjectDefinitionKey"]
+        objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it) && sourceLive(es, n["type"], "ServiceModel")) return "service" to it }
+        if (truthy(es["dataObjectDefinitionKey"]) && sourceLive(es, n["type"], "DataObject")) return "dataObject" to es["dataObjectDefinitionKey"]
+        // A create-instance button's callee is the process or case it starts — which is also the model
+        // whose contract its payload map has to match. `instanceType` says which; the other is a leftover.
+        val startsCase = (es["instanceType"] as? String)?.equals("case", ignoreCase = true) == true
+        if (!startsCase) modelRefKey(es["processReference"])?.let { if (truthy(it)) return "process" to it }
+        modelRefKey(es["caseReference"])?.let { if (truthy(it)) return "case" to it }
         // `extraSettings.url` is where a real REST button keeps its endpoint; the component-level `url`
         // only occurs in hand-written and legacy models. Without the former, a REST button's payload and
-        // header mappings carried no callee at all.
+        // header mappings carried no callee at all. A link's URL is where it goes, not what it calls.
         val url = pyOr(pyOr(es["url"], n["url"]), es["invokeServiceUrl"]) as? String
-        if (!url.isNullOrBlank()) return "rest" to url.trim()
+        if (!url.isNullOrBlank() && (truthy(es["invokeServiceUrl"]) || urlRole(n["type"] as? String, es) == UrlRole.CALL)) {
+            return "rest" to SecretScan.redactUrl(url.trim())
+        }
         return null to null
+    }
+
+    /** A data table's operation keys, each with the flag that switches its row action on. */
+    private val DATA_TABLE_OPERATIONS = listOf(
+        "dataObjectDataTableCreateOperationKey" to "dataObjectDataTableEnableCreate",
+        "dataObjectDataTableEditOperationKey" to "dataObjectDataTableEnableEdit",
+        "dataObjectDataTableDeleteOperationKey" to "dataObjectDataTableEnableDelete",
+    )
+
+    /** The four form keys a data-object data table carries (the platform's `useDataObjectDT`), each with
+     *  the flag that switches its action on. */
+    private val DATA_TABLE_FORMS = listOf(
+        "dataObjectDataTableCreateFormKey" to "dataObjectDataTableEnableCreate",
+        "dataObjectDataTableEditFormKey" to "dataObjectDataTableEnableEdit",
+        "dataObjectDataTableViewFormKey" to "dataObjectDataTableEnableView",
+        "dataObjectDataTableDeleteFormKey" to "dataObjectDataTableEnableDelete",
+    )
+
+    /** An action switch that is not switched off. Only an explicit `false` turns it off: the data table
+     *  enables view, edit and delete when the flag is absent (`DataTableNew`), and an expression decides at
+     *  run time. Reading an absent flag as off made the forms those actions open "unused". */
+    private fun enabled(v: Any?): Boolean = v != false && !(v is String && v.trim().equals("false", ignoreCase = true))
+
+    /**
+     * Whether a component's settings for one of [kinds] of data source are the ones the runtime reads.
+     * The forms runtime builds exactly one data source from `extraSettings.dataSource`
+     * (`DataSourceFactory.getDataSource`): `Rest` reads `queryUrl`/`lookupUrl`, `Master` builds its own URLs
+     * from `tableKey`, `DataObject` reads the definition and operation keys (and a `queryUrl` the model
+     * sets), `Query` the query model, `ServiceModel` the service; static `items` on a data-object source make
+     * it static. A data-object select is a data-object source whatever it says (`DataObject/Select.tsx` sets
+     * it), and a component without `dataSource` — a button, a work list, an older model — is taken at its
+     * word.
+     */
+    private fun sourceLive(es: Map<String, Any?>, type: Any?, vararg kinds: String): Boolean {
+        if (type == "dataObjectSelect") return kinds.any { it.equals("DataObject", ignoreCase = true) }
+        val ds = (es["dataSource"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return true
+        if (ds.equals("DataObject", ignoreCase = true) && (es["items"] as? List<*>)?.isNotEmpty() == true) return false
+        return kinds.any { it.equals(ds, ignoreCase = true) }
+    }
+
+    private enum class UrlRole { CALL, LINK }
+
+    /**
+     * What a component's `url` is at run time, per the Work forms runtime: a REST button calls it and an
+     * HTML component loads its markup from it (a call); a link or link button is an `href`, fetched only as
+     * a download (`asFileDownload`); a data table's `url` is where a row click goes. Any other component
+     * does nothing with it, and neither does this.
+     */
+    private fun urlRole(type: String?, es: Map<String, Any?>?): UrlRole? = when (type) {
+        "restButton", "htmlComponent", "cellComponent" -> UrlRole.CALL
+        "link", "linkButton" -> if (truthy(es?.get("asFileDownload"))) UrlRole.CALL else UrlRole.LINK
+        "dataTable" -> UrlRole.LINK
+        else -> null
     }
 
     /** `.agent` — model settings, tools, operations, knowledge base; records tool/KB refs. */
@@ -549,6 +1316,8 @@ object ModelParsers {
             "aiVendor" to ms["aiVendor"], "modelName" to ms["modelName"], "temperature" to ms["temperature"],
             "operations" to operations, "tools" to tools, "knowledgeBase" to null, "enableApiEndpoint" to doc["enableApiEndpoint"],
         )
+        withDesc(info, doc)
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
         fun toolRef(t: Any?) {
             val tm = objOf(t) ?: return
             if (!truthy(tm["key"])) return
@@ -561,7 +1330,7 @@ object ModelParsers {
             if (mt == "service") ctx.addOpUse(key, "service", tm["key"], tm["operationKey"])
         }
         // freemarker behavior templates (documentClassification + operations), guardrails and
-        // evaluators — parity with the platform's AgentModelReferenceExtractor (both persisted
+        // evaluators — the same references Design itself extracts from an agent model (both persisted
         // shapes: `agentModel.key` directly and nested under `configuration`).
         fun behaviorTemplateRefs(behavior: Map<String, Any?>?) {
             if (behavior?.get("type") != "freemarkerTemplate") return
@@ -587,10 +1356,12 @@ object ModelParsers {
         guardrailEvaluatorRefs(doc)
         for (op in listOfObjs(doc["operations"])) {
             val beh = objOf(op["behavior"]) ?: emptyMap()
+            // The prompts ARE the agent's behaviour — the old 200-char cap cut most of them off,
+            // making the interesting part unreadable and unsearchable.
             operations.add(linkedMapOf(
                 "key" to op["key"], "name" to op["name"],
-                "systemMessage" to ((beh["systemMessage"] as? String) ?: "").take(200),
-                "userMessage" to ((beh["userMessage"] as? String) ?: "").take(200),
+                "systemMessage" to capText((beh["systemMessage"] as? String) ?: ""),
+                "userMessage" to capText((beh["userMessage"] as? String) ?: ""),
             ))
             for (t in (op["tools"] as? List<*> ?: emptyList<Any?>())) toolRef(t)
             behaviorTemplateRefs(beh)
@@ -604,9 +1375,12 @@ object ModelParsers {
                 ctx.addRef(key, "agent", ffile, "classifies-document", "document", objOf(d["contentModel"])?.get("key"))
             }
         }
-        // external agent settings: inbound-event-configuration properties reference an event model
+        // External agent settings: a property of the vendor palette's `inboundeventconfiguration` type
+        // references an event model. The palette says which property that is, and the agent does not —
+        // a `{id, key}` template property looks the same — so a property's key counts only where it is
+        // an event's; otherwise it was a missing event that nothing claimed.
         for (v in (objOf(objOf(doc["externalAgentSettings"])?.get("properties")) ?: emptyMap()).values) {
-            ctx.addRef(key, "agent", ffile, "agent-event", "event", objOf(v)?.get("key"))
+            ctx.addRef(key, "agent", ffile, "agent-event", "event", objOf(v)?.get("key"), ifResolved = true)
         }
         val kb = objOf(objOf(doc["knowledgeBase"])?.get("knowledgeBaseModelReference")) ?: emptyMap()
         if (truthy(kb["key"])) { info["knowledgeBase"] = kb["key"]; ctx.addRef(key, "agent", ffile, "knowledgeBase", "knowledgeBase", kb["key"]) }
@@ -620,11 +1394,13 @@ object ModelParsers {
         val doc = json(data)
         val ek = objOf(doc["channelEventKeyDetection"]) ?: emptyMap()
         ctx.addRef(doc["key"], "channel", ffile, "channel-event", "event", ek["fixedValue"])
-        return linkedMapOf(
+        val info = withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "channelType" to doc["channelType"], "type" to doc["type"],
-            "topics" to doc["topics"], "destination" to doc["destination"], "eventKey" to ek,
-        )
+            "topics" to doc["topics"], "destination" to SecretScan.redactAnyUrl(doc["destination"]), "eventKey" to ek,
+        ), doc)
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
+        return info
     }
 
     /** `.action` — a bot/action model; records form/channel/signal refs + script vars. */
@@ -632,18 +1408,19 @@ object ModelParsers {
         val doc = json(data)
         val key = doc["key"]
         ctx.addRef(key, "action", ffile, "action-form", "form", doc["formKey"])
-        for (ch in (doc["channels"] as? List<*> ?: emptyList<Any?>())) {
-            ctx.addRef(key, "action", ffile, "action-channel", "channel", if (ch is String) ch else objOf(ch)?.get("key"))
-        }
-        // `signalName` is a model key only for the start-instance bots (the platform's reference
-        // extractor discriminates on botKey the same way); for any other bot it is a real BPMN
-        // signal name and resolves against the signal index, not the process index.
+        // `channels` — `menu`, `quick-menu`, `slash-menu`, `mobile-*` (the platform's ActionChannelTypes) —
+        // says where in the UI the action is offered. It is not a reference to a channel *model*, and reading
+        // it as one made every action report two missing models. Kept on the record as a fact.
+        // `signalName` is whatever the action's bot reads it as. The start-instance bots and the dynamic
+        // sub-process bot read a definition key (the platform's reference extractor discriminates on botKey
+        // the same way), the platform signal bot a BPMN signal. Any other bot — a custom one, the
+        // set-variable bot — reads it as it likes, and a variable name there was a "triggered signal".
         when (doc["botKey"]) {
-            "bpmn-start-process-instance-bot" ->
+            "bpmn-start-process-instance-bot", "bpmn-inject-dynamic-subprocess-bot" ->
                 ctx.addRef(key, "action", ffile, "starts-process", "process", doc["signalName"])
             "cmmn-start-case-instance-bot" ->
                 ctx.addRef(key, "action", ffile, "starts-case", "case", doc["signalName"])
-            else ->
+            "platform-signal-process-bot" ->
                 ctx.addRef(key, "action", ffile, "triggers-signal", "signal", doc["signalName"])
         }
         val permGroups = (doc["permissionGroups"] as? List<*>) ?: emptyList<Any?>()
@@ -651,14 +1428,20 @@ object ModelParsers {
         val config = objOf(doc["config"]) ?: emptyMap()
         val scriptInfo = objOf(config["scriptInfo"]) ?: emptyMap()
         val script = scriptInfo["script"] as? String
-        VarHarvest.collectScriptVars(ctx, script, listOf(key), scriptInfo["language"] as? String)
+        // In an action bot's script `flw.getInput('x')` / `flw.setOutput('x', …)` are the action's payload —
+        // what its button sends and gets back (see [actionParams]) — not variables: the bot's input container
+        // is the payload. (In a script task the same calls read and write the execution's variables.)
+        VarHarvest.collectScriptVars(ctx, script?.let { FLW_PAYLOAD_CALL_RE.replace(it, "flw.payload(") }, listOf(key),
+            scriptInfo["language"] as? String)
         val rec = linkedMapOf(
             "key" to key, "name" to doc["name"], "file" to ffile, "botKey" to doc["botKey"],
-            "formKey" to doc["formKey"], "signalName" to doc["signalName"], "channels" to doc["channels"],
+            // a bare key, or Design's `{id, key}` — the reference above unwraps either, the record must too
+            "formKey" to modelRefKey(doc["formKey"]), "signalName" to doc["signalName"], "channels" to doc["channels"],
             "scopeType" to doc["scopeType"], "icon" to doc["icon"], "permissionGroups" to doc["permissionGroups"],
             "script" to script, "scriptLanguage" to scriptInfo["language"],
             "ioParameters" to actionParams(ctx, key, doc, config, script),
         )
+        withDesc(rec, doc)
         // named scriptProblems, not problems: the action record is the node's data wholesale, and
         // node.data.problems already means "expression problems" to the explorer
         ScriptValidator.problemDicts(script, scriptInfo["language"] as? String,
@@ -670,6 +1453,7 @@ object ModelParsers {
     /** `flw.getInput('x')` / `flw.setOutput('y', …)` — how a script-based action bot reads its payload
      *  and returns a result (the `flw` scripting API; quotes may be single or double). */
     private val FLW_IO_RE = Regex("""flw\.(getInput|setOutput)\s*\(\s*['"]([^'"]+)['"]""")
+    private val FLW_PAYLOAD_CALL_RE = Regex("""\bflw\.(?:getInput|setOutput|setTransientOutput)\s*\(""")
 
     /**
      * The in/out parameters an action bot is given, in the same shape as a BPMN/CMMN task's mappings.
@@ -684,7 +1468,7 @@ object ModelParsers {
         val out = ArrayList<Map<String, Any?>>()
         val bot = doc["botKey"]
         // the bot is this action's callee — the thing the values are actually handed to
-        val callee = (bot as? String)?.ifEmpty { null }?.let { "bot" to it }
+        val callee = (bot as? String)?.ifEmpty { null }?.let { Callee("bot", it) }
         fun add(dir: String, kind: String, source: Any?, target: Any?) = ctx.addParams(
             out, key, bot, doc["name"], "actionBot",
             listOf(linkedMapOf("dir" to dir, "kind" to kind, "source" to source, "target" to target)),
@@ -707,38 +1491,72 @@ object ModelParsers {
         return out
     }
 
-    /** `.dictionary` — a data dictionary's declared type names. */
+    /** `.dictionary` — the declared type names plus, when the model states them, each type's
+     *  parent and properties (`typeDefs`). Handles both persisted shapes: a name → definition map
+     *  and a list of `{key, name, …}` entries. */
     fun parseDictionary(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
-        val types = objOf(doc["types"]) ?: emptyMap()
-        return linkedMapOf("key" to doc["key"], "name" to doc["name"], "file" to ffile, "types" to types.keys.toList())
+        val typeNames = ArrayList<Any?>()
+        val typeDefs = ArrayList<Map<String, Any?>>()
+        fun propsOf(dm: Map<String, Any?>): List<Map<String, Any?>> = when (val p = dm["properties"]) {
+            is Map<*, *> -> p.entries.map { (pn, pv) ->
+                linkedMapOf<String, Any?>("name" to pn, "type" to (objOf(pv)?.get("type") ?: pv))
+            }
+            is List<*> -> listOfObjs(p).map {
+                linkedMapOf<String, Any?>("name" to (it["name"] ?: it["key"]), "type" to it["type"])
+            }
+            else -> emptyList()
+        }
+        fun def(name: Any?, dm: Map<String, Any?>) {
+            typeNames.add(name)
+            val rec = linkedMapOf<String, Any?>("name" to name)
+            (dm["parent"] ?: dm["extends"])?.let { rec["parent"] = it }
+            propsOf(dm).takeIf { it.isNotEmpty() }?.let { rec["properties"] = it }
+            if (rec.size > 1) typeDefs.add(rec)
+        }
+        when (val t = doc["types"]) {
+            is Map<*, *> -> for ((name, d) in t) def(name, objOf(d) ?: emptyMap())
+            is List<*> -> for (dm in listOfObjs(t)) def(dm["key"] ?: dm["name"] ?: continue, dm)
+        }
+        val info = withDesc(
+            linkedMapOf("key" to doc["key"], "name" to doc["name"], "file" to ffile, "types" to typeNames),
+            doc,
+        )
+        if (typeDefs.isNotEmpty()) info["typeDefs"] = typeDefs
+        return info
     }
 
     /** `.data` (data object / masterData) — columns, backing service/dictionary, relations, access. */
     fun parseDataObject(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
         val key = doc["key"]
+        val masterData = doc["dataObjectType"] == "masterData"
+        // what every record below is about: a master-data list is its own node type, not a data object
+        val self = if (masterData) "masterData" else "dataObject"
         (objOf(doc["definitionIdentityLinks"]) ?: emptyMap()).forEach { (action, links) ->
             val lm = objOf(links) ?: return@forEach
-            ctx.addAccess(key, "dataObject", "definition", action, (lm["groups"] as? List<*>)?.joinToString(",") ?: "")
+            ctx.addAccess(key, self, "definition", action, (lm["groups"] as? List<*>)?.joinToString(",") ?: "")
         }
         for (il in listOfObjs(doc["instanceIdentityLinks"])) {
-            ctx.addAccess(key, "dataObject", "instance", (il["type"] as? String) ?: "link", (il["groups"] as? List<*>)?.joinToString(",") ?: "")
+            ctx.addAccess(key, self, "instance", (il["type"] as? String) ?: "link", (il["groups"] as? List<*>)?.joinToString(",") ?: "")
         }
-        ctx.addRef(key, "dataObject", ffile, "backed-by-service", "service", doc["referencedServiceDefinitionModelKey"])
-        ctx.addRef(key, "dataObject", ffile, "typed-by-dictionary", "dataDictionary", doc["referencedDataDictionaryModelKey"])
+        ctx.addRef(key, self, ffile, "backed-by-service", "service", doc["referencedServiceDefinitionModelKey"])
+        ctx.addRef(key, self, ffile, "typed-by-dictionary", "dataDictionary", doc["referencedDataDictionaryModelKey"])
         val columns = ArrayList<Map<String, Any?>>()
         for (f in listOfObjs(doc["fieldMappings"])) {
             val col = linkedMapOf<String, Any?>("name" to f["name"], "label" to f["label"], "type" to f["type"])
             if (truthy(f["dataObjectModelKey"])) {
                 col["refDataObject"] = f["dataObjectModelKey"]
                 col["relationship"] = f["dataObjectModelRelationshipType"]
-                ctx.addRef(key, "dataObject", ffile, "relates-to", "dataObject", f["dataObjectModelKey"])
+                ctx.addRef(key, self, ffile, "relates-to", "dataObject", f["dataObjectModelKey"])
             }
             columns.add(col)
         }
         objOf(doc["variables"])?.forEach { (n, lbl) ->
             columns.add(linkedMapOf("name" to n, "label" to (lbl as? String), "type" to null))
+            // A master-data list's `variables` are the columns of its reference table (`lang`, `color`),
+            // never variables of a process or case — 143 lists made 35 phantom variables on one project.
+            if (masterData) return@forEach
             ctx.addVar(key, n)
             // A data object's own variable is a column of a table the Work UI, a query or a REST client
             // reads. Nothing in the models has to mention it for it to be in use, so the direction is
@@ -747,34 +1565,367 @@ object ModelParsers {
         }
         val out = linkedMapOf<String, Any?>(
             "key" to key, "name" to doc["name"], "file" to ffile,
+            // the `others` bucket node-ifies by `modelType`; a data object's is redundant but harmless
+            "modelType" to self,
             "dataObjectType" to doc["dataObjectType"], "sourceId" to doc["sourceId"],
             "service" to doc["referencedServiceDefinitionModelKey"], "dictionary" to doc["referencedDataDictionaryModelKey"],
+            "dictionaryType" to doc["dataDictionaryTypeName"],
             "columns" to columns, "fields" to columns.map { it["name"] },
         )
         for (k in listOf("type", "subType", "keyField", "idField", "nameField", "supportsNameFiltering")) {
             if (doc[k] != null) out[k] = doc[k]
         }
-        return out
+        return withDesc(out, doc)
     }
 
-    /** Fallback for model types without a dedicated parser (query/sequence/sla/template/…) → `others`. */
+    /** Long free-text bodies (template variations, query DSL, prompts) are capped at this many chars. */
+    private const val TEXT_CAP = 4000
+
+    internal fun capText(v: Any?): Any? = if (v is String && v.length > TEXT_CAP) v.take(TEXT_CAP) else v
+
+    /** The identity + description head every `others`-bucket record starts with. */
+    private fun othersHead(doc: Map<String, Any?>, ffile: String, mtype: String): MutableMap<String, Any?> =
+        withDesc(linkedMapOf(
+            "key" to doc["key"], "name" to doc["name"], "file" to ffile, "modelType" to mtype,
+        ), doc)
+
+    /**
+     * A definition filter in a query's Elasticsearch template — `"caseDefinitionKey": "X"` in a `term`, or
+     * `"processDefinitionKey": ["A", "B"]` in a `terms`. None of the real queries carries the top-level
+     * `processDefinitionKey` the legacy shape uses; they all filter here, and a renamed case then made the
+     * query return nothing without a word. Matched on the decoded template, where the quotes are plain.
+     */
+    private val QUERY_DEF_FILTER_RE = Regex(
+        "\"(processDefinitionKey|caseDefinitionKey|scopeDefinitionKey|rootScopeDefinitionKey|parentScopeDefinitionKey|definitionKey)\"" +
+            "\\s*:\\s*(\"[^\"]*\"|\\[[^\\]]*])",
+    )
+    private val QUERY_DEF_VALUE_RE = Regex("\"([^\"]*)\"")
+    private val ES_SORT_ORDERS = setOf("asc", "desc")
+
+    /** `.query` — source index, declared parameters/columns, sort keys and the query body itself. */
+    fun parseQuery(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = designBody(json(data))
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "query")
+        for (k in listOf("type", "subType", "sourceIndex")) if (truthy(doc[k])) info[k] = doc[k]
+        // Two persisted shapes: the platform keeps `parameters` as a name → definition map; older and
+        // hand-written models list `columns` [{name, label, variableName}]. Both are the query's contract.
+        val params = ArrayList<Map<String, Any?>>()
+        when (val p = doc["parameters"]) {
+            is Map<*, *> -> for ((n, def) in p) {
+                val dm = objOf(def) ?: emptyMap()
+                params.add(linkedMapOf("name" to n, "type" to dm["type"], "label" to dm["label"], "required" to dm["required"]))
+            }
+            is List<*> -> for (dm in listOfObjs(p)) params.add(
+                linkedMapOf("name" to dm["name"], "type" to dm["type"], "label" to dm["label"], "required" to dm["required"]),
+            )
+        }
+        if (params.isNotEmpty()) info["parameters"] = params
+        val columns = listOfObjs(doc["columns"]).map {
+            linkedMapOf("name" to it["name"], "label" to it["label"], "variableName" to it["variableName"])
+        }
+        if (columns.isNotEmpty()) info["columns"] = columns
+        // A column shows the variable it names: a read the task or instance list performs. A path
+        // (`customer.name`) reads its root, as the explorer's column check takes it — whole, it is no name.
+        for (c in columns) (c["variableName"] as? String)?.substringBefore('.')?.substringBefore('[')?.let {
+            ctx.addVar(key, it)
+            ctx.addVarSite(key, it, Ctx.READ, "queryColumn")
+        }
+        (doc["sortParameters"] as? List<*>)?.mapNotNull { if (it is Map<*, *>) it["name"] else it }
+            ?.takeIf { it.isNotEmpty() }?.let { info["sortParameters"] = it }
+        // the search-template body is the query's actual logic — searchable once it is here
+        for (k in listOf("templateContent", "templateFilter")) {
+            val text = (doc[k] as? String)?.takeIf { it.isNotBlank() } ?: continue
+            info[k] = capText(text)
+            // A literal `"variables.name": "x"` term filters the indexed instances or tasks on the variable
+            // `x` — unlike the template's `${…}`, which is a request parameter. Eleven queries driving the task
+            // lists of one real project filtered on a flag reported as written but never read; deleting its
+            // write, as that report advised, would have emptied every one of those lists.
+            for (name in queryFilterVariables(text)) {
+                ctx.addVar(key, name)
+                ctx.addVarSite(key, name, Ctx.READ, "queryFilter")
+            }
+        }
+        // builder queries: name the aggregations without embedding the whole configuration tree
+        objOf(doc["configuration"])?.let { cfg ->
+            val aggs = listOfObjs(cfg["aggregations"]).mapNotNull { it["name"] ?: it["type"] }
+            if (aggs.isNotEmpty()) info["aggregations"] = aggs
+        }
+        // demo/legacy shape: the query is pinned to one process definition
+        ctx.addRef(key, "query", ffile, "queries-process", "process", doc["processDefinitionKey"])
+        // The platform's shape: the definition is a filter inside the search template itself. Read from the
+        // whole bodies, not the capped copies on the record — a filter past the cap still pins the query.
+        val defKeys = LinkedHashSet<String>()
+        (doc["processDefinitionKey"] as? String)?.trim()?.takeIf { it.isNotEmpty() && it.none { c -> c in "\$<{?" } }?.let { defKeys.add(it) }
+        val index = (doc["sourceIndex"] as? String)?.lowercase().orEmpty()
+        for (k in listOf("templateFilter", "templateContent")) {
+            val body = doc[k] as? String ?: continue
+            for (m in QUERY_DEF_FILTER_RE.findAll(body)) {
+                val kind = when (m.groupValues[1]) {
+                    "caseDefinitionKey" -> "case"
+                    "processDefinitionKey" -> "process"
+                    // the instance index's own field: which kind it is depends on the index searched
+                    "definitionKey" -> if ("case" in index) "case" else if ("process" in index) "process" else null
+                    // a task's scope may be either; the resolver tries a process, then a case
+                    else -> "process"
+                } ?: continue
+                for (q in QUERY_DEF_VALUE_RE.findAll(m.groupValues[2])) {
+                    val v = q.groupValues[1].trim()
+                    // `${caseKey}` / `<#if …>`: the template decides at run time, which names no model. And
+                    // `{"processDefinitionKey": "desc"}` is Elasticsearch's sort shorthand, not a filter — read
+                    // as one, a query sorted by definition reported a missing process called `desc`.
+                    if (v.isEmpty() || v.any { it in "\$<{?" } || v.lowercase() in ES_SORT_ORDERS) continue
+                    ctx.addRef(key, "query", ffile, "queries-process", kind, v)
+                    defKeys.add(v)
+                }
+            }
+        }
+        if (defKeys.isNotEmpty()) info["definitionKeys"] = defKeys.toList()
+        // who may run it (same identityLinks shape as a data object's)
+        (objOf(doc["identityLinks"]) ?: emptyMap()).forEach { (action, links) ->
+            val groups = (objOf(links)?.get("groups") as? List<*>)?.filterIsInstance<String>() ?: return@forEach
+            if (groups.isEmpty()) return@forEach
+            ctx.groups.addAll(groups)
+            ctx.addAccess(key, "query", "query", action, groups.joinToString(","))
+        }
+        return info
+    }
+
+    // `"variables.name": "x"` or the `terms` list `"variables.name": ["x", "y"]`, with or without `.keyword`;
+    // the quotes may be escaped once more where a template was itself stored as a JSON string.
+    private val QUERY_VAR_TERM_RE = Regex("""\\?"variables\.name(?:\.keyword)?\\?"\s*:\s*(\[[^\]]*]|\\?"[^"\\]*\\?")""")
+    private val QUOTED_RE = Regex("""\\?"([^"\\]*)\\?"""")
+    private val PLAIN_NAME_RE = Regex("[A-Za-z_]\\w*")
+
+    /** The variables a query template filters on by literal name; a `${…}` or Freemarker value is a parameter. */
+    internal fun queryFilterVariables(template: String): Set<String> =
+        QUERY_VAR_TERM_RE.findAll(template).flatMap { m -> QUOTED_RE.findAll(m.groupValues[1]).map { it.groupValues[1] } }
+            .filter { PLAIN_NAME_RE.matches(it) }.toCollection(LinkedHashSet())
+
+    /** `.sequence` — the number format and its counters. */
+    fun parseSequence(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val info = othersHead(doc, ffile, "sequence")
+        // `format` is a display string ("ORD-{seq:6}") or an object {prefix, digits, suffix}
+        when (val f = doc["format"]) {
+            is String -> info["format"] = f
+            is Map<*, *> -> {
+                val digits = (f["digits"] as? Number)?.toInt() ?: 0
+                info["format"] = "" + (f["prefix"] ?: "") +
+                    (if (digits > 0) "{seq:$digits}" else "{seq}") + (f["suffix"] ?: "")
+            }
+        }
+        for (k in listOf("start", "startValue", "increment", "min", "max", "cycle")) {
+            if (doc[k] != null) info[k] = doc[k]
+        }
+        return info
+    }
+
+    /** `.sla` — due-date targets and what happens when they are missed. */
+    fun parseSla(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "sla")
+        for (k in listOf(
+            "slaType", "scopeType", "businessCalendarType", "businessCalendarValue",
+            "completionDueDateValue", "completionDueDateTimeUnit", "completionDueDateExpression",
+            "inProgressStartDueDateValue", "inProgressStartDueDateTimeUnit", "inProgressStartDueDateExpression",
+            "inProgressStartOnClaim", "suspendAllowed", "taskDefinitionKey",
+        )) if (doc[k] != null) info[k] = doc[k]
+        // demo/legacy shape: thresholds [{type, duration}]
+        val thresholds = listOfObjs(doc["thresholds"]).map { linkedMapOf("type" to it["type"], "duration" to it["duration"]) }
+        if (thresholds.isNotEmpty()) info["thresholds"] = thresholds
+        // escalation / lifecycle actions; a start-process/start-case action is a real model reference
+        fun actions(listKey: String, outKey: String) {
+            val recs = listOfObjs(doc[listKey]).map { e ->
+                val cfg = objOf(e["actionConfiguration"]) ?: objOf(e["actionConfig"]) ?: emptyMap()
+                val rec = linkedMapOf<String, Any?>()
+                for (k in listOf("stepId", "on", "relativeType", "timeValue", "timeUnit", "action", "condition")) {
+                    if (e[k] != null) rec[k] = e[k]
+                }
+                when (e["action"]) {
+                    "startProcess" -> (cfg["processDefinitionKey"] ?: cfg["key"])?.also {
+                        rec["starts"] = it
+                        ctx.addRef(key, "sla", ffile, "escalation-starts", "process", it)
+                    }
+                    "startCase" -> (cfg["caseDefinitionKey"] ?: cfg["key"])?.also {
+                        rec["starts"] = it
+                        ctx.addRef(key, "sla", ffile, "escalation-starts", "case", it)
+                    }
+                    "assignment" -> cfg["assignee"]?.also { rec["assignee"] = it }
+                }
+                rec
+            }.filter { it.isNotEmpty() }
+            if (recs.isNotEmpty()) info[outKey] = recs
+        }
+        actions("escalationDefinitions", "escalations")
+        actions("initializationDefinitions", "initializationActions")
+        actions("assignmentDefinitions", "assignmentActions")
+        actions("completionDefinitions", "completionActions")
+        // demo/legacy shape: the SLA is pinned to one process definition
+        ctx.addRef(key, "sla", ffile, "sla-of-process", "process", doc["processDefinitionKey"])
+        return info
+    }
+
+    /** `.tpl` — the template's body/variations: the actual text a reader searches for. */
+    fun parseTemplate(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "template")
+        // demo/legacy shape keeps the body at the top level; Design persists it under `editorJson`, and the
+        // extractor has already lifted it to the top for a `template-models/x.json` — so the body is the
+        // wrapper's `editorJson` (object or string) when there is one, else the document itself. Reading
+        // only `editorJson` lost every variation of an unwrapped Design export.
+        val ej = designBody(doc)
+        for (k in listOf("type", "subType", "templateType", "documentType")) {
+            val v = if (truthy(doc[k])) doc[k] else ej[k]
+            if (truthy(v)) info[k] = v
+        }
+        (doc["content"] as? String)?.takeIf { it.isNotBlank() }?.let { info["content"] = capText(it) }
+        val varParams = listOfObjs(ej["variationParameters"]).map {
+            linkedMapOf("name" to it["name"], "defaultValue" to it["defaultValue"])
+        }
+        if (varParams.isNotEmpty()) info["variationParameters"] = varParams
+        // Two spellings of a variation: Design's editor writes `{variationParameters, templateText}` (or a
+        // `templateFileResourceId` for an attached document), the older and hand-written shape
+        // `{parameterValues, text, resource}`. Reading only the second, every variation of a Design export
+        // came out empty and was dropped.
+        val variations = listOfObjs(ej["templateVariations"]).map { v ->
+            val rec = linkedMapOf<String, Any?>()
+            (objOf(v["parameterValues"]) ?: objOf(v["variationParameters"])?.takeIf { it.isNotEmpty() })?.let { rec["parameters"] = it }
+            ((v["text"] ?: v["templateText"]) as? String)?.let { rec["text"] = capText(it) }
+            (v["resource"] ?: v["templateFileResourceId"])?.let { rec["resource"] = it }
+            rec
+        }.filter { it.isNotEmpty() }
+        if (variations.isNotEmpty()) info["variations"] = variations
+        ctx.addRef(key, "template", ffile, "template-form", "form", doc["formKey"])
+        return info
+    }
+
+    /** `.knowledgebase` — retrieval settings; credentials stay out (only their *type* is kept). */
+    fun parseKnowledgeBase(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val info = othersHead(doc, ffile, "knowledgeBase")
+        for (k in listOf("type", "subType", "inputSource", "contentItemsPath", "topK", "similarityThreshold")) {
+            if (doc[k] != null) info[k] = doc[k]
+        }
+        val sources = listOfObjs(doc["sources"]).map { linkedMapOf("type" to it["type"], "path" to it["path"]) }
+        if (sources.isNotEmpty()) info["sources"] = sources
+        // Only the shape of the store, NEVER its credentials: the report must not carry an apiKey even
+        // when the model does — `credentials` says what kind of secret is needed, and no more.
+        objOf(doc["vectorStore"])?.let { vs ->
+            val emb = objOf(vs["embeddingSettings"]) ?: emptyMap()
+            info["vectorStore"] = linkedMapOf<String, Any?>(
+                "type" to vs["type"],
+                "embedding" to emb["type"], "embeddingModel" to emb["modelName"], "dimension" to emb["dimension"],
+                "credentials" to objOf(vs["credentials"])?.get("type"),
+            )
+        }
+        // …and where a credential is written down anyway, the path to it — still not the value.
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
+        return info
+    }
+
+    /** `.extractor` — which indexed variables it writes, from which scope. */
+    fun parseVariableExtractor(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = designBody(json(data))
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "variableExtractor")
+        (doc["sourceIndex"] ?: doc["extends"])?.let { info["sourceIndex"] = it }
+        val extractors = ArrayList<Map<String, Any?>>()
+        for (ve in listOfObjs(doc["variableExtractors"])) {
+            val filter = objOf(ve["filter"]) ?: emptyMap()
+            extractors.add(linkedMapOf(
+                "from" to filter["name"], "path" to ve["path"], "to" to ve["to"],
+                "type" to ve["type"], "scope" to filter["scopeDefinitionKey"],
+            ))
+            // The scope key may name a process or a case — the resolver's process→case fallback covers both.
+            ctx.addRef(key, "variableExtractor", ffile, "extracts-from", "process", filter["scopeDefinitionKey"])
+            ctx.addVar(key, ve["to"])
+            // An extracted variable exists precisely so that queries, task lists and dashboards can
+            // index it — none of which Atlas parses. It is a write whose readers are out of reach.
+            ctx.addVarSite(key, ve["to"], Ctx.WRITE, "variableExtractor", elementType = "variableExtractor")
+            ctx.markReadsUnknown(ve["to"])
+        }
+        if (extractors.isNotEmpty()) info["extractors"] = extractors
+        (doc["fullTextVariables"] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { info["fullTextVariables"] = it }
+        // `[{scopeDefinitionKey, name}]`: the platform turns each entry into a regular extractor that copies
+        // the variable into the type-ahead field Work's global search matches against. So it is the same
+        // scope link as an extractor's filter, and a read of the variable — copied verbatim, a renamed case
+        // silently dropped out of the search, and a variable only the search needed looked unread.
+        for (ft in listOfObjs(doc["fullTextVariables"])) {
+            val scope = ft["scopeDefinitionKey"]
+            ctx.addRef(key, "variableExtractor", ffile, "extracts-from", "process", scope)
+            ctx.addVar(key, ft["name"])
+            ctx.addVarSite(key, ft["name"], Ctx.READ, "fullTextIndex", elementType = "variableExtractor", scope = scope)
+            // The read sits in the extractor, not in the case it indexes, so the scope check would still
+            // call the case's write unread there; the reader that matters — the search — is outside the models.
+            ctx.markReadsUnknown(ft["name"])
+        }
+        return info
+    }
+
+    /** `.document` — content-model settings, per-action forms and permissions. */
+    fun parseDocumentModel(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "document")
+        for (k in listOf("type", "subType", "versioning", "initialState", "initialType")) {
+            if (doc[k] != null) info[k] = doc[k]
+        }
+        (doc["aiInstructions"] as? String)?.takeIf { it.isNotBlank() }?.let { info["aiInstructions"] = capText(it) }
+        objOf(doc["forms"])?.let { forms ->
+            // `{op: key}` on the page whether Design wrote the key bare or as a `{id, key}` reference
+            info["forms"] = forms.mapValues { modelRefKey(it.value) }
+            forms.forEach { (op, fk) -> ctx.addRef(key, "document", ffile, "document-$op-form", "form", fk) }
+        }
+        objOf(doc["actionPermissions"])?.let { perms ->
+            val recs = perms.entries.map { (action, groups) ->
+                val gs = (groups as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                ctx.groups.addAll(gs)
+                ctx.addAccess(key, "document", "document", action, gs.joinToString(","))
+                linkedMapOf("action" to action, "groups" to gs)
+            }
+            if (recs.isNotEmpty()) info["actionPermissions"] = recs
+        }
+        objOf(doc["variables"])?.let { vars ->
+            info["variables"] = vars.entries.map { linkedMapOf("key" to it.key, "type" to objOf(it.value)?.get("type")) }
+            for (n in vars.keys) {
+                ctx.addVar(key, n)
+                // like a data object's columns: read by the Work UI / REST clients Atlas cannot see
+                ctx.markReadsUnknown(n)
+            }
+        }
+        return info
+    }
+
+    /**
+     * Fallback for model types without a dedicated parser (dashboardComponent/palette/…) → `others`.
+     *
+     * A body that does not parse, or is no JSON object, throws — like every structured parser — so the
+     * extractor records a `parse` diagnostic and parseIssues reports it. It used to come back as a record
+     * with no key, which nothing could index: a truncated palette or dashboard component vanished from the
+     * report without a word, although the platform fails to deploy it.
+     */
     fun parseGeneric(data: ByteArray, ctx: Ctx, ffile: String, mtype: String): Map<String, Any?> {
-        val doc = try { MiniJson.parse(String(data, Charsets.UTF_8)) } catch (e: Exception) { null }
-        if (doc !is Map<*, *>) return linkedMapOf("key" to null, "name" to null, "file" to ffile, "modelType" to mtype)
+        val doc = MiniJson.parse(String(data, Charsets.UTF_8))
+        if (doc !is Map<*, *>) {
+            throw IllegalArgumentException("JSON is ${if (doc is List<*>) "an array" else "not an object"} — a $mtype model is one JSON object")
+        }
         @Suppress("UNCHECKED_CAST") val d = doc as Map<String, Any?>
         val out = linkedMapOf<String, Any?>("file" to ffile, "modelType" to mtype)
         for (k in GENERIC_KEYS) if (truthy(d[k])) out[k] = d[k]
         objOf(d["queryModel"])?.let { qm -> if (truthy(qm["key"])) ctx.addRef(d["key"], mtype, ffile, "queryModel", "query", qm["key"]) }
-        if (mtype == "variableExtractor") for (ve in listOfObjs(d["variableExtractors"])) {
-            ctx.addRef(d["key"], mtype, ffile, "extracts-from", "process", objOf(ve["filter"])?.get("scopeDefinitionKey"))
-            ctx.addVar(d["key"], ve["to"])
-            // An extracted variable exists precisely so that queries, task lists and dashboards can
-            // index it — none of which Atlas parses. It is a write whose readers are out of reach.
-            ctx.addVarSite(d["key"], ve["to"], Ctx.WRITE, "variableExtractor", elementType = "variableExtractor")
-            ctx.markReadsUnknown(ve["to"])
+        // A palette's identity keys are `Palette-Id` / `title`, not `key` / `name` — without this
+        // every palette came out as `key: None` and could not become a node at all.
+        if (mtype == "palette") {
+            if (!truthy(out["key"])) d["Palette-Id"]?.let { out["key"] = it }
+            if (!truthy(out["name"])) d["title"]?.let { out["name"] = it }
+            for (k in listOf("category", "scopeType")) if (truthy(d[k])) out[k] = d[k]
+            for (k in listOf("paletteItems", "stencils", "propertyPackages")) {
+                (d[k] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { out["${k}Count"] = it.size }
+            }
         }
-        if (mtype == "template" && truthy(d["formKey"])) ctx.addRef(d["key"], mtype, ffile, "template-form", "form", d["formKey"])
-        if (mtype == "document") objOf(d["forms"])?.forEach { (op, fk) -> ctx.addRef(d["key"], mtype, ffile, "document-$op-form", "form", fk) }
         return out
     }
 

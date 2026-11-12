@@ -9,9 +9,8 @@ package com.flowable.atlas.script
  * `flowable.sandbox.expression.strict-mode=true` (default off) only `@AllowedBeanInStrictMode`
  * beans resolve.
  *
- * Source: the local enterprise checkout `flowable-platform` (2026.2.0-SNAPSHOT, extracted
- * 2026-07-30) plus the OSS base interfaces the platform ones extend (`ContentService`,
- * `IdmIdentityService`, `FormService`, `FormRepositoryService` from `flowable-engine`).
+ * Source: the platform's public service interfaces plus the OSS base interfaces they extend
+ * (`ContentService`, `IdmIdentityService`, `FormService`, `FormRepositoryService` from `flowable-engine`).
  * Overloads are merged into the richest signature.
  *
  * Regeneration: same throwaway approach as [ScriptServiceApis] — per target a LIST of interface

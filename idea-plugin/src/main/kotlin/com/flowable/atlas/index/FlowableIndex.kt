@@ -1,5 +1,7 @@
 package com.flowable.atlas.index
 
+import com.intellij.openapi.vfs.VirtualFile
+
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ModelMembers
 import com.flowable.atlas.parsing.RestCallScanner
@@ -19,12 +21,21 @@ class FlowableIndex(
     val referencedIdentifiers: Set<String> = emptySet(),
     /** Fully-qualified class names referenced from models (delegate/class attributes). */
     val referencedClassFqns: Set<String> = emptySet(),
+    /** Every `root.member` a model expression names, as `root#member` — how a Java method is found used
+     *  on one of its class's beans rather than by its name anywhere. */
+    val beanMembers: Set<String> = emptySet(),
+    /** Every root a model expression starts with — a bean name, or a variable. */
+    val expressionRoots: Set<String> = emptySet(),
     /** Project-wide process/case variable names (BPMN dataObjects, formProperties, form fields). */
     val variables: Set<String> = emptySet(),
     /** BPMN top-level `<message name>` values. */
     val messages: Set<String> = emptySet(),
     /** BPMN top-level `<signal name>` values. */
     val signals: Set<String> = emptySet(),
+    /** Some model computes a message name at run time — the [messages] are not all the names there are. */
+    val dynamicMessages: Boolean = false,
+    /** Some model computes a signal name at run time. */
+    val dynamicSignals: Boolean = false,
     /** `<userTask id>` values — candidates for `taskDefinitionKey(...)`. */
     val userTaskIds: Set<String> = emptySet(),
     /** Ids of every flow node — candidates for `activityId(...)`. */
@@ -36,6 +47,18 @@ class FlowableIndex(
     val restCalls: Set<RestCallScanner.RestRef> = emptySet(),
     /** Wall-clock time this snapshot was built (epoch millis); 0 when not set by the scanner. */
     val builtAtMillis: Long = 0L,
+    /** The newest modification time among the model files and archives scanned (epoch millis); 0 when
+     *  nothing was scanned. What "have the models changed since this report was generated?" compares
+     *  against — [builtAtMillis] measures the scan, not the models, and would flag every report on Rebuild. */
+    val newestModelMtime: Long = 0L,
+    /** Names of the `.bar`/`.zip` archives in scope that could not be opened or read — what the Hub has
+     *  to say, because an unindexed archive is otherwise indistinguishable from an empty project. */
+    val skippedArchives: List<String> = emptyList(),
+    /** The same archives by name: the file, and why it could not be read — what the Hub points at. */
+    val skippedArchiveFiles: Map<String, SkippedArchive> = emptyMap(),
+    /** Every model file and archive scanned, with its modification time — what "which models changed
+     *  since this page was generated?" is answered from; [newestModelMtime] is this map's maximum. */
+    val fileMtimes: Map<VirtualFile, Long> = emptyMap(),
 ) {
 
     private val distinctByType: Map<ModelType, List<ModelEntry>> by lazy {
@@ -43,6 +66,26 @@ class FlowableIndex(
             .groupBy { it.type }
             .mapValues { (_, list) -> list.distinctBy { it.key }.sortedBy { it.key } }
     }
+
+    private val keySetByType: Map<ModelType, Set<String>> by lazy {
+        distinctByType.mapValues { (_, list) -> list.mapTo(LinkedHashSet()) { it.key } }
+    }
+
+    private val memos = java.util.concurrent.ConcurrentHashMap<Any, Any>()
+
+    /**
+     * A value derived from this snapshot, computed once and dropped with it — for a consumer outside this
+     * package that would otherwise keep its own cache keyed by the snapshot. An application-level extension
+     * (Go to Symbol) that did so kept a closed project's whole index alive until its next search. [compute]
+     * must be pure: two threads racing may both run it, and the first value stored wins.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> memo(key: Any, compute: () -> T): T =
+        (memos[key] ?: memos.putIfAbsent(key, compute()) ?: memos.getValue(key)) as T
+
+    /** The distinct keys of one model type, as a set — what a key inspection asks per literal, so it is
+     *  computed once per snapshot rather than once per literal. */
+    fun keySetOf(type: ModelType): Set<String> = keySetByType[type] ?: emptySet()
 
     /** Distinct models of a type (one per key), sorted by key — the completion candidate set. */
     fun keysOfType(type: ModelType): List<ModelEntry> = distinctByType[type] ?: emptyList()
@@ -72,4 +115,19 @@ class FlowableIndex(
     fun allEntries(): List<ModelEntry> = byKey.values.flatten()
 
     fun distinctCount(): Int = distinctByType.values.sumOf { it.size }
+
+    /**
+     * Whether some process is known only from a file whose elements are not read — a Design workspace
+     * JSON rather than BPMN XML. Its messages, signals and tasks are then missing from every vocabulary,
+     * so "no model declares this name" is no verdict.
+     */
+    val processWithoutMembers: Boolean by lazy {
+        byKey.values.any { entries ->
+            val processes = entries.filter { it.type == ModelType.PROCESS }
+            processes.isNotEmpty() && processes.none { ModelType.isXmlModel(it.file.name) }
+        }
+    }
 }
+
+/** An archive the index could not look into, and why. */
+data class SkippedArchive(val file: VirtualFile, val reason: String)

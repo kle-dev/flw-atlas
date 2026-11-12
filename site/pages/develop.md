@@ -18,13 +18,18 @@ Building needs a **JDK 21+**. Running the CLI needs only a **JRE 21+**.
 
 That runs the whole gate: the `:core` golden tests against `core/src/test/resources/miniproject`, the
 parser and graph unit tests, the drift/sync tests, the `:cli` contract tests (the artifact names the
-plugin depends on), the shared expression-validator parity suite, and the three browser-driven frontend
-tests. It also produces the installable plugin ZIP.
+plugin depends on, and which jar and output folder the `atlas` launcher picks), the shared
+expression-validator parity suite, the browser-driven frontend tests, and `:cli:siteCheck`, which runs
+`scripts/site-build.mjs` over `site/` — the Markdown subset, internal links and images, version
+strings, mockups — non-strict and without the demo, so it needs node but not Chrome. It also produces
+the installable plugin ZIP.
 
 ### The goldens
 
-`core/src/test/resources/golden/` pins the generated artifacts byte-for-byte. When a change to them is
-intended:
+`core/src/test/resources/golden/` pins the generated artifacts byte-for-byte. The changes report is
+pinned over two versions of the fixture: `core/src/test/resources/miniproject-v2/` holds only the files
+the second version changes, laid over a copy of `miniproject` — so a change to one of those files belongs
+in both folders. When a change to the goldens is intended:
 
 ```bash
 ./gradlew :core:updateGoldens
@@ -35,25 +40,83 @@ That re-baselines the goldens **and** regenerates every other derived file in th
 `CHANGELOG.md`, which is the source of truth for the release history — the descriptor holds a
 size-budgeted window onto its newest entries, because that field is capped at 65535 characters).
 
-> A word of warning when reading a golden diff: the normaliser sorts every list by its canonical JSON,
-> so adding **any** key to a node's `data` re-sorts the whole `graph.nodes` list. The diff then looks
-> like nodes were shuffled or paired with the wrong data. They were not — compare keyed by node `id`,
-> never by list position.
+`miniproject.graph.json` is the `graph.json` the CLI writes for the fixture, minus its `_generated`
+block (the time and the Atlas version), laid out one token per line so that a change reads as a line
+diff. Nothing is sorted for the comparison, so the order of a form's fields, a case's stages or the
+findings is pinned as well. A failing golden names the first line that differs, its JSON path and both
+versions of it, so the console tells you where to look.
 
 ### The browser tests
 
-Three tests drive the generated explorer in headless Chrome, because `explorer.js` is a large browser
-asset that no JUnit test can execute:
+These tests drive the generated explorer in headless Chrome — or its pure parts in node — because
+`explorer.js` is a large browser asset that no JUnit test can execute:
 
 | Task | What it proves |
 |---|---|
 | `:cli:searchSelfTest` | The search engine, evaluated out of `explorer.js` and run against a query table |
 | `:cli:explorerUiTest` | The page boots without errors; click, ⌘-click, Shift-click and Enter all activate a hit; facets narrow; the browse list navigates |
 | `:cli:diagramUiTest` | The diagram element card's geometry — that an expanded card escapes its viewport and the scrim covers the modal |
+| `:cli:islandSelfTest` | The explorer's inflater, evaluated out of `explorer.js` in node against zlib: stored, fixed and dynamic blocks, every level and strategy, multi-byte text, truncated or mislabelled input, and a 20 MB island in well under a second |
+| `:cli:explorerUiTestDeflated` | Every `explorerUiTest` check again, on a page whose data island is deflated — written with the system property `atlas.explorer.compressAbove=0`, since the fixture is far below the 1 MB where deflating starts |
+| `:cli:remoteStubUiTest` | The Remote Development stub (`frontend/remote-stub.html`), with the test standing in for the IDE's JS bridge: the first open fetches every part and boots the explorer, a second open in the same profile fetches nothing and boots from the `localStorage` cache, a failing bridge ends in the stub's error card, a stalled part offers a *Retry* that asks only for what is missing, and a ~18 MB report shows progress that only grows |
+| `:cli:erdSelfTest` | The ER diagram designer's core, evaluated out of `erd.js` in node: which tables a project has, column order against a changed schema, the relations the models propose (through a join table too) and the tables a panel names as related, where a new card lands, what a diagram file may contain, the search's ranking, and *Arrange* — one side left of many, no overlaps, no avoidable crossing, stable when repeated, forty tables in well under a second |
+| `:cli:erdUiTest` | The designer's page for the demo project, with real mouse and key input over the DevTools protocol (the canvas captures the pointer, which synthetic events skip): drag a table in, relate, reorder, colour, undo, reload, export, add a table's related tables and take their proposals, bring back a dismissed one, a browser copy against a changed project file, panels that fit a short page, arrange a heap of tables, expand and collapse all, search and go to a column, present — and that the explorer has none of it |
 
 They **skip themselves** when node or Chrome is missing, so `./gradlew build` stays green on a machine
 without them. `ATLAS_REQUIRE_BROWSER_TESTS=1` turns that skip into a failure — CI sets it, so a green
 pipeline can never mean "the frontend was never opened".
+
+`explorerUiTest` and `diagramUiTest` run on Chrome's virtual time, which gives the page an allowance of
+page time rather than wall time. `explorerUiTest` works its allowance out from how many steps its probes
+have, so adding steps never means raising a constant. A probe that stops before its verdict says where it
+got to — *stopped at step 134 of 216*, how many assertions had run by then, and the last one — which tells
+a run cut short apart from a page that failed before the probe started (*never ran its first step*).
+
+`:cli:launcherSmoke`, also part of `check`, runs the `./atlas` launcher the way a user does — from
+inside a copy of the fixture project, as `./atlas .`, against the freshly built fat-jar — and checks that
+the explorer lands in `atlas-output/<project>/` and that the launcher's last line names it. It needs bash,
+the launcher's own requirement, and skips itself without it.
+
+### Checking against a real corpus
+
+The bundled BPMN, CMMN and DMN schemas turn on the IDE's XML validation for every model file, at error
+level, so a schema that is stricter than the platform it describes paints correct models red. `./gradlew
+build` validates the models this repository ships; the question that cannot be answered here is how real
+ones fare, because a real corpus is customer work and must never be copied into this public repository.
+
+Point the same test at a checkout that already exists on your machine:
+
+```bash
+./gradlew :idea-plugin:test --tests "*BundledSchemaValidationTest" -Patlas.corpus=/path/to/a/checkout
+```
+
+It prints a count per format and the ten most common causes. Without the property the test reports itself
+*skipped*, and a path that is not a directory fails it, so a mistyped path cannot pass having read nothing.
+A cause is only worth acting on when it is a *schema gap* — a construct Flowable supports that the schema
+does not declare — rather than a model defect such as an id that is not a valid XML name. The threshold
+for shipping a schema change is 99 % of files clean with no single cause above 1 %; at the time of writing
+it is 99.1 %, and every remaining finding is a real defect or a template file full of `$MODEL_KEY`
+placeholders. Run it before changing anything under `idea-plugin/src/main/resources/schemas/`, and again
+after — see `idea-plugin/README.md` for what may be changed in them and why.
+
+### Pictures of the plugin's panels
+
+A Swing layout is easy to break and slow to look at: every check used to mean starting an IDE and
+dragging a tool window to three widths. The plugin's panels can be painted without one:
+
+```bash
+./gradlew :idea-plugin:test --tests "*UiShotsTest*" -Patlas.uiShots=build/ui-shots
+```
+
+It builds the real Atlas Hub, Atlas Findings, both playground tabs and every settings page, lays them out
+at the widths they are used at — the Hub at 280, 360 and 480 px, the playground docked at the bottom and
+at the side — and writes one PNG each. Every picture also prints how wide its content *wants* to be,
+and flags it when that is more than it was given: the number that says whether a narrow tool window
+cuts something off. The pictures are laid out by the real UI DSL but painted under Darcula, because the
+test application has no themes installed to switch between, so they are for layout, not for colour. The
+New UI chrome and a light theme still need a look in `runIdeLocal`. Without the property the test is left
+out of the run altogether, so `./gradlew build` never writes images and never counts a picture it did not
+paint as a passed test; asking for it by `--tests` without the property fails with *No tests found*.
 
 ### The compatibility gate
 
@@ -67,16 +130,26 @@ before every release**: it is the only check that sees plugin-descriptor defects
 not.
 
 ```bash
-./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath="/Applications/IntelliJ IDEA.app"
+./gradlew :idea-plugin:runIde        # sandbox on the downloaded 2026.2 SDK
+./gradlew :idea-plugin:runIdeLocal   # sandbox on the IDE installed here — add
+                                     # -Patlas.runIdePath="…/IntelliJ IDEA.app" for a different one
 ```
 
-Runs a sandbox on a real installation — the only check that exercises the real plugin classloader.
+`runIdeLocal` runs on a real installation, which is the only check that exercises the real plugin
+classloader — and it needs no download. Without the property it takes the IDE in the standard install
+location, so the task is simply absent on a machine that has none.
 
 ## Where things live
 
 - The explorer frontend is `core/src/main/resources/frontend/explorer.{html,css,js}` — plain, editable
   files read at render time by `ExplorerHtmlRenderer` and inlined into the generated page. There is no
   separate top-level copy and no embed step.
+- The ER diagram designer is a page of its own, `frontend/erd.{html,js,css}`, composed by `ErdHtmlRenderer`:
+  it inlines `explorer.css` for the tokens, fonts and controls, and none of `explorer.js` — the few helpers
+  it needs (escaping, the toast, the copy bridge, the theme) are in `erd.js`. Its payload is the tables
+  only (the changelog, service and data-object nodes, cut down), which is why it stays small; keep it so.
+  The pure part of `erd.js` sits between `__ERD_CORE_START__` / `__ERD_CORE_END__`, which is what
+  `scripts/erd-selftest.mjs` evaluates.
 - `explorer.css` has a layout token scale (`--space-*` on a 4pt grid, `--radius-*`, `--text-*`) at the
   top of `:root`. Use the tokens for spacing, radius and font size; borders, breakpoints and structural
   sizes stay raw pixels.
@@ -88,14 +161,17 @@ Runs a sandbox on a real installation — the only check that exercises the real
 
 ## Supporting a new IDE version
 
-This is a verify job, not a rebuild job. The plugin compiles against the **oldest** supported platform
-(2026.1, `sinceBuild 261`) so one artifact loads on later versions; `until-build` is deliberately wide
-because Atlas ships as a ZIP with no Marketplace update channel, and a tight bound would make it vanish
-on an IDE upgrade instead of prompting for one.
+For a **newer** IDE this is a verify job, not a rebuild job. `until-build` is deliberately wide, because
+Atlas ships as a ZIP with no Marketplace update channel and a tight bound would make it vanish on an IDE
+upgrade instead of prompting for one. So: run `verifyPlugin` and `runIdeLocal` against the new IDE, and
+if both are clean, the existing artifact already supports it. A bug report submitted from the IDE states
+what was actually verified, so a newer IDE is never quietly presented as covered.
 
-So: run `verifyPlugin` and `runIdeLocal` against the new IDE, and if both are clean, the existing
-artifact already supports it. The Atlas Hub's footer states what was actually verified and flags a
-running IDE outside that range — in either direction.
+Moving the **floor** is the bigger step, and the 2026.2 move is the worked example: bump the SDK in
+`idea-plugin/build.gradle.kts` and `sinceBuild`, raise `AtlasPlatformSupport.VERIFIED_SINCE_BRANCH`, and
+expect to declare things the old platform gave you for free — JCEF left the platform core in 2026.2, so
+its bundled plugin had to join the compile classpath. Everyone below the new floor loses the plugin, so
+the version claims in the READMEs and on the getting-started page move with it.
 
 ## CI
 
@@ -106,11 +182,32 @@ running IDE outside that range — in either direction.
    plugin ZIP, so a pull request can be installed without building it.
 2. **JetBrains Plugin Verifier** — separate, because it downloads gigabytes of IDE. Uploads its report.
 3. **publish release** — only on a pushed `v*` tag, after both gates. Builds the plugin ZIP and the CLI
-   jar, computes `SHA256SUMS.txt`, verifies the tag matches the built version, and creates the GitHub
-   release. Release artifacts are **not** committed to the repository.
+   jar, adds the `atlas` launcher beside it, computes `SHA256SUMS.txt`, verifies the tag matches the
+   built version, and creates the GitHub release. Release artifacts are **not** committed to the
+   repository.
 
 Cutting a release is therefore: update `CHANGELOG.md`, bump the version, `./gradlew
 :core:updateGoldens`, run `verifyPlugin`, then push a `v<version>` tag.
+
+## When a search does not find something
+
+A report carries its own copy of the search engine, so a failure has three possible causes and they need
+different fixes. `search-diagnose.mjs` tells them apart against an existing report, using **that
+report's** engine and data rather than the checkout's:
+
+```bash
+node scripts/search-diagnose.mjs <project>.explorer.html "the query"
+```
+
+It prints, in order: which generator wrote the report; whether the string is in any node's data at all
+(if not, it is an extraction problem and the search can do nothing); how the query parsed and how many
+nodes it matched, naming any node that carries the string in the field the query asked for and still
+does not match; and finally which rows the first page actually draws, grouped as the palette groups
+them, naming any matching node the page leaves out.
+
+Reach for it **before** theorising. Reproducing a reported search failure from a hand-built fixture cost
+four releases once, three of them fixing something other than the reported defect: extraction and
+matching were fine, and the row was simply never drawn.
 
 ## This site
 
@@ -121,12 +218,17 @@ The site sources are in `site/`, and it is built by a dependency-free Node scrip
 node scripts/site-build.mjs --serve     # pages only, prints the file:// URL
 node scripts/site-shots.mjs             # regenerate the screenshots (needs Chrome)
 node scripts/site-shots.mjs --check-site build/site   # no page scrolls sideways, no JS errors
+node scripts/plugin-icons.mjs           # regenerate the plugin's icon set (commit the output)
 ```
 
 > The ⌘K search fetches its index, and a browser refuses that on a `file://` page. Opening
 > `build/site/index.html` from disk works for everything except search; to try search locally, serve
 > the directory over HTTP or start Chrome with `--allow-file-access-from-files`.
 
+- `scripts/plugin-icons.mjs` is not about the site but lives beside these: it writes the IntelliJ
+  plugin's icon set (`idea-plugin/src/main/resources/icons/atlas/*.svg`) from the same `TYPE_ICONS` table
+  and `--c-*` palette the mockups draw from. Run it after changing a glyph or a colour and commit the
+  output; `PluginIconsSyncTest` fails the build when the committed icons drift from their sources.
 - `site/pages/*.md` are the page sources, in a **strict Markdown subset**. The generator fails on
   anything outside it rather than rendering it wrong, and it verifies that every internal link and image
   resolves.
@@ -137,23 +239,36 @@ node scripts/site-shots.mjs --check-site build/site   # no page scrolls sideways
   diff-reviewable and about 2 KB each.
 - `site/flowable-demo/` is the sample project every screenshot and the live demo are generated from.
   `DEMO-*` keys and `com.example.*` packages only: **this repository is public, so no customer
-  identifier belongs anywhere in it.**
+  identifier belongs anywhere in it.** Its `cases/claim.cmmn` and `forms/claim-*.form` are also what
+  `PlaywrightRendererTest` renders the Playwright guide from; change them together.
 - Nothing generated is committed. `.github/workflows/pages.yml` builds the demo artifacts and the
-  screenshots on every push to `main` and deploys the result; `--strict` makes a missing generated file
-  a build failure there, while a local build only warns.
+  screenshots and deploys the result; `--strict` makes a missing generated file a build failure there,
+  while a local build only warns.
+- It deploys on a pushed **`v*` tag**, not on every push to `main`. The site substitutes the Gradle
+  version into `\{{VERSION}}`, so deploying from `main` published a site describing a build with no
+  release behind it — and between a version bump and its tag it advertised a version nobody could
+  install. Tag-triggered, the published site and the newest release always describe the same product.
+  A documentation fix that cannot wait for the next release goes out via **workflow_dispatch** from the
+  Actions tab.
 
-Three tests in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
+Three gates in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
 
 | Test | What it holds |
 |---|---|
-| `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags, explorer routes, inspections and actions out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. |
+| `:cli:siteCheck` | The site builds: every page is in the Markdown subset the generator renders, every internal link and image resolves, every mockup exists, and no page hardcodes the current version or dates a past change with `\{{VERSION}}`. The same `scripts/site-build.mjs` as a hand run, non-strict and without the demo, so the screenshots and the live demo may be missing; it skips without node, like the browser tests. |
+| `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags (long and short), explorer routes, inspections, actions and the frontend tasks `check` runs out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. It gates the other way too: a flag, route, check id or test task the pages still list but the code no longer has is a red build as well, because a documented thing that is gone misleads a reader as surely as a missing one. Two facts that are prose rather than lists are held as well: a count of checks spelled out on the site or in `README.md` must be the catalog's size, and a `CLAUDE.md` import line a page documents must be the one the renderer prints for the documented command. |
 | `SiteDemoProjectTest` | `site/flowable-demo` still produces at least one finding for **every** check, and exactly one deliberate parse issue — the screenshots claim all of them are real. |
-| `DocsVersionSyncTest` | The version `FEATURES.md` says it describes is the version this build is. |
 
 There is nothing to re-baseline for any of them: the fix is to write the sentence, because the point is
-that a human describes the new thing.
+that a human describes the new thing. A version number is handled structurally instead, in both
+directions. The generator rejects the current version written as a literal, so a page writes
+`\{{VERSION}}` where it means *this release* and cannot go stale. And it rejects `\{{VERSION}}` after a
+word that dates something — *since*, *until*, *before*, *after*, *as of*, *from*, *in* — because a
+change that shipped in an earlier release is written as that release's number: `\{{VERSION}}` there
+would claim, on every future release, that the change happened in it. (A page that has to show the
+placeholder itself, as this one does, puts a backslash before the braces.)
 
-> These tests read files that live **outside** `:core`'s source sets, so they are declared as inputs of
-> `:core:test` in `core/build.gradle.kts`. Without that, editing a page leaves the task `UP-TO-DATE` and
-> `build` reports success on exactly the drift the test exists to catch — verified: renaming every
-> `guessedVars` mention in `checks.md` was green until the inputs were declared.
+> The two JUnit tests read files that live **outside** `:core`'s source sets, so they are declared as
+> inputs of `:core:test` in `core/build.gradle.kts`. Without that, editing a page leaves the task
+> `UP-TO-DATE` and `build` reports success on exactly the drift the test exists to catch — verified:
+> renaming every `guessedVars` mention in `checks.md` was green until the inputs were declared.

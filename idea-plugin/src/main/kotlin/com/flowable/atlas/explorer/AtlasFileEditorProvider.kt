@@ -2,25 +2,31 @@ package com.flowable.atlas.explorer
 
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorPolicy
+import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorProvider
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.jcef.JBCefApp
+import org.jdom.Element
 
 /**
- * Contributes the "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file and hides the
+ * Contributes the "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file — and for the ER
+ * diagram designer's `*.erd.html`, which uses the same bridges and toolbar — and hides the
  * platform's default HTML "Text" editor for it — a generated, self-contained page isn't meant to be
  * hand-edited, so the rendered explorer is the only editor. Only offered when JCEF is available in the
- * running IDE; otherwise the provider bows out (the default editor stays, and the page can still be
- * opened in an external browser).
+ * running IDE; otherwise the provider bows out, and [AtlasExplorerOpener] opens the page in the external
+ * browser instead of letting the platform show its source (a file opened from the Project view by hand
+ * still gets the default editor).
  */
 class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
 
     override fun accept(project: Project, file: VirtualFile): Boolean =
         !file.isDirectory &&
-            file.name.endsWith(".explorer.html", ignoreCase = true) &&
-            JBCefApp.isSupported()
+            // a report inside a .zip has no path to regenerate into or open in a browser (`toNioPath()` throws)
+            file.isInLocalFileSystem &&
+            // the explorer, and the ER diagram designer beside it — one tab, the same bridges
+            AtlasArtifact.isPage(file.name) &&
+            JcefSupport.isAvailable()
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor = AtlasFileEditor(project, file)
 
@@ -28,8 +34,17 @@ class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
 
     override fun getPolicy(): FileEditorPolicy = FileEditorPolicy.HIDE_DEFAULT_EDITOR
 
+    override fun readState(sourceElement: Element, project: Project, file: VirtualFile): FileEditorState =
+        AtlasExplorerState(sourceElement.getAttributeValue(ROUTE).orEmpty())
+
+    override fun writeState(state: FileEditorState, project: Project, targetElement: Element) {
+        val route = (state as? AtlasExplorerState)?.route.orEmpty()
+        if (route.isNotEmpty()) targetElement.setAttribute(ROUTE, route)
+    }
+
     companion object {
         /** Provider id of the embedded JCEF explorer tab; used to select it after opening (see [AtlasExplorerOpener]). */
         const val EDITOR_TYPE_ID = "flowable-atlas-explorer"
+        private const val ROUTE = "route"
     }
 }

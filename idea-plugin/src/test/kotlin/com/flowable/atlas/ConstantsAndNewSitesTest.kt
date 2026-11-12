@@ -36,6 +36,25 @@ class ConstantsAndNewSitesTest : BasePlatformTestCase() {
             infos.any { (it.description ?: "").contains("is not a known") })
     }
 
+    fun testAKeyInTestSourcesIsNotFlagged() {
+        addCaseStub()
+        myFixture.enableInspections(FlowableBrokenKeyInspection::class.java)
+        // a test that starts "no-such-case" to assert the failure is not a broken reference
+        val test = myFixture.addFileToProject(
+            "src/test/java/demo/CaseTest.java",
+            "package demo; class CaseTest { void m(org.flowable.cmmn.api.runtime.CaseInstanceBuilder b) { b.caseDefinitionKey(\"DEMO-C999\"); } }",
+        )
+        myFixture.configureFromExistingVirtualFile(test.virtualFile)
+        val infos = myFixture.doHighlighting()
+        assertFalse("a key in test sources must not be flagged", infos.any { (it.description ?: "").contains("is not a known") })
+        // …while the same key in production code still is
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.cmmn.api.runtime.CaseInstanceBuilder b) { b.caseDefinitionKey(\"DEMO-C999\"); } }",
+        )
+        assertTrue(myFixture.doHighlighting().any { (it.description ?: "").contains("is not a known") })
+    }
+
     fun testConstantKnownKeyIsAccepted() {
         addCaseStub()
         myFixture.enableInspections(FlowableBrokenKeyInspection::class.java)
@@ -50,6 +69,44 @@ class ConstantsAndNewSitesTest : BasePlatformTestCase() {
         val infos = myFixture.doHighlighting()
         assertFalse("a constant carrying a known key must not be flagged",
             infos.any { (it.description ?: "").contains("is not a known") })
+    }
+
+    fun testAConstantsBrokenKeyOffersToChangeTheConstant() {
+        addCaseStub()
+        myFixture.enableInspections(FlowableBrokenKeyInspection::class.java)
+        val constants = myFixture.addFileToProject(
+            "demo/ModelConstants.java",
+            "package demo; public final class ModelConstants { public static final String REVIEW = \"DEMO-C999\"; }",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.cmmn.api.runtime.CaseInstanceBuilder b) { b.caseDefinitionKey(demo.ModelConstants.REV<caret>IEW); } }",
+        )
+        myFixture.doHighlighting()
+        val fix = myFixture.availableIntentions.firstOrNull { it.text == "Change constant value to 'DEMO-C001'" }
+        assertNotNull("a constant behind an unknown key gets a fix, like a literal does", fix)
+        myFixture.launchAction(fix!!)
+        // The fix lands where the value lives — the constants class — and the call site stays as it was.
+        assertTrue(constants.text, constants.text.contains("REVIEW = \"DEMO-C001\""))
+        assertTrue(myFixture.file.text.contains("demo.ModelConstants.REVIEW"))
+    }
+
+    fun testEventTypeElementTextOffersTheSameFixAsAnAttribute() {
+        myFixture.addFileToProject("models/orderCreated.event", """{"key":"orderCreated","name":"Order created"}""")
+        myFixture.enableInspections(FlowableXmlBrokenKeyInspection::class.java)
+        myFixture.configureByText(
+            "proc.bpmn20.xml",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="p1">
+                   <startEvent id="s"><extensionElements><flowable:eventType>orderCr<caret>eatd</flowable:eventType></extensionElements></startEvent>
+                 </process>
+               </definitions>""",
+        )
+        myFixture.doHighlighting()
+        val fix = myFixture.availableIntentions.firstOrNull { it.text == "Replace with 'orderCreated'" }
+        assertNotNull("element text used to be flagged without a fix", fix)
+        myFixture.launchAction(fix!!)
+        assertTrue(myFixture.file.text.contains("<flowable:eventType>orderCreated</flowable:eventType>"))
     }
 
     fun testFormOutcomeCompletion() {

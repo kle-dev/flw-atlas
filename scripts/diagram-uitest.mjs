@@ -62,8 +62,16 @@ if (!chrome) {
 const probe = `<script>
 (async function(){
   const log=[], errs=[];
-  const say=(k,v)=>log.push(k+': '+v);
-  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  // How far the run has got, in a <meta> of its own — the explorer rewrites the title on every route
+  // change — so a run cut short says after which check, instead of reading like a page that never booted.
+  const stamp=()=>{
+    let pm=document.getElementById('uitest-progress');
+    if(!pm){ pm=document.createElement('meta'); pm.id='uitest-progress'; document.head.appendChild(pm); }
+    pm.setAttribute('content', String(log.length));
+    pm.setAttribute('data-last', log.length?log[log.length-1].slice(0,160):'');
+  };
+  const say=(k,v)=>{ log.push(k+': '+v); stamp(); };
+  const ok=(k,cond,detail)=>{ log.push(k+': '+(cond?'ok':'FAIL '+(detail||''))); stamp(); };
   window.addEventListener('error', e=>errs.push(e.message));
   window.addEventListener('unhandledrejection', e=>errs.push('promise: '+(e.reason&&e.reason.message)));
   const tick=ms=>new Promise(r=>setTimeout(r,ms||80));
@@ -73,6 +81,7 @@ const probe = `<script>
     log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
     document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
   };
+  stamp();                                              // started: the search for a diagram logs nothing yet
   try{
     localStorage.removeItem('atlas-dgcard');            // a leftover pref would decide the start state
     // --- find a diagram with clickable elements ---
@@ -84,10 +93,26 @@ const probe = `<script>
       if(!sect) continue;
       sect.open=true; await tick(250);                  // a kept-closed section only fits on reveal
       view=sect.querySelector('.dgview');
-      g=view&&view.querySelector('[data-el]');
+      // a shape, not an edge: edges carry data-el too (their fat invisible twin is the click target)
+      g=view&&(view.querySelector('g[data-el][tabindex]')||view.querySelector('[data-el]'));
       if(g){ say('diagram found on', n.id); break; }
     }
     if(!g){ ok('a model with a rendered diagram', false, 'no [data-el] in any .dgview'); return finish(); }
+    view.scrollIntoView({block:'center'}); await tick(150);
+    // --- shapes are keyboard stops, and the selection joins the link ---
+    ok('a shape is focusable', g.getAttribute('tabindex')==='0' && g.getAttribute('role')==='button');
+    ok('and named for a screen reader', !!g.getAttribute('aria-label'));
+    g.focus(); g.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); await tick(150);
+    ok('Enter on a focused shape opens its card', !!document.querySelector('.dgcard'));
+    ok('the element is in the link', decodeURIComponent(location.hash).indexOf('&e='+g.dataset.el)>0, 'hash='+location.hash);
+    esc(); await tick(100);
+    // a deep link with &e= locates the element on the canvas, not only in its rows
+    const nodeId=state.sel; location.hash='#/overview'; await tick(200);
+    location.hash='#'+encodeURIComponent(nodeId)+'&e='+encodeURIComponent(g.dataset.el); await tick(400);
+    view=document.querySelector('#detail details.sect[data-sect="diagram"] .dgview');
+    ok('following a &e= link selects the element on the diagram', !!view && !!view.querySelector('[data-el].dgsel'),
+       view?'no .dgsel':'no diagram view');
+    g=view&&view.querySelector('[data-el="'+g.dataset.el+'"]'); if(!g){ ok('the element is still there', false); return finish(); }
     view.scrollIntoView({block:'center'}); await tick(150);
     // --- the card: a window on <body>, docked to the viewport corner ---
     click(g); await tick(150);
@@ -161,6 +186,58 @@ const probe = `<script>
     const mr=mc.getBoundingClientRect();
     ok('the overlay centers on the window, not inside the modal panel',
        Math.abs((mr.left+mr.right)/2-window.innerWidth/2)<3);
+    // --- the full-screen view persists across opens: reopening it must not stack another set of pan and
+    //     zoom listeners, each holding its own clone, and the one set it has drives the drawing shown now ---
+    hideDgCard(); await tick(80);
+    const inlineSvg=document.querySelector('#detail details.sect[data-sect="diagram"] .dgview svg');
+    const addEL=EventTarget.prototype.addEventListener; let added=0;
+    EventTarget.prototype.addEventListener=function(){ if(this===mview) added++; return addEL.apply(this, arguments); };
+    try{ for(let i=0;i<3;i++){ closeDiagramModal(); openDiagramModal(inlineSvg); } }
+    finally{ EventTarget.prototype.addEventListener=addEL; }
+    await tick(120);
+    ok('reopening full screen adds no listeners to its persistent view', added===0, added+' added over 3 reopens');
+    const mpan=mview.querySelector('.dgpan'), before=mpan.style.transform, mr2=mview.getBoundingClientRect();
+    mview.dispatchEvent(new WheelEvent('wheel',{deltaY:-100, clientX:mr2.left+mr2.width/2, clientY:mr2.top+mr2.height/2, bubbles:true, cancelable:true}));
+    ok('and the wheel still zooms the reopened drawing', mview._z && mview._z.pan===mpan && mpan.style.transform!==before && mview._z.scale>0,
+       'transform '+before+' → '+mpan.style.transform);
+    // --- findings on the canvas: a marker per element with an open finding, and the card lists them ---
+    closeDiagramModal(); hideDgCard(); await tick(100);
+    ok('closing full screen lets go of its drawing', !mview._z
+       && [...document.querySelectorAll('#dgmodal .dgbar button[data-z]')].every(b=>!b.onclick));
+    const withEl=(DATA.findings||[]).filter(f=>f.element!=null && !f.waived && byId.get(f.node));
+    const target=withEl.length?byId.get(withEl[0].node):null;
+    if(!target){ say('note','no element-level finding in this fixture'); }
+    else {
+      location.hash='#/overview'; await tick(200);
+      location.hash='#'+encodeURIComponent(target.id); await tick(400);
+      const det=document.getElementById('detail');
+      const ds=det&&det.querySelector('details.sect[data-sect="diagram"]');
+      if(ds){ ds.open=true; await tick(300); }
+      const dv=ds&&ds.querySelector('.dgview');
+      const expected=new Set(withEl.filter(f=>f.node===target.id).map(f=>String(f.element))).size;
+      const marks=dv?[...dv.querySelectorAll('.dgmark')]:[];
+      ok('every element with an open finding wears a marker', !!dv && marks.length===expected, marks.length+' of '+expected);
+      ok('a marker says what it counts', marks.every(m=>/finding/.test(m.getAttribute('aria-label')||'')));
+      ok('a marker is a keyboard stop', marks.every(m=>m.getAttribute('tabindex')==='0'&&m.getAttribute('role')==='button'));
+      if(marks.length){
+        click(marks[0]); await tick(200);
+        const card=document.querySelector('.dgcard');
+        ok('clicking a marker opens the card of its shape', !!card && dv.querySelector('[data-el="'+marks[0].getAttribute('data-mark-el')+'"].dgsel')!=null);
+        ok('the card lists the findings', !!card && /Findings [(][0-9]+[)]/.test(card.textContent||'') && !!card.querySelector('[data-dgaccept], .wv-restore'));
+        const acc=card&&card.querySelector('[data-dgaccept]');
+        if(acc){ click(acc); await tick(200);
+          const row=det.querySelector('.tr[data-fi="'+acc.getAttribute('data-dgaccept')+'"]');
+          ok('accept… lands on the finding row with its form open', !!row && row.open && document.activeElement===row.querySelector('.wv-form input.wv-in[required]'));
+        }
+      }
+    }
+    // --- reading diagram after diagram with the mouse alone (no ⌘/Ctrl ever pressed) must not keep the
+    //     drawings it replaced: a detached view held its whole SVG, closures and listeners ---
+    for(const n of nodes.filter(n=>['process','case','decision'].indexOf(n.type)>=0).slice(0,3)){
+      location.hash='#'+encodeURIComponent(n.id); await tick(300);
+    }
+    ok('inline diagrams are not kept after they are replaced', [...dgZoomViews].every(v=>v.isConnected),
+       [...dgZoomViews].filter(v=>!v.isConnected).length+' of '+dgZoomViews.size+' tracked views detached');
   }catch(e){ log.push('FAIL threw: '+e.message); }
   finish();
 })();
@@ -168,24 +245,41 @@ const probe = `<script>
 
 const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('diagram-uitest: not an explorer report'); process.exit(2); }
-const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-dguitest-')), 'report.html');
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-dguitest-'));
+// Removed on exit, not in a finally block: the failures below leave through process.exit(1), which runs none.
+process.on('exit', () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch (e) { /* a temp dir */ } });
+const tmp = path.join(work, 'report.html');
 fs.writeFileSync(tmp, html.replace('</body>', probe + '</body>'));
 
+// Page time, not wall time — virtual time jumps from timer to timer, so the run takes seconds. Unlike
+// explorer-uitest.mjs there are no steps to derive it from: the probe is one async function whose ticks
+// add up to well under half of this.
+const BUDGET = 20000;
 let dom;
 try {
   dom = execFileSync(chrome, [
     '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
     // A narrow window on purpose: that is where a card trapped in the diagram becomes unusable.
-    '--window-size=980,760', '--virtual-time-budget=20000', '--dump-dom', 'file://' + tmp,
+    '--window-size=980,760', '--virtual-time-budget=' + BUDGET, '--dump-dom', 'file://' + tmp,
   ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
 } catch (e) {
   console.error('diagram-uitest: Chrome failed to run —', e.message);
   process.exit(1);
 }
 
-const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
+// Only the page title counts: a probe that fails to parse never sets it, and the dumped DOM still carries
+// the probe's own source text, which a bare search for the markers would "find".
+const m = dom.match(/<title>UITEST_BEGIN([\s\S]*?)UITEST_END<\/title>/);
 if (!m) {
-  console.error('diagram-uitest: the probe never finished — the page most likely threw during boot.');
+  // The probe's stamp tells a page that never ran it from a run cut short. The pattern is the serialized
+  // element, which the probe's own source text (also in the dump) does not contain.
+  const p = dom.match(/<meta id="uitest-progress" content="(\d+)"(?: data-last="([^"]*)")?>/);
+  if (!p) console.error('diagram-uitest: the probe never started — it failed to parse, or the page threw before it.');
+  else {
+    console.error(`diagram-uitest: stopped after ${p[1]} checks — the virtual-time budget (${BUDGET / 1000} s of page time) ran out first.`);
+    const last = (p[2] || '').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, '\u00a0').replace(/&amp;/g, '&');
+    if (last) console.error('  last check:', last);
+  }
   const t = dom.match(/<title>([\s\S]*?)<\/title>/);
   console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
   process.exit(1);

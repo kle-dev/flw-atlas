@@ -40,18 +40,46 @@ object ModelKinds {
         Kind("event", "events", "event"),
         Kind("dataDictionary", "dictionaries", "dataDictionary"),
         Kind("dataObject", "dataObjects", "dataObject"),
+        // A `.data` whose `dataObjectType` is `masterData` — a managed reference list, not a table-backed
+        // object; read by the data-object parser, but its own kind (143 of them on one real project
+        // were "data objects", and each one's `variables` map a set of project variables).
+        Kind("masterData", "others", "masterData"),
         Kind("securityPolicy", "policies", "securityPolicy"),
         Kind("action", "actions", "action"),
+        // Structured parsers whose records keep living in the `others` bucket (the result shape and
+        // graph.json stay stable); GraphBuilder node-ifies `others` entries via their `modelType`.
+        Kind("query", "others", "query"),
+        Kind("sequence", "others", "sequence"),
+        Kind("sla", "others", "sla"),
+        Kind("template", "others", "template"),
+        Kind("knowledgeBase", "others", "knowledgeBase"),
+        Kind("variableExtractor", "others", "variableExtractor"),
+        Kind("document", "others", "document"),
     )
 
     /** model type → result bucket. */
     val MODEL_BUCKET: Map<String, String> = MODEL_KINDS.associate { it.mtype to it.bucket }
 
-    /** Unique bucket names in declaration order, plus the two non-parser buckets. */
+    /** Unique bucket names in declaration order, plus the two catch-all buckets (always last). */
     val MODEL_BUCKETS: List<String> =
-        MODEL_KINDS.map { it.bucket }.distinct() + listOf("liquibase", "others")
+        MODEL_KINDS.map { it.bucket }.distinct().filter { it != "others" } + listOf("liquibase", "others")
 
     /** Model types whose graph/index type differs from the parser key (bpmn→process, cmmn→case, …). */
     val NORMALIZE_TYPE: Map<String, String> =
         MODEL_KINDS.filter { it.mtype != it.nodeType }.associate { it.mtype to it.nodeType }
+
+    private val NODE_TYPE_OF_BUCKET: Map<String, String> = MODEL_KINDS.associate { it.bucket to it.nodeType }
+
+    /**
+     * The graph node type of [entry], a model in [bucket] — what its node id `<type>:<key>` starts with. Two
+     * buckets hold several types and the entry says which: `forms` (a form or a page) and `others` (every
+     * kind without a bucket of its own). Shared by the graph and by anything that has to name a bucket entry
+     * the way the graph does, so the two cannot drift.
+     */
+    fun nodeType(bucket: String, entry: Map<*, *>): String = when (bucket) {
+        "forms" -> entry["modelType"] as? String ?: "form"
+        "others" -> entry["modelType"] as? String ?: "other"
+        "liquibase" -> "liquibase"
+        else -> NODE_TYPE_OF_BUCKET[bucket] ?: bucket
+    }
 }

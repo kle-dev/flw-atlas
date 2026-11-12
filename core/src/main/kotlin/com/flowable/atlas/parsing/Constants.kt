@@ -6,15 +6,67 @@ package com.flowable.atlas.parsing
  */
 object Constants {
 
-    /** Implicit roots the engine provides — never treated as a project variable/bean. */
+    /**
+     * Implicit roots the engine provides — never treated as a project variable/bean. `planItemInstances`
+     * is the CMMN query root (`CmmnVariableScopeELResolver.PLAN_ITEM_INSTANCES_KEY`,
+     * `${planItemInstances.definitionId('x').active().count()}`), `currentTenantId` comes from
+     * `VariableContainerELResolver`; both were read as beans of the project's own before.
+     */
     val FLOWABLE_CONTEXT = setOf(
-        "execution", "task", "caseInstance", "planItemInstance", "processInstance",
-        "variableContainer", "authenticatedUserId", "authenticatedUser", "currentUserId",
+        "execution", "task", "caseInstance", "planItemInstance", "planItemInstances", "processInstance",
+        "variableContainer", "authenticatedUserId", "authenticatedUser", "currentUserId", "currentTenantId",
         "loggedInUser", "dateUtil", "date", "currentTime", "now", "initiator",
         "loopCounter", "variables", "vars", "var", "entityManagerFactory", "environment",
         "cmmnRuntimeService", "runtimeService", "taskService", "repetitionCounter",
         "root", "self", "parent", "caseInstanceId", "processInstanceId",
     )
+
+    private val VARIABLE_NAME_RE = Regex("[A-Za-z_]\\w*")
+
+    /** Whether [name] can be a process or case variable at all: an identifier that is neither engine
+     *  context nor a literal. The graph's every site and the IDE's form vocabulary apply this one test. */
+    fun isVariableName(name: String): Boolean =
+        VARIABLE_NAME_RE.matches(name) && name !in FLOWABLE_CONTEXT && name !in JAVA_LITERALS
+
+    /**
+     * Whether a name is shaped the way Spring beans are named — `orderService`, `pdfGeneratorTask`,
+     * `flwTimeUtils` — for a root no declaration vouches for. `${x.method()}` reads like a bean call and
+     * like a method on a variable's value, and a Design export carries no Java to resolve against: a
+     * project's own `${userProfileDataService.getUserProfile(x)}` and a variable read such as
+     * `${requesterData.getName()}` or `${attachments.size()}` look the same to the harvest. The suffix is
+     * what separates them. Measured over four real projects: all 25 variable roots misread as beans fail
+     * this test, every project bean in the same lists passes it.
+     */
+    private val BEAN_NAME_SUFFIX = Regex(
+        "(?:Service|Task|Bean|Delegate|Utils|Helper|Repository|Client|Mapper|Handler|Provider|Factory|" +
+            "Resolver|Listener|Manager|Facade|Gateway|Adapter|Api|Dao|Component|Controller|Endpoint|Registry|" +
+            "Publisher|Sender|Validator|Converter|Processor|Executor|Generator|Builder)$",
+    )
+    fun looksLikeBeanName(name: String): Boolean = name.length > 4 && BEAN_NAME_SUFFIX.containsMatchIn(name)
+
+    /**
+     * The roots of a `{{…}}` binding that are the form runtime's own scratch space, never a process or
+     * case variable: `$temp`, `$response`, a table's `$row`, the router's `$route`, a list's `$item` and
+     * `$index`… Written with or without the `$`, since both spellings occur. One set for the two places
+     * that decide what a binding reads (it used to be declared twice, and a root added to one copy was
+     * missing from the other).
+     */
+    val FRONTEND_SCRATCH_ROOTS = setOf(
+        "endpoints", "item", "index", "itemParent", "ctx", "root", "parent", "event", "self",
+        "first", "last", "start", "pageSize", "flw", "payload", "temp", "filter",
+        "sortColumn", "sortDirection", "orderBy", "sortBy", "total", "response",
+        "page", "size", "data", "value", "params", "row", "route", "formValid", "lang", "scope", "original",
+        "path", "column", "rowIndex",
+    )
+
+    /**
+     * A Spring property placeholder written into a Java string — `@Value("${mail.from}")`,
+     * `${server.port:8080}` — is configuration, not an expression the engine evaluates, and its dotted
+     * key is no variable. Applied to Java sources: on a model the same shape may be a property path
+     * (`${order.total}`), which is why the graph builder keeps its own, narrower rule there.
+     */
+    private val JAVA_CONFIG_PLACEHOLDER_RE = Regex("^[A-Za-z][\\w.-]*(:[^}(]*)?$")
+    fun isJavaConfigPlaceholder(body: String): Boolean = body.contains('.') && JAVA_CONFIG_PLACEHOLDER_RE.matches(body.trim())
 
     /** EL keywords / literals that are never variable names. */
     val JAVA_LITERALS = setOf(
@@ -22,25 +74,124 @@ object Constants {
         "instanceof", "gt", "lt", "ge", "le", "eq", "ne", "new",
     )
 
+    /**
+     * The scope tokens of a backend expression. The platform's `HierarchyVariableELResolver` resolves
+     * `root`, `parent` and `self` to the root, parent and current instance and reads the property as a
+     * variable there, so `${root.riskLevel}` reads `riskLevel` — the prefix only says whose. Leaving the
+     * name out (because `root` is engine context and `.riskLevel` looks like a member) reported variables
+     * that a called process branches on as written but never read.
+     */
+    val HIERARCHY_TOKENS = setOf("root", "parent", "self")
+
+    /** The same for a `{{…}}` binding: Work puts the root and the parent instance's variables into the form
+     *  payload under `root` and `parent`. Its `self` holds the instance's own fields only, never a variable. */
+    val FRONTEND_HIERARCHY_TOKENS = setOf("root", "parent")
+
+    /**
+     * What Work and the resolver put beside the variables under a scope token: the instance's own fields.
+     * `${root.businessKey}` reads a variable of that name only when one exists, so such a name credits a
+     * variable something else already names and never makes one up.
+     */
+    val INSTANCE_FIELDS = setOf(
+        "id", "name", "businessKey", "businessStatus", "startTime", "startUserId", "endTime", "tenantId",
+        "processDefinitionId", "processDefinitionKey", "caseDefinitionId", "caseDefinitionKey", "state",
+    )
+
+    // The name is possessive so a method name cannot back off a letter to dodge the `(` check:
+    // `root.getVariable('x')` is a call on the scope, not a variable `getVariabl`.
+    private val HIERARCHY_READ_RE = Regex("(?<![\\w.$])(root|parent|self)\\s*\\.\\s*([A-Za-z_]\\w*+)(?!\\s*\\()")
+
+    /**
+     * `(token, name)` for every `token.name` in [body] whose token is one of [tokens]. [body] must already
+     * have its string literals blanked, or `'root.x'` would read `x`.
+     */
+    fun hierarchyReads(body: String, tokens: Set<String>): List<Pair<String, String>> =
+        HIERARCHY_READ_RE.findAll(body).mapNotNull { m ->
+            val token = m.groupValues[1]
+            val name = m.groupValues[2]
+            if (token !in tokens || name in HIERARCHY_TOKENS || name in JAVA_LITERALS || name in FLOWABLE_CONTEXT) null
+            else token to name
+        }.distinct().toList()
+
+    private val LEADING_SCOPE_RE = Regex("^\\s*(?:root|parent|self)\\s*\\.\\s*")
+
+    /** [text] without a leading scope token — a DMN input expression `root.amount` reads `amount`. */
+    fun withoutScopePrefix(text: String): String = LEADING_SCOPE_RE.replaceFirst(text, "")
+
+    /**
+     * Beans the Flowable platform provides (engine-provided, not project source): the delegate Design
+     * writes into every task type's `delegateExpression`, and the `flw*Utils` expression helpers the
+     * platform registers. One set for every surface: the graph
+     * marks these `platform`, the reports list them apart from the project's own beans, and the runtime
+     * checks know that a call into one of them stays inside the engine. It used to be declared three
+     * times, once per renderer, which is how a bean could be "platform" on one page and "review" on the next.
+     *
+     * The names are read off the platform's own auto-configurations, not guessed — regenerate from
+     * the platform starters: the task delegates Design writes, the Engage task delegates, the platform
+     * services an expression may call, and the `flw*Utils` helpers. `flw` itself is the platform's EL
+     * root for its scripting API: `${flw.setOutput(…)}` in a task listener is
+     * platform API, not a bean of the project's — 36 "unresolved beans" on one real project said otherwise.
+     * `jacksonObjectMapper` is Spring Boot's `ObjectMapper` bean and `environmentEndpoint` the actuator's;
+     * the platform starter brings both.
+     */
+    val FLOWABLE_PLATFORM_BEANS = setOf(
+        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
+        "createDocumentService", "serviceRegistryService", "agentService",
+        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
+        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
+        "mergeDocumentService", "convertDocumentToPDFService", "housekeepingServiceTask",
+        "generateSequenceServiceTask", "triggerIntentEvaluationServiceTask", "flowablePlatformAbbyyService",
+        "processCreateConversationTask", "caseCreateConversationTask", "processModifyConversationTask",
+        "caseModifyConversationTask", "processSendMessageTask", "caseSendMessageTask",
+        "whatsAppInteractiveMessageTask", "engageConversationService", "engageMessageService",
+        "flwCollectionUtils", "flwJsonUtils", "flwFormatUtils", "flwLocaleUtils", "flwMathUtils",
+        "flwStringUtils", "flwTimeUtils", "flwDateFunctionUtils", "flwIOUtils", "flwAuthTokenUtils",
+        "flwBase64Utils", "flwContentItem", "propertyConfigurationService", "flw",
+        "commentService", "translationService", "encryptionService", "platformCommentService",
+        "platformTaskService", "platformCaseInstanceService", "platformProcessInstanceService",
+        "platformContentItemService", "coreContentService", "platformFormService", "queryService",
+        "jacksonObjectMapper", "environmentEndpoint",
+        // the engine's own services, exposed as beans and called from expressions
+        // (`${dataObjectRuntimeService.addUserIdentityLink(…)}`): engine API, not code of the project's
+        "dataObjectRuntimeService", "dataObjectRepositoryService", "platformIdentityService", "idmIdentityService",
+        "formService", "contentService", "templateService", "flowablePlatformTemplateService", "sequenceService",
+        "historyService", "managementService", "repositoryService", "cmmnRepositoryService", "cmmnTaskService",
+        "cmmnHistoryService", "eventRegistry", "eventRepositoryService", "actionRuntimeService",
+        "actionRepositoryService", "dashboardService",
+    )
+
     // Harvesting regexes — ported from flowable_atlas.py (~lines 69-72, 1296).
-    val EXPR_RE = Regex("[#$]\\{[^}]*\\}")
+    // A backslash before the `$`/`#` is the author saying "literal, do not evaluate" — in a Groovy
+    // GString, in a Java string, in a JSON body — so `\${x}` is not an expression and is not harvested;
+    // it used to be validated like one and could only ever come out wrong.
+    val EXPR_RE = Regex("(?<!\\\\)[#$]\\{[^}]*\\}")
     val MUSTACHE_RE = Regex("\\{\\{[^}]*\\}\\}")
+    /** A template or document rendered against a model's whole variable container. */
+    val WHOLE_CONTAINER_RE = Regex("""\.\s*variableContainer\s*\(""")
+
+    /** `environment.getProperty('crm.endpoint', '')` / `propertyConfigurationService.getProperty("k")` in a
+     *  model's expression — a Spring property the model reads. The quote may be JSON-escaped. */
+    val PROPERTY_READ_RE = Regex("""\b(?:environment|propertyConfigurationService)\s*\.\s*getProperty\(\s*\\?["']([A-Za-z0-9_.\-\[\]]+)\\?["']""")
     val METHOD_CALL_FULL_RE = Regex("(?<![\\w.\$])([A-Za-z_][\\w]*)\\s*\\.\\s*([A-Za-z_][\\w]*)\\s*\\(")
-    val DELEGATE_CLASS_RE = Regex("(?:flowable|activiti):class=\"([^\"]+)\"")
+    // The literal first and the namespace as a lookbehind: the same matches, but searched with Boyer-Moore
+    // over every model's raw text instead of tried at every position (see VarHarvest).
+    val DELEGATE_CLASS_RE = Regex(":class(?<=(?:flowable|activiti):class)=\"([^\"]+)\"")
 
     private val NAMED_ENTITIES = mapOf(
         "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ",
     )
-    private val ENTITY_RE = Regex("&(#x?[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);")
+    private val ENTITY_RE = Regex("&(#[xX]?[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);")
+
+    /** A numeric entity's character, or null for one past U+10FFFF, which `Character.toChars` would throw on. */
+    private fun codePoint(cp: Int?): String? =
+        cp?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) }
 
     /** Minimal HTML/XML entity unescape mirroring Python `html.unescape` for the entities models use. */
     fun htmlUnescape(s: String): String = ENTITY_RE.replace(s) { m ->
         val body = m.groupValues[1]
         when {
-            body.startsWith("#x") || body.startsWith("#X") ->
-                body.substring(2).toIntOrNull(16)?.let { String(Character.toChars(it)) } ?: m.value
-            body.startsWith("#") ->
-                body.substring(1).toIntOrNull()?.let { String(Character.toChars(it)) } ?: m.value
+            body.startsWith("#x") || body.startsWith("#X") -> codePoint(body.substring(2).toIntOrNull(16)) ?: m.value
+            body.startsWith("#") -> codePoint(body.substring(1).toIntOrNull()) ?: m.value
             else -> NAMED_ENTITIES[body] ?: m.value
         }
     }

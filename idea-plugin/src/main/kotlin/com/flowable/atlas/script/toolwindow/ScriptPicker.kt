@@ -1,5 +1,6 @@
 package com.flowable.atlas.script.toolwindow
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelFiles
@@ -10,6 +11,7 @@ import com.flowable.atlas.script.ScriptContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -47,16 +49,25 @@ internal object ScriptPicker {
             }
     }
 
-    fun show(panel: FlowableScriptPanel) {
+    fun show(panel: FlowableScriptPanel, anchor: java.awt.Component? = null) {
         val project = panel.project
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Scanning Flowable models for scripts…", true,
         ) {
             override fun run(indicator: ProgressIndicator) {
-                val rows = runCatching { collectRows(project) { indicator.checkCanceled() } }
-                    .getOrDefault(emptyList())
+                // Cancel means no popup — not an empty one. `runCatching` swallowed the cancellation
+                // the scan asks for and showed "nothing found".
+                // A scan that failed says so — it used to read as "no scripts found", which sends the reader
+                // looking for scripts that are there.
+                val rows = try {
+                    Result.success(collectRows(project) { indicator.checkCanceled() })
+                } catch (e: ProcessCanceledException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
                 ApplicationManager.getApplication().invokeLater({
-                    if (!project.isDisposed) showPopup(panel, rows)
+                    if (!project.isDisposed) showPopup(panel, rows, anchor)
                 }, ModalityState.any())
             }
         })
@@ -89,7 +100,7 @@ internal object ScriptPicker {
         return out.distinctBy { Triple(it.elementId, it.kind, it.body) }
     }
 
-    private val LISTENER_KINDS = setOf("executionListener", "taskListener", "planItemLifecycleListener")
+    private val LISTENER_KINDS = setOf("executionListener", "taskListener", "planItemLifecycleListener", "caseLifecycleListener")
     private const val MAX_DEPTH = 32
 
     /**
@@ -143,22 +154,28 @@ internal object ScriptPicker {
         listenerKind == "executionListener" -> ScriptContext.BPMN_EXECUTION_LISTENER
         listenerKind == "taskListener" && modelType == ModelType.CASE -> ScriptContext.CMMN_TASK_LISTENER
         listenerKind == "taskListener" -> ScriptContext.BPMN_TASK_LISTENER
-        else -> ScriptContext.UNKNOWN   // planItemLifecycleListener has no script support anyway
+        else -> ScriptContext.UNKNOWN   // neither lifecycle listener (plan item, case) has script support anyway
     }
 
-    private fun showPopup(panel: FlowableScriptPanel, rows: List<ScriptRow>) {
+    private fun showPopup(panel: FlowableScriptPanel, found: Result<List<ScriptRow>>, anchor: java.awt.Component?) {
         val factory = JBPopupFactory.getInstance()
-        if (rows.isEmpty()) {
-            factory.createMessage("No scripts found in the project's models.")
-                .showCenteredInCurrentWindow(panel.project)
+        val rows = found.getOrNull()
+        if (rows.isNullOrEmpty()) {
+            val text = found.exceptionOrNull()?.let { FlowableAtlasBundle.message("playground.scripts.scanFailed", it.message ?: it.javaClass.simpleName) }
+                ?: FlowableAtlasBundle.message("playground.scripts.none")
+            place(factory.createMessage(text), panel, anchor)
             return
         }
-        factory.createPopupChooserBuilder(rows)
-            .setTitle("Load Script from Model")
+        place(factory.createPopupChooserBuilder(rows)
+            .setTitle(FlowableAtlasBundle.message("playground.scripts.load.title"))
             .setRenderer(textListCellRenderer("") { it.label })
             .setNamerForFiltering { it.label }
             .setItemChosenCallback { row -> panel.loadScript(row.body, row.format, row.context) }
-            .createPopup()
-            .showCenteredInCurrentWindow(panel.project)
+            .createPopup(), panel, anchor)
+    }
+
+    /** Under the toolbar button when there is one — the Examples picker shares it. */
+    internal fun place(popup: com.intellij.openapi.ui.popup.JBPopup, panel: FlowableScriptPanel, anchor: java.awt.Component?) {
+        if (anchor != null && anchor.isShowing) popup.showUnderneathOf(anchor) else popup.showCenteredInCurrentWindow(panel.project)
     }
 }

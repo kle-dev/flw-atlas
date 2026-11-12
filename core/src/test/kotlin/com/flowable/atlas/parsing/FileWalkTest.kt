@@ -77,4 +77,52 @@ class FileWalkTest {
         }
         assertTrue("fixture yielded no models — is the resource still there?", d.models.isNotEmpty())
     }
+
+    @Test
+    fun aSymlinkBackToAnAncestorIsNotWalkedAgain() {
+        val sub = tmp.newFolder("models")
+        File(sub, "a.bpmn").writeText("<definitions/>")
+        java.nio.file.Files.createSymbolicLink(File(sub, "loop").toPath(), tmp.root.toPath())
+        val names = FileWalk.files(tmp.root).map { it.name }.toList()
+        assertEquals(listOf("a.bpmn"), names)
+    }
+
+    /**
+     * A committed link out of the project — to a sibling checkout, to the parent folder — is not followed,
+     * and is reported instead; one that stays inside is followed. A link the walk would have pruned, or a
+     * file discovery would not have read, costs the report nothing and is not reported.
+     */
+    @Test
+    fun aSymlinkOutOfTheRootIsNotFollowedButReported() {
+        val root = tmp.newFolder("project")
+        val outside = tmp.newFolder("outside")
+        File(outside, "DEMO-elsewhere.bpmn").writeText("<definitions/>")
+        File(outside, ".editorconfig").writeText("root = true")
+        File(root, "models").mkdirs()
+        File(root, "models/DEMO-here.bpmn").writeText("<definitions/>")
+        val made = runCatching {
+            java.nio.file.Files.createSymbolicLink(File(root, "vendor").toPath(), outside.toPath())
+            java.nio.file.Files.createSymbolicLink(File(root, "up").toPath(), java.nio.file.Paths.get(".."))
+            java.nio.file.Files.createSymbolicLink(File(root, "one.bpmn").toPath(), File(outside, "DEMO-elsewhere.bpmn").toPath())
+            java.nio.file.Files.createSymbolicLink(File(root, "alias.bpmn").toPath(), java.nio.file.Paths.get("models/DEMO-here.bpmn"))
+            java.nio.file.Files.createSymbolicLink(File(root, "build").toPath(), outside.toPath())
+            java.nio.file.Files.createSymbolicLink(File(root, ".editorconfig").toPath(), File(outside, ".editorconfig").toPath())
+        }.isSuccess
+        // a file system or an account that cannot create links (Windows without the privilege) has nothing to test
+        org.junit.Assume.assumeTrue(made)
+        val left = ArrayList<String>()
+        val files = FileWalk.files(root, onLeave = { left.add(it.name) }) { it.name != "build" }.toList()
+        val rootReal = root.canonicalFile.toPath()
+        assertTrue(files.toString(), files.all { it.canonicalFile.toPath().startsWith(rootReal) })
+        assertEquals("a link inside the project is still followed", listOf("alias.bpmn", "models/DEMO-here.bpmn"),
+            files.map { it.relativeTo(root).invariantSeparatorsPath }.sorted())
+        assertEquals("a pruned folder is not reported, however it is linked", listOf(".editorconfig", "one.bpmn", "up", "vendor"), left.sorted())
+        val d = Discovery.discover(root)
+        // a linked file discovery would not read is no loss to the report, and no warning either
+        assertEquals(listOf("one.bpmn", "up", "vendor"), d.outsideLinks.map { it.name }.sorted())
+        // …and the report says so, rather than leaving a team that links shared models in to guess
+        val diags = (com.flowable.atlas.graph.Atlas.extract(root)["diagnostics"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf("one.bpmn", "up", "vendor"),
+            diags.filter { it["kind"] == "skip" && it["message"].toString().contains("symbolic link") }.map { it["path"].toString() }.sorted())
+    }
 }

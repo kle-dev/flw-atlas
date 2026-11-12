@@ -31,11 +31,36 @@ if (a < 0 || b < 0 || b < a) {
 }
 const block = source.slice(a + START.length, b);
 
-// The engine's only outside dependencies are injected through SX_ENV, so a stub is enough here: the
-// element-name walk only adds process/case element ids, which none of the cases below rely on.
 const engine = new Function(`"use strict";${block};return {
-  qParse, hayTokens, scoreIndex, searchIndex, hlite, fuzzyScore, SX_ENV
+  qParse, hayTokens, scoreIndex, searchIndex, matchWhere, hlite, fuzzyScore, suggestScore, SX_ENV
 };`)();
+
+/** Lift a whole top-level function out of explorer.js by name, or say so and stop. Plain string
+ *  scanning rather than a regex: the marker it looks for is `\n}` at column zero, which is exactly
+ *  how every top-level function in the file ends. */
+function lift(name) {
+  const at = source.indexOf(`\nfunction ${name}(`);
+  const end = at < 0 ? -1 : source.indexOf('\n}\n', at);
+  if (at < 0 || end < 0) {
+    console.error(`search-selftest: function ${name}() not found in ${JS_PATH} — was it renamed?\n` +
+      'The engine needs it through SX_ENV; a stub would silently empty a haystack.');
+    process.exit(2);
+  }
+  return source.slice(at, end + 3);
+}
+// elementNames() is the one thing the engine takes from the app, and it is not optional: `lab` gets
+// every BPMN/CMMN element's *name* from it and `ids` every element *id*, so the empty-Map stub this
+// used to pass would let the label cases pass for the wrong reason. Both functions are pure, so they
+// are lifted out of the source the same way the engine block is.
+engine.SX_ENV.elementNames = new Function(
+  `"use strict";${lift('caseCriteria')}${lift('elementNames')};return elementNames;`)();
+// `has:` matches an element by Design's word for its type as well as by the type itself — "Expression
+// button" is what a reader types, `scriptButton` what the model stores — so the word has to come from the
+// real vocabulary table, not a stub that would let the Design-word cases pass for no reason.
+const termsAt = source.indexOf('const DESIGN_TERMS = {');
+const termsSrc = source.slice(termsAt, source.indexOf('\n};', termsAt) + 3);
+engine.SX_ENV.elTerm = new Function(
+  `"use strict";${termsSrc}${lift('elementTypeKey')}${lift('elementTypeLabel')};return elementTypeLabel;`)();
 
 // ---------- load the report ----------
 const reportPath = process.argv[2];
@@ -70,7 +95,17 @@ const rankOf = (hits, id) => hits.findIndex(h => h.n.id === id);
 // with a customerName column, and "Priority"/priorityMD). The fixture feeds the three goldens, so it
 // must not be edited to make a case pass — pick a different case instead.
 const DO_CUSTOMER = 'dataObject:customerDO';
-const DO_PRIORITY = 'dataObject:priorityMD';
+const DO_PRIORITY = 'masterData:priorityMD';   // a master-data list is its own kind since 0.26.0
+// The fixture form, whose buttons carry the ids / callees / expressions the `id:` cases look up.
+const FORM_ORDER = 'form:orderForm';
+// The label / description cases below read fixture content that is there for its own sake:
+// order.bpmn documents its process and two of its elements, demo.app has a Description,
+// order-form.form labels its fields and gives one component a description, order-decision.dmn
+// annotates a rule, customer.data labels its columns and case.policy its permissions.
+const APP_DEMO = 'app:demoApp';
+const PROC_ORDER = 'process:orderProcess';
+const DEC_ORDER = 'decision:orderDecision';
+const POLICY_ORDER = 'securityPolicy:orderPolicy';
 
 const cases = [
   // --- the regression the whole change is about: words are independent and order-free ---
@@ -107,6 +142,89 @@ const cases = [
   { q: 'customer key:customerDO', has: DO_CUSTOMER, why: 'key facet' },
   { q: 'customer key:nope',     none: true,        why: 'key facet that matches nothing' },
 
+  // --- `id:` looks a model element up by its identifier, and only by that ---
+  { q: 'id:notifyButton',   top: FORM_ORDER, why: 'a form button id finds the form that declares it' },
+  { q: 'id:orderTotal',     has: FORM_ORDER, why: 'an expression button id, whose caption says nothing like it' },
+  { q: 'id:callSub',        has: 'process:orderProcess', why: 'a BPMN element id finds its process' },
+  { q: 'id:notify',         has: FORM_ORDER, why: 'a fragment of an id is enough' },
+  { q: 'id:Recalculate',    none: true,      why: 'a caption is not an id — that is the point of the facet' },
+  { q: 'id:zzzznope',       none: true,      why: 'an id that exists nowhere' },
+  { q: 'zzzznope id:notifyButton', none: true, why: 'the facet narrows, but the terms still have to match' },
+  { q: 'customer id:notifyButton', has: FORM_ORDER, why: 'and a term that does match keeps the node' },
+
+  // --- what a button invokes, and the expression it evaluates, are searchable ---
+  { q: 'notifyCustomerAction', has: FORM_ORDER, why: 'the action a button triggers surfaces the form' },
+  { q: 'orderTotal',           has: FORM_ORDER, why: 'the target an expression button writes' },
+
+  // --- an explicit facet is a FILTER: it returns everything that has the thing, and nothing that
+  //     merely mentions it. A variable's own label is its identifier, not a caption, so `label:` must
+  //     not answer with the variable a field binds to — which is what buried the forms. ---
+  { q: 'label:orderTotal', missing: 'variable:orderTotal', why: "a variable's identifier is not a label" },
+  { q: 'label:order',      missing: 'expression:${total > 100}', why: 'nor is an expression\'s text' },
+  { q: 'label:amount',     missing: 'binding:{{amount}}',   why: 'nor a binding\'s' },
+
+  // --- `label:` narrows to the captions a person reads, wherever they sit ---
+  { q: 'label:recalculate', has: FORM_ORDER,   why: 'a button caption is a label' },
+  { q: 'label:approve',     has: FORM_ORDER,   why: 'an outcome button caption is a label' },
+  { q: 'label:priority',    has: DO_CUSTOMER,  why: 'a data object column label' },
+  { q: 'label:update',      has: POLICY_ORDER, why: 'a permission label' },
+  { q: 'label:approval',    has: PROC_ORDER,   why: 'a BPMN element name is its caption on the canvas' },
+  { q: 'label:internal',    has: FORM_ORDER,   why: 'a field label, reachable by one of its words' },
+  // The mirror image of the `id:Recalculate` case above: an id is not a caption either.
+  { q: 'label:notifyButton', none: true,       why: 'an element id is not a label' },
+  { q: 'label:zzzznope',    none: true,        why: 'a caption that exists nowhere' },
+  { q: 'zzzznope label:approve', none: true,   why: 'the facet narrows, but the terms still have to match' },
+
+  // --- `desc:` narrows to the prose the modeller wrote about the thing ---
+  { q: 'desc:miniature',    top: APP_DEMO,     why: "Design's model Description on the app" },
+  { q: 'desc:entry',        has: PROC_ORDER,   why: 'the process documentation' },
+  { q: 'desc:backoffice',   top: PROC_ORDER,   why: 'a BPMN element documentation — and NOT the group of that name' },
+  { q: 'desc:hidden',       top: FORM_ORDER,   why: 'a form component description' },
+  { q: 'desc:approval',     has: DEC_ORDER,    why: 'a DMN rule annotation' },
+  { q: 'desc:zzzznope',     none: true,        why: 'a description that exists nowhere' },
+
+  // --- a facet tolerates the space and the casing people actually type ---
+  { q: 'desc: backoffice',  top: PROC_ORDER,  why: 'a space after the colon is how people type it first' },
+  { q: 'label: recalculate', has: FORM_ORDER, why: 'and it holds for every facet, not just desc:' },
+
+  // --- a facet value in quotes: the only way to ask a facet for a multi-word caption. The regression:
+  //     the phrase pass used to strip the quotes first, so `label: "Internal note"` degraded into the
+  //     TERM `label` plus a phrase — three arbitrary nodes mentioning the word "label" instead of the
+  //     form that carries the caption. ---
+  { q: 'label: "Internal note"', has: FORM_ORDER, why: 'quoted facet value, spaced — the query people actually type' },
+  { q: 'label:"internal note"',  has: FORM_ORDER, why: 'unspaced and lowercased, same answer' },
+  { q: 'label:"note internal"',  none: true,      why: 'a quoted facet value stays contiguous, like any phrase' },
+  { q: 'zzzznope label: "Internal note"', none: true, why: 'terms beside a quoted facet still AND in' },
+  { q: 'DESC: BACKOFFICE',  top: PROC_ORDER,  why: 'prefix and value are both case-insensitive' },
+  { q: 'CUSTOMER T: DATAOBJECT', has: DO_CUSTOMER, why: 'so are the terms beside it' },
+
+  // --- and the point of it all: prose is findable without knowing the facet exists ---
+  { q: 'backoffice checks', top: PROC_ORDER, why: 'two words that only ever occur in one documentation' },
+  { q: 'shipping stamp',    has: PROC_ORDER, why: 'an element documentation, as a plain query' },
+
+  // --- a word of separators only is matched literally: the empty binding an expression button writes
+  //     the whole payload through used to be an empty query, answered with the recent list ---
+  { q: '{{}}',              has: FORM_ORDER,  why: 'the form whose button stores into {{}}' },
+  { q: '{{}}',              has: 'binding:{{}}', why: 'and the binding itself' },
+  { q: '{{}} reset',        has: FORM_ORDER,  why: 'a literal word beside a plain one: both AND in' },
+  { q: '{{}} zzzznope',     none: true,       why: 'the literal word does not excuse a term that matches nothing' },
+
+  // --- `has:` asks for models holding an element of a type — by the type or by Design's word for it ---
+  { q: 'has:"expression button"', has: FORM_ORDER, why: "Design's word for a scriptButton" },
+  { q: 'has:expressionbutton', has: FORM_ORDER, why: 'the word run together' },
+  { q: 'has:scriptButton',  has: FORM_ORDER,  why: 'the type the model stores' },
+  { q: 'has:attachment',    top: FORM_ORDER,  why: 'an `upload` component is what Design calls Attachment' },
+  { q: 'has:decimal',       has: FORM_ORDER,  why: 'a float `number` is a Decimal — the variant decides the palette entry' },
+  { q: 'has:"start event"', has: PROC_ORDER,  why: 'a BPMN element by its palette name' },
+  { q: 'has:"start event"', missing: FORM_ORDER, why: 'a form has no start event' },
+  { q: 'has:usertask',      missing: DO_CUSTOMER, why: 'a node without elements never answers has:' },
+  { q: 'has:zzzznope',      none: true,       why: 'a type nothing has' },
+  // With has:, label: and id: describe that same element, not anything anywhere in the model.
+  { q: 'has:"expression button" label:recalculate', has: FORM_ORDER, why: 'the expression button captioned Recalculate' },
+  { q: 'has:"expression button" id:resetTotal', has: FORM_ORDER, why: 'the expression button with that id' },
+  { q: 'has:"expression button" label:internal', none: true, why: 'Internal note is a textarea, not an expression button' },
+  { q: 'has:"expression button" id:notifyButton', none: true, why: 'notifyButton is an action button' },
+
   // --- AND semantics: a word that matches nothing drops the node ---
   { q: 'customer zzzznope',  none: true, why: 'every word has to match' },
 ];
@@ -139,8 +257,49 @@ unit('hayTokens splits camelCase + digits',
 unit('qParse separates facets from terms',
   (p => [p.terms, p.facets])(engine.qParse('shopping template t:dataObject')),
   [['shopping','template'], { type: 'dataobject' }]);
+unit('qParse separates the label/desc facets',
+  (p => [p.terms, p.facets])(engine.qParse('order label:Approve desc:Backoffice')),
+  [['order'], { lab: 'approve', desc: 'backoffice' }]);
+unit('qParse accepts a space after the colon',
+  [engine.qParse('desc: approval').facets, engine.qParse('label:  courier').facets],
+  [{ desc: 'approval' }, { lab: 'courier' }]);
+// The regression this guards: without the space the query became the two TERMS `label` and `courier`,
+// and answered with whichever node had the word "label" in a script body — a silent wrong hit.
+unit('a spaced facet leaves no stray term behind', engine.qParse('label: courier').terms, []);
+unit('qParse is case-insensitive on both halves',
+  engine.qParse('DESC:Approval').facets, { desc: 'approval' });
+unit('qParse accepts the desc: aliases',
+  [engine.qParse('description:x').facets, engine.qParse('doc:x').facets],
+  [{ desc: 'x' }, { desc: 'x' }]);
 unit('qParse keeps a quoted phrase whole',
   engine.qParse('"get outreach" key').phrases, ['get outreach']);
+// The regression this guards: the phrase pass ran first and ate the quotes, so the query below became
+// the TERM `label` plus the phrase `mein label` — answering with nodes that merely mention the word
+// "label" instead of everything carrying that caption.
+unit('qParse binds a quoted value to its facet, not to the phrase list',
+  (p => [p.terms, p.phrases, p.facets])(engine.qParse('label: "Mein Label"')),
+  [[], [], { lab: 'mein label' }]);
+unit('a quoted facet value works unspaced, for every facet',
+  [engine.qParse('desc:"two words"').facets, engine.qParse('key:"x"').facets],
+  [{ desc: 'two words' }, { key: 'x' }]);
+unit('a quoted phrase containing a facet-shaped word stays a phrase',
+  (p => [p.phrases, p.facets])(engine.qParse('"the label: thing"')),
+  [['the label: thing'], {}]);
+unit('a facet typed through the colon but unvalued is pending, never the term "label"',
+  (p => [p.terms, p.facets, p.pending])(engine.qParse('customer label:')),
+  [['customer'], {}, 'lab']);
+unit('a lone pending facet keeps the query empty instead of searching for the prefix word',
+  (p => [p.empty, p.pending])(engine.qParse('label: ')),
+  [true, 'lab']);
+unit('a word of separators only becomes a literal phrase, and the query is not empty',
+  (p => [p.terms, p.phrases, p.empty])(engine.qParse('{{}}')),
+  [[], ['{{}}'], false]);
+unit('…beside ordinary words, which still split into terms',
+  (p => [p.terms, p.phrases])(engine.qParse('{{}} order-form')),
+  [['order', 'form'], ['{{}}']]);
+unit('qParse reads has:, quoted or bare',
+  [engine.qParse('has:"Start event"').facets, engine.qParse('has:upload id:x').facets],
+  [{ has: 'start event' }, { has: 'upload', id: 'x' }]);
 unit('hlite marks every occurrence, merged and escaped-safe',
   engine.hlite('Template of a template', engine.qParse('template')).map(s => (s.hit ? '[' : '') + s.t + (s.hit ? ']' : '')).join(''),
   '[Template] of a [template]');
@@ -148,6 +307,113 @@ unit('hlite leaves a non-matching string in one piece',
   engine.hlite('nothing here', engine.qParse('zzz')), [{ t: 'nothing here', hit: false }]);
 unit('fuzzyScore finds a typo as a subsequence', engine.fuzzyScore('customer', 'custmer') > 0, true);
 unit('fuzzyScore rejects a non-subsequence', engine.fuzzyScore('customer', 'zzz'), 0);
+// The regression this guards: `label:Recalculate` returned the right rows with zero <mark> on them —
+// facet values never entered the highlight needles, so a facet hit looked like no hit at all.
+unit('hlite marks a bound facet value like a term',
+  engine.hlite('Recalculate total', engine.qParse('label:Recalculate')).some(s => s.hit), true);
+unit('hlite does not highlight a bucket facet value (type:)',
+  engine.hlite('form of forms', engine.qParse('t:form')).some(s => s.hit), false);
+// The regressions these guard: the old suggester glued `custmer nam` into the single needle
+// `custmernam` (matching nothing sensible), and scanned only name/key — a mistyped *caption* got no
+// suggestion at all.
+unit('suggestScore matches each mistyped word on its own',
+  engine.suggestScore({ name: 'customer name', key: 'customerName', lab: '' }, ['custmer', 'nam']) > 0, true);
+unit('suggestScore reaches captions, not just name and key',
+  engine.suggestScore({ name: 'order form', key: 'orderForm', lab: 'kundennummer\nrecalculate' }, ['recalculte']) > 0, true);
+unit('suggestScore is AND across words',
+  engine.suggestScore({ name: 'customer name', key: 'customerName', lab: '' }, ['custmer', 'zzz']), 0);
+
+// Every caption the Fields section renders MUST be in the index. This is the invariant that a report
+// of "labels are not searchable" actually tests, and nothing checked it — which is why three fixes went
+// to extraction and matching before the real cause (the page not drawing the row) was found.
+{
+  const missing = [];
+  for (const n of nodes) {
+    if (n.type !== 'form' && n.type !== 'page') continue;
+    const lab = engine.searchIndex(n).lab;
+    for (const f of (n.data || {}).fields || [])
+      if (f.label && !lab.includes(String(f.label).toLowerCase())) missing.push(`${n.id}#${f.id}=${f.label}`);
+  }
+  unit('every field caption the panel renders is in the search index', missing, []);
+}
+
+// palWindow() belongs to the palette, not the engine, but it is pure and it is the reason a form whose
+// caption matched could be absent from the screen while the search had found it. Lifted the same way.
+const palWindow = new Function('searchIndex', `${lift('palWindow')}return palWindow;`)(engine.searchIndex);
+{
+  const isModels = h => engine.searchIndex(h.n).section === 'Models';
+  const others = nodes.filter(n => engine.searchIndex(n).section !== 'Models').map(n => ({ n }));
+  const models = nodes.filter(n => engine.searchIndex(n).section === 'Models').map(n => ({ n }));
+  // The worst case the palette actually hits: every other section outranks Models, and there are more
+  // of those than the page holds. A plain score cut renders no Models group at all.
+  const list = others.concat(models);
+  const secs = new Set(list.map(h => engine.searchIndex(h.n).section)).size;
+  ran++;
+  if (others.length <= secs || models.length < 2) {
+    failed++;
+    console.error('FAIL  palWindow case cannot be built from this report');
+  } else console.log('ok    palWindow case is meaningful (' + others.length + ' non-Models hits)');
+  unit('a plain score cut would hide the Models group', list.slice(0, secs).some(isModels), false);
+  unit('the shared page keeps a slot for every section', palWindow(list, secs).some(isModels), true);
+  unit('…and still fills the page', palWindow(list, secs).length, secs);
+  // The regression that a per-section FLOOR introduced: three rows guaranteed became three rows total,
+  // so ten forms carrying the searched caption were reported as three.
+  const shown = Math.min(20, list.length - 1);
+  unit('a section gets a share of the page, not a fixed floor',
+    palWindow(list, shown).filter(isModels).length >= Math.min(models.length, Math.floor(shown / secs)),
+    true);
+  unit('a section that runs out leaves its share to the others', palWindow(list, shown).length, shown);
+  unit('a page that fits everything is returned untouched', palWindow(list, list.length + 1), list);
+}
+
+// The row's "why did this match" hint. A facet query has to be explained by a field OF THAT KIND:
+// answering `label:volume` with "id · expectedVolume" names the very field the facet exists to exclude.
+function whyOf(q, id) {
+  const p = engine.qParse(q);
+  const n = nodes.find(x => x.id === id);
+  const r = n && engine.scoreIndex(engine.searchIndex(n), p, 0);
+  const w = r && engine.matchWhere(n, p, r.fields);
+  return w ? w.hint : null;
+}
+// The hint leads with the matched text itself — it is what was searched for, and it is what the
+// highlighter lights up; the owner follows after @.
+unit('a label: hit is explained by the caption it matched',
+  whyOf('label:Recalculate', FORM_ORDER), 'label · Recalculate @orderTotal');
+unit('a label: hit on a task caption names that element',
+  whyOf('label:approval', PROC_ORDER), 'label · Decide approval');
+unit('a desc: hit is explained by the sentence it came from',
+  whyOf('desc:Backoffice', PROC_ORDER), 'doc · Backoffice checks the order total before it shi… @approveTask');
+unit('a has: hit names the element by its palette word and caption',
+  whyOf('has:"expression button" label:recalculate', FORM_ORDER), 'Expression button · Recalculate @orderTotal');
+unit('a has: hit narrowed by id: names that element',
+  whyOf('has:"expression button" id:resetTotal', FORM_ORDER), 'Expression button · Reset total @resetTotal');
+unit('a literal {{}} hit names the field that carries it',
+  whyOf('{{}}', FORM_ORDER), 'value · {{}} @resetTotal');
+unit("a label: hit on the node's own label leaves the hint to the key",
+  whyOf('label:priority', DO_PRIORITY), null);
+// A long value is cut around the match, not from its start: a zip-entry path, a URL or an expression
+// carries its match in the tail as often as not, and a head cut showed the same
+// "file · <module>/src/main/resources/com/…" on thirty rows with nothing to highlight.
+function whyOfNode(q, n) {
+  const p = engine.qParse(q), r = engine.scoreIndex(engine.searchIndex(n), p, 0);
+  return r ? engine.matchWhere(n, p, r.fields) : null;
+}
+{
+  const P = 'modules/demo-app/src/main/resources/com/example/app/DEMO-shippingapp-bar.zip!form-DEMO-F1.form';
+  const w = whyOfNode('shippingapp', { id: 'form:DEMO-F1', type: 'form', key: 'DEMO-F1', label: 'Order form', file: P, data: { file: P } });
+  unit('a hint in a long path keeps the matched text', !!w && /shippingapp/i.test(w.hint), true);
+  unit('…within the hint width', !!w && w.hint.length <= 'file · '.length + 48, true);
+  unit('…and the whole value is kept for the tooltip', w && w.full, 'file · ' + P);
+  const Q = 'modules/demo-app/src/main/resources/com/example/app/DEMO-app-bar.zip!form-DEMO-intake.form';
+  unit('a match in the last segment of a path shows that segment',
+    (whyOfNode('intake', { id: 'form:DEMO-F2', type: 'form', key: 'DEMO-F2', label: 'Order form', file: Q, data: { file: Q } }) || {}).hint,
+    'file · …!form-DEMO-intake.form');
+  // the tooltip gets a path whole, but not a 4 000-character script around one matched word
+  const body = 'x'.repeat(2000) + ' zzneedle ' + 'y'.repeat(2000);
+  const w2 = whyOfNode('zzneedle', { id: 'process:DEMO-P1', type: 'process', key: 'DEMO-P1', label: 'Order', data: { script: body } });
+  unit('the tooltip shows a long body around the match, not all of it',
+    !!w2 && /zzneedle/.test(w2.full) && w2.full.length <= 420 && /zzneedle/.test(w2.hint), true);
+}
 
 // A zero-result query must still be able to suggest something (the palette's "did you mean").
 ran++;

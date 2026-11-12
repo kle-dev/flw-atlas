@@ -32,6 +32,10 @@
       }
     ],
     [
+      {"id": "customerRecord.customerName", "type": "text", "label": "Customer name"},
+      {"id": "shipTo.deliveryCity", "type": "text", "label": "Ship-to city"}
+    ],
+    [
       {
         "id": "canEditButton",
         "type": "restButton",
@@ -50,6 +54,8 @@
         "id": "notifyButton",
         "type": "workAction",
         "label": "Notify customer",
+        "visible": "{{amount > 0}}",
+        "primary": true,
         "extraSettings": {
           "actionDefinitionKey": "notifyCustomerAction",
           "sendPayloadMapping": [
@@ -60,6 +66,74 @@
             {"name": "$temp.sent", "expression": "{{$response.executionPayload.sent}}"}
           ]
         }
+      }
+    ],
+    [
+      {
+        "id": "orderTotal",
+        "type": "scriptButton",
+        "value": "{{orderTotal}}",
+        "extraSettings": {
+          "text": "Recalculate",
+          "script": "{{amount * 1.081}}",
+          "autoExecute": true,
+          "timer": 30000
+        }
+      }
+    ],
+    [
+      {
+        "id": "escalate",
+        "type": "workAction",
+        "extraSettings": {
+          "actionDefinitionKey": {"key": "notifyCustomerAction", "id": "ACTION_MODEL-7"},
+          "sendFullPayload": true,
+          "mapFullResponse": true,
+          "navigationUrl": "/work/case/{{$response.scopeId}}",
+          "sendPayloadMapping": [
+            {"name": "orderTotal", "expression": "{{orderTotal}}"}
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "id": "customerPortal",
+        "type": "linkButton",
+        "value": "Open customer portal",
+        "extraSettings": {"url": "https://portal.example.com/{{customer}}", "target": "_blank"}
+      }
+    ],
+    [
+      {
+        "id": "creditScore",
+        "type": "restButton",
+        "visible": false,
+        "value": "{{$temp.score}}",
+        "ignore": "{{!customer}}",
+        "description": "Hidden worker: refreshes the score whenever the customer changes.",
+        "i18n": {"en_us": {"extraSettings": {"text": "Refresh score"}}},
+        "extraSettings": {
+          "url": "/api/customers/{{customer}}/score",
+          "valueExpression": "{{$response.score}}",
+          "autoExecute": "{{customer}}",
+          "executeAlways": true
+        }
+      }
+    ],
+    [
+      {"id": "internalNote", "type": "textarea", "label": "Internal note", "enabled": "{{isSupervisor}}"}
+    ],
+    [
+      {"id": "invoiceCopy", "type": "upload", "label": "Invoice copy"},
+      {"id": "discountRate", "type": "number", "label": "Discount rate", "extraSettings": {"numberType": "float"}}
+    ],
+    [
+      {
+        "id": "resetTotal",
+        "type": "scriptButton",
+        "value": "{{}}",
+        "extraSettings": {"text": "Reset total", "script": "{{amount > 0}}"}
       }
     ]
   ],

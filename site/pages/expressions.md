@@ -30,12 +30,20 @@ a runtime no-op and is not reported.
 
 **3 · The function catalog** — every function call is checked against what exists:
 
-- an unknown backend namespace (`Unknown function namespace 'p'`);
+- an unknown backend namespace (`Unknown function namespace 'p'`) — a namespace is a bare name before
+  the colon, never a property reached through a dot, and never the name before the colon that closes a
+  ternary's `?`;
 - a known namespace with an unknown function (`Unknown function 'p:n'`);
 - backend syntax in a frontend expression, with the `flw.` form suggested;
 - an unknown `flw.` member, or an unknown member of one of your own namespaces — but **only when there
   is a plausible near-match**. A member with no near-match is assumed to be a function your project
-  injected, and is left alone.
+  injected, and is left alone;
+- a `variables:` / `vars:` / `var:` call with a number of arguments the engine cannot bind — an
+  **error**, like a syntax error, because the rule is the engine's. The engine puts the variable
+  container in front of the arguments only when one is missing, so `${vars:get('route', 'A')}` reads
+  `'route'` as the container and fails at runtime, and `${vars:equals(x)}` is an argument short. The
+  explicit-container form, `${vars:get(execution, 'x')}`, is valid and is not reported; a literal in its
+  place is.
 
 Bare identifiers are never flagged. They are almost always process variables or form fields, and
 guessing there would produce noise instead of findings.
@@ -71,7 +79,11 @@ table, and the Alt-Enter quick fix on an unknown-function warning writes into it
 
 Atlas also **discovers** frontend custom functions automatically by scanning your customisation sources
 for `additionalData`. `--custom-functions <path>` points that scan somewhere specific;
-`--no-custom-functions` turns it off.
+`--no-custom-functions` turns it off. An entry whose value is a literal (`$isDesktop: true`) is listed
+as a value: completion offers it without the `()` a function gets. Each function's page in the explorer
+shows its **implementation** — the entry that registers it, or the declaration it names, followed through
+the registration's import — with the file and line it starts on. For a compiled bundle the code comes from its sourcemap, which names a
+path of the build rather than of the project, so it is shown but does not open.
 
 ## What is deliberately not validated
 
@@ -80,7 +92,25 @@ are not validated at all — validating them against the wrong grammar would pro
 positives.
 
 Atlas also declines to judge an expression whose harvested text looks truncated: after unescaping, if
-the body still contains a stray `{`, the harvester probably cut it short, so no verdict is issued.
+the body still contains a stray `{`, the harvester probably cut it short, so no verdict is issued. Those
+are counted — `stats.exprSkippedNested` in `graph.json`, and the expression's own page says *not
+validated* and why — so "no problems" and "not judged" cannot be confused.
+
+A backslash in front of the dollar sign, `\${…}`, is the author saying *literal, do not evaluate* — in a
+Groovy string, a Java string, a JSON body. It is not an expression and is not harvested at all.
+
+Neither is a `${…}` inside a **script body** — a script task's `<script>`, a listener's script, an
+action's `scriptInfo.script`, a script operation's `config.script`, a form script button's `script`. A
+Groovy `"${user?.firstName}"` or a JavaScript `` `${total}` `` is the script language's own string
+interpolation; read as JUEL it is a syntax error, its helpers (`flw`, `flwTimeUtils`) look like beans the
+model calls, and its locals look like variables. Scripts are read by the script checker below instead. A
+`{{…}}` in a form script button's script stays a binding: the form engine evaluates it before the script runs.
+
+A **Spring property placeholder** is not an expression either: `${email.inbound.channel.imap-url:imap://…}`
+in a channel's URL, or any `${dotted.key:default}`, is filled in by the environment before the engine
+sees it. Atlas marks the node `placeholder` and neither validates it as JUEL (the `:default` would be
+a syntax error) nor reads `imap` and `localhost` as variables. A dotted name with no default,
+`${order.total}`, is a property path and is validated as usual.
 
 ## Scripts
 
@@ -93,8 +123,16 @@ Script bodies get the same treatment, per script language and per context. Atlas
   script's context, an EL-only API called from a script, and a listener type that does not support
   scripts at all.
 
+A name the script binds itself is never reported as a missing root or checked as one: a declaration or
+assignment, a closure, loop or `catch` parameter (`tasks.any { task -> … }`, `for (task in tasks)`), and
+a JavaScript function or arrow parameter. A call is reported as a typo only when the bound object
+really lacks the member: the engine binds `execution`, `task`, `planItemInstance` and `caseInstance` as
+its entity objects, so the entities' own methods — `execution.getRootProcessInstance()`,
+`caseInstance.setName(…)` — are valid calls, though completion offers only the documented interface.
+
 Contexts are distinguished, because the bindings differ: script task (BPMN), execution listener,
-task listener, script task (CMMN), CMMN task listener, and an action's bot script.
+task listener, script task (CMMN), CMMN task listener, an action's bot script, and a script-type service
+operation — which binds the `flw` API and the operation's inputs, and no execution, task or case.
 
 In the IDE the bodies are more than checked — real Groovy and JavaScript are **injected** into them, so
 you get that language's own highlighting and inspections inside a BPMN file, and completion for the
@@ -102,14 +140,16 @@ root objects Flowable actually binds in that context.
 
 ## In the IDE
 
-Two playgrounds, both in the *Flowable Expressions* tool window:
+Two playgrounds, both in the *Atlas Playground* tool window:
 
 - **Expressions** — type an expression in either dialect and see it validated as you type. Frontend
   expressions evaluate live against a JSON payload you paste, with each sub-expression's value shown
   inline. Backend expressions evaluate against a running Flowable instance, on a real process, case or
   task scope.
 - **Scripts** — a script editor with the variables, reads, bindings and beans of the selected context
-  as clickable chips, and *Load Script from Model…* to pull a real script body out of an indexed model.
+  as clickable chips, *Load Script from Model…* to pull a real script body out of an indexed model, and
+  *Load Example…* for a worked example instead: complete scripts for every context and language, each
+  commented with what it demonstrates, and all of them validated by the build against this same catalog.
 
 Alt-Enter on any expression in a model opens it in the playground, pre-filled with its dialect and its
 model's scope. Full details in the [plugin reference](../plugin/reference/#expressions).

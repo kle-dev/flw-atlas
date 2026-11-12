@@ -1,7 +1,9 @@
 package com.flowable.atlas.action
 
+import com.intellij.openapi.application.ApplicationManager
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -30,7 +32,12 @@ class DumpFlowableIndexAction : AnAction() {
         Messages.showMessageDialog(project, RebuildModelIndexAction.render(index), "Model Index", Messages.getInformationIcon())
     }
 
+    // `internal="true"` in the descriptor is not the only gate: a menu that renders this group somewhere
+    // else (the Hub's ⋮) must not show a debugging entry either, outside internal mode.
     override fun update(e: AnActionEvent) {
+        e.presentation.isVisible = ApplicationManager.getApplication().isInternal
         e.presentation.isEnabled = e.getData(CommonDataKeys.PROJECT) != null
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

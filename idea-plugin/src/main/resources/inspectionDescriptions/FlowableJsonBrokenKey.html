@@ -1,0 +1,18 @@
+<html>
+<body>
+Reports a model key inside a Flowable JSON model — a form, page, data object, service, event, channel, action,
+document, app, agent or dashboard component — that matches no indexed model of the expected type: a form
+component's subform (<code>extraSettings.formRef</code>), data object, service, action, process or case; a data
+object's backing service or dictionary; an app's <code>childModels</code>; a channel's event; an agent's tools.
+These are the sites Ctrl+click follows, and an unresolved one is the report's <i>missing reference</i> defect.
+<p>Example: <code>"formRef": {"id": "…", "key": "DEMO-orderFrom"}</code> is reported with the suggestion
+<i>did you mean 'DEMO-orderForm'?</i></p>
+<p>Quick fix: <b>Replace with '…'</b>.</p>
+<!-- tooltip end -->
+<p>Values containing <code>{{</code>, <code>${</code> or <code>#{</code> name a key at run time and are skipped,
+as are the models the platform ships itself under a key of the expected type (the <code>_flowableMailEvent</code>
+event, the <code>F07-deactivateUser</code> form a copied <code>deactivate-user.action</code> keeps). A form key may name a page and a
+data-object key a master-data model, as at run time. Silent when the project has no indexed key of that type or
+the model index has not been built yet.</p>
+</body>
+</html>

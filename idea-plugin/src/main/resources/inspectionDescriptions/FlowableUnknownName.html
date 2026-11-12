@@ -1,0 +1,23 @@
+<html>
+<body>
+Reports a message, signal, task key or activity id in Java that no indexed model declares:
+<code>startProcessInstanceByMessage</code>, <code>messageEventReceived</code> and <code>messageName</code> take a
+message, <code>signalEventReceived</code> and its variants a signal, <code>taskDefinitionKey</code> a user-task id and
+<code>activityId</code> a flow-node id. An unknown message throws at run time; an unknown signal reaches no one and
+says nothing.
+<p>Example: <code>runtimeService.signalEventReceived("DEMO-orderCancelld")</code> is reported with the suggestion
+<i>did you mean 'DEMO-orderCancelled'?</i></p>
+<p>Quick fix: <b>Replace with '…'</b>.</p>
+<!-- tooltip end -->
+<p>Messages and signals are the names of every model in scope — a <code>&lt;message name&gt;</code>, a
+<code>&lt;signal name&gt;</code>, or a <code>messageRef</code>/<code>signalRef</code> that names no declaration, which
+the engine then takes as the name, and the <code>signalRef</code> of a case's signal event listener, which the same
+<code>signalEventReceived</code> reaches. A task key or activity id is judged only when the same chain names its model
+(<code>processDefinitionKey("…")</code>, <code>caseDefinitionKey("…")</code>), and never in a chain with
+<code>or()</code>; <code>taskDefinitionKeyLike</code> takes a pattern and is skipped. Variables and form outcomes are
+not judged.</p>
+<p>Silent before the model index exists, when the project declares no name of that kind, when a model computes
+one at run time (<code>flowable:messageExpression</code>, <code>flowable:signalExpression</code>, a name holding
+<code>${…}</code>), when a process is known only from a Design JSON file, and in test sources.</p>
+</body>
+</html>

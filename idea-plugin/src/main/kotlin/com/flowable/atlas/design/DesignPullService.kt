@@ -1,20 +1,37 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.environment.AtlasConnectionSelection
+import com.flowable.atlas.environment.auth.AtlasCredentials
+import com.flowable.atlas.environment.AtlasDesignTarget
+import com.flowable.atlas.environment.AtlasProtection
+import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.explorer.AtlasArtifactFiles
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasGenerationRunner
+import com.flowable.atlas.findings.AtlasFindingsService
+import com.flowable.atlas.findings.AtlasFindingsToolWindowFactory
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.project.AtlasProjectRootService
-import com.flowable.atlas.settings.ConnectionsConfigurable
+import com.flowable.atlas.project.AtlasScopedKeys
+import com.flowable.atlas.settings.EnvironmentsConfigurable
+import com.flowable.atlas.settings.connections.EnvironmentsTreePanel
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.analysis.AnalysisScope
+import com.intellij.codeInspection.InspectionManager
+import com.intellij.codeInspection.actions.RunInspectionIntention
+import com.intellij.codeInspection.ex.InspectionManagerEx
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -25,6 +42,10 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.profile.codeInspection.InspectionProjectProfileManager
+import com.intellij.psi.PsiDirectory
+import com.intellij.psi.PsiManager
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -39,6 +60,68 @@ import java.nio.file.StandardCopyOption
  */
 internal fun removedModelKeys(previous: Set<String>?, current: Set<String>): List<String> =
     previous?.minus(current)?.sorted() ?: emptyList()
+
+/** What the post-pull balloon offers. */
+internal enum class PullAction { FIND_BROKEN, REGENERATE, SIGN_OUT_RETRY }
+
+/**
+ * The post-pull balloon's actions, in order. Removed keys come first: they are what turns the balloon into
+ * a warning, and "code or models referencing them may now be broken" with no way to find them left the
+ * reader opening files at random. Pure, like [removedModelKeys], so the choice is tested without a pull.
+ */
+internal fun pullBalloonActions(removedKeys: List<String>, hasExplorer: Boolean, unauthorized: Boolean): List<PullAction> =
+    buildList {
+        if (removedKeys.isNotEmpty()) add(PullAction.FIND_BROKEN)
+        if (hasExplorer) add(PullAction.REGENERATE)
+        if (unauthorized) add(PullAction.SIGN_OUT_RETRY)
+    }
+
+/**
+ * What one pull changed in one app's export, entry by entry: the model files that are new, gone, or
+ * have different content (a CRC-32 over the entry) compared with the export that was on disk before.
+ * The removed-*keys* drift above is the code-impact signal (a key nobody can resolve any more); this is
+ * the modeller's changelog — "what did I just pull?" — which the balloon never answered.
+ */
+internal data class ArchiveDiff(val added: List<String>, val removed: List<String>, val changed: List<String>) {
+    val isEmpty: Boolean get() = added.isEmpty() && removed.isEmpty() && changed.isEmpty()
+
+    /** `3 changed, 1 added, 2 removed`, omitting zero counts; `unchanged` when nothing moved. */
+    fun summary(): String {
+        val parts = listOfNotNull(
+            changed.size.takeIf { it > 0 }?.let { "$it changed" },
+            added.size.takeIf { it > 0 }?.let { "$it added" },
+            removed.size.takeIf { it > 0 }?.let { "$it removed" },
+        )
+        return if (parts.isEmpty()) "unchanged" else parts.joinToString(", ")
+    }
+}
+
+/** [previous] and [current] are `entry name → CRC-32`; a null [previous] (first export) yields null. */
+internal fun archiveDiff(previous: Map<String, Long>?, current: Map<String, Long>): ArchiveDiff? {
+    if (previous == null) return null
+    return ArchiveDiff(
+        added = (current.keys - previous.keys).sorted(),
+        removed = (previous.keys - current.keys).sorted(),
+        changed = current.keys.intersect(previous.keys).filter { previous[it] != current[it] }.sorted(),
+    )
+}
+
+/** `entry name → CRC-32 of its content` for every model entry of a zip's [bytes] (a nested `.bar` counts as one entry). */
+internal fun modelEntryChecksums(bytes: ByteArray): Map<String, Long> {
+    val out = LinkedHashMap<String, Long>()
+    java.util.zip.ZipInputStream(bytes.inputStream()).use { zin ->
+        var e = zin.nextEntry
+        while (e != null) {
+            if (!e.isDirectory && com.flowable.atlas.model.ModelFiles.isModelPath(e.name)) {
+                val crc = java.util.zip.CRC32()
+                crc.update(zin.readBytes())
+                out[e.name] = crc.value
+            }
+            e = zin.nextEntry
+        }
+    }
+    return out
+}
 
 private val LOG = logger<DesignPullService>()
 
@@ -59,51 +142,102 @@ private val LOG = logger<DesignPullService>()
 class DesignPullService(private val project: Project) {
 
     /** One successfully written app, for the summary notification and VFS/index refresh. */
-    private data class PulledApp(val app: DesignClient.App?, val appKey: String, val target: Path, val size: Int)
+    private data class PulledApp(
+        val app: DesignClient.App?,
+        val appKey: String,
+        val target: Path,
+        val size: Int,
+        /** Against the export that was on disk before; null for a first export. */
+        val diff: ArchiveDiff?,
+    )
 
-    /** Queues the pull as a background task; safe to call from the EDT. Pulls the *effective*
-     *  selection: the Atlas Hub's personal override when one exists, else the configured default. */
+    /** Queues the pull as a background task; safe to call from the EDT. */
     fun pullInBackground() = pullInBackground(selection = null)
 
     /** Pull exactly [workspaceKey]/[appKeys] — the Atlas Hub's "pull selected" entry point. */
     fun pullInBackground(workspaceKey: String, appKeys: List<String>) =
-        pullInBackground(DesignPullSelection.Selection(workspaceKey, appKeys.toList()))
+        pullInBackground(DesignPullSelection(workspaceKey, appKeys.toList()))
 
-    private fun pullInBackground(selection: DesignPullSelection.Selection?) {
-        object : Task.Backgroundable(project, "Pulling app from Flowable Design", true) {
-            override fun run(indicator: ProgressIndicator) = pull(indicator, selection)
+    /**
+     * The pull that runs *because* the environment editor was just closed. Whatever is still missing is
+     * reported rather than answered by opening that editor a second time — see [blocked].
+     */
+    fun pullAfterConfiguring() = pullInBackground(selection = null, mayConfigure = false)
+
+    /**
+     * Resolves the target and asks about a protected environment **before** queueing anything.
+     *
+     * The confirmation has to happen here rather than inside the background task: this is called from
+     * the EDT, resolving touches neither keychain nor network, and a modal dialog surfacing from under
+     * a progress indicator is exactly the kind of thing that gets dismissed without being read. A pull
+     * overwrites archives in the working tree, so the question is modal — the weight matches the
+     * consequence.
+     *
+     * [mayConfigure] is false for a pull that has already had the environment editor opened for it.
+     */
+    private fun pullInBackground(selection: DesignPullSelection?, mayConfigure: Boolean = true) {
+        val target = AtlasDesignTarget.resolve(project)
+        if (target == null) {
+            blocked("No Flowable Design environment is selected — pick one in the Atlas Hub.", mayConfigure)
+            return
+        }
+        if (target.connection.requiresConfirmation &&
+            !AtlasProtection.confirmPull(project, target.connection, target.targetFolder)
+        ) {
+            return   // a cancelled action is not a failure: nothing is reported, nothing is changed
+        }
+        val title = "Pulling from ${target.connection.environmentName} (Flowable Design)"
+        object : Task.Backgroundable(project, title, true) {
+            override fun run(indicator: ProgressIndicator) = pull(indicator, target, selection, mayConfigure)
         }.queue()
     }
 
-    private fun pull(indicator: ProgressIndicator, requested: DesignPullSelection.Selection?) {
-        val settings = FlowableAtlasProjectSettings.getInstance(project)
+    private fun pull(
+        indicator: ProgressIndicator,
+        target: AtlasDesignTarget,
+        requested: DesignPullSelection?,
+        mayConfigure: Boolean,
+    ) {
         val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
-        if (projectDir == null || !settings.isDesignConfigured()) {
-            configureThenRetry()
+        if (projectDir == null) {
+            blocked("This project has no folder on disk to pull into.", mayConfigure)
             return
         }
-        // Log the failure path: a broken/locked keychain looks exactly like "not configured yet" from
-        // here, so without this the user is bounced to Settings again and again with nothing to go on.
-        val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }
-            .onFailure { LOG.warn("Could not read Design credentials from the PasswordSafe", it) }
-            .getOrNull()
-        if (auth == null) {
-            configureThenRetry()   // e.g. keychain entry was deleted, or the chosen mode has no secret yet
+        val connection = target.connection
+        // Log the failure path: a broken or locked keychain looks exactly like "not configured yet"
+        // from here, so without this the user is bounced to Settings again and again with nothing to go on.
+        val auth = try {
+            AtlasCredentials.contextFor(connection.baseUrl, connection.authMode, connection.username)
+        } catch (e: ProcessCanceledException) {
+            throw e   // a cancelled keychain read is not "not configured"
+        } catch (e: Exception) {
+            LOG.warn("Could not read Design credentials from the PasswordSafe", e); null
+        }
+        // Empty, not null: a captured browser session authenticates on its own, so "no stored secret"
+        // is only a dead end when there is no session either.
+        if (auth == null || auth.isEmpty) {
+            // e.g. the keychain entry was deleted, or the chosen mode has no secret yet
+            blocked("Not signed in to ${connection.baseUrl} — store a password or token for it.", mayConfigure)
             return
         }
-        val conn = DesignClient.Connection(settings.designBaseUrl, auth)
-        val selection = requested ?: DesignPullSelection.effective(
-            DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
-            DesignPullSelection.load(project),
-        )
-        val workspaceKey = selection.workspaceKey
-        val appKeys = selection.appKeys
+        val conn = DesignClient.Connection(connection.baseUrl, auth)
+        val workspaceKey = requested?.workspaceKey ?: target.workspaceKey
+        val appKeys = requested?.appKeys ?: target.appKeys
+        if (workspaceKey.isBlank()) {
+            notifyFailure("No workspace selected — pick one in the Atlas Hub.")
+            return
+        }
         if (appKeys.isEmpty()) {
-            notifyFailure("No apps selected — tick at least one app in the Atlas Hub or in Settings → Connections.")
+            notifyFailure("No apps selected — tick at least one app in the Atlas Hub.")
             return
         }
-        val targetDir = projectDir.resolve(settings.designTargetFolder.ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER })
-            .normalize()
+        val targetDir = projectDir.resolve(target.targetFolder).normalize()
+
+        // Post-pull drift, part one: the keys the project had, taken before anything is written. Taken
+        // after the VFS refresh (as it was), the refresh had already dropped the index, the snapshot was
+        // always empty, and the "keys removed by this pull" warning could never fire.
+        val indexService = project.service<FlowableModelIndexService>()
+        val previousKeys = indexService.cachedOrNull()?.let { modelKeys(it) }
 
         // Resolve display names/versions once, up front (best-effort — a list failure only degrades the
         // filename/notification to the raw key and never aborts the pull).
@@ -112,19 +246,26 @@ class DesignPullService(private val project: Project) {
         val written = mutableListOf<PulledApp>()
         val failed = mutableListOf<String>()
         val usedNames = mutableSetOf<String>()
-        for (appKey in appKeys) {
+        // A three-app pull is minutes of network time; a bar that never moves reads as a hang.
+        indicator.isIndeterminate = false
+        for ((i, appKey) in appKeys.withIndex()) {
             indicator.checkCanceled()
+            indicator.fraction = i.toDouble() / appKeys.size
             val app = apps.firstOrNull { it.key == appKey }
             val display = app?.name ?: appKey
-            indicator.text = "Exporting '$display' from Flowable Design…"
+            indicator.text = "Exporting '$display' from Flowable Design… (${i + 1} of ${appKeys.size})"
             when (val export = DesignClient.exportApp(conn, workspaceKey, appKey)) {
                 is DesignClient.Result.Failed -> failed += "$display — ${export.message}"
                 is DesignClient.Result.Success -> {
                     val fileBase = uniqueFileBase(export.value.fileName, app?.name, appKey, usedNames)
                     indicator.text = "Writing $fileBase.zip…"
                     try {
+                        // What was there before the overwrite is the baseline for "what did I pull?".
+                        val previous = targetDir.resolve("$fileBase.zip").takeIf { Files.isRegularFile(it) }
+                            ?.let { runCatching { modelEntryChecksums(Files.readAllBytes(it)) }.getOrNull() }
                         val target = writeZip(targetDir, fileBase, export.value.bytes)
-                        written += PulledApp(app, appKey, target, export.value.bytes.size)
+                        val diff = archiveDiff(previous, modelEntryChecksums(export.value.bytes))
+                        written += PulledApp(app, appKey, target, export.value.bytes.size, diff)
                     } catch (e: IOException) {
                         // The balloon gets e.message; the log gets the trace, which is what distinguishes
                         // a read-only target dir from a full disk from a VFS lock.
@@ -148,15 +289,12 @@ class DesignPullService(private val project: Project) {
         // the whole folder. Synchronous refresh is fine: we are on a pooled thread, not the EDT.
         val outsideContent = refreshVfsAndDetectOutsideContent(targetDir, written.map { it.target })
 
-        // Post-pull drift: snapshot the keys the project had, rebuild, and flag any the pull removed —
-        // code or models still referencing them may now be broken. refresh() rebuilds synchronously and
-        // returns the fresh index, so the after-snapshot is exact.
-        val indexService = project.service<FlowableModelIndexService>()
-        val previousKeys = indexService.cachedOrNull()?.let { modelKeys(it) }
+        // Part two: rebuild, and flag any key the pull removed — code or models still referencing it may
+        // now be broken. refresh() rebuilds synchronously and returns the fresh index, so the after-snapshot is exact.
         indicator.text = "Rebuilding Flowable index…"
         val removedKeys = removedModelKeys(previousKeys, modelKeys(indexService.refresh()))
 
-        notifySuccess(projectDir, written, failed, outsideContent, removedKeys)
+        notifySuccess(projectDir, connection.environmentName, written, failed, outsideContent, removedKeys)
     }
 
     /** The distinct model keys currently in [index] (for post-pull drift detection). */
@@ -197,24 +335,90 @@ class DesignPullService(private val project: Project) {
         return !anyInContent
     }
 
-    /** Opens the Connections settings page on the EDT and re-runs the pull once configured. */
+    private fun isUnauthorized(message: String): Boolean = message.contains("401")
+
+    /**
+     * The most common pull failure is an expired token or a changed password, and the fix was "find
+     * the connection, clear it, sign in, pull again" across two dialogs: this does the clearing and
+     * opens the connection to sign in, then pulls again once it can.
+     */
+    private fun addSignOutAndRetry(notification: com.intellij.notification.Notification) {
+        val conn = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) ?: return
+        notification.addAction(NotificationAction.createSimple("Sign out & retry") {
+            AtlasCredentials.clear(conn.baseUrl)
+            configureThenRetry()
+        })
+    }
+
+    /**
+     * A pull that cannot start. The first attempt offers the environment editor and runs again once it
+     * closes; an attempt that *is* that re-run reports [reason] instead.
+     *
+     * The second half is the whole point. Retrying unconditionally made "Pull from Flowable Design"
+     * impossible to get out of: the retry asks [AtlasDesignTarget.isPullReady], which reads the
+     * *selection* — and a missing password or an unreadable keychain entry does not change the
+     * selection. So a connection with nothing signed in reopened the editor every single time the user
+     * closed it, with no way out but closing the project.
+     */
+    private fun blocked(reason: String, mayConfigure: Boolean) {
+        if (mayConfigure) configureThenRetry() else notifyFailure(reason)
+    }
+
+    /** Opens the settings on the EDT and re-runs the pull once it can actually run. */
     private fun configureThenRetry() {
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, ConnectionsConfigurable::class.java)
-            if (FlowableAtlasProjectSettings.getInstance(project).isDesignConfigured()) pullInBackground()
+            openEnvironmentsThenRetry()
         }
     }
 
-    private fun notifySuccess(projectDir: Path, written: List<PulledApp>, failed: List<String>, outsideContent: Boolean, removedKeys: List<String>) {
+    /** The editor, then one more attempt at what the user actually asked for. EDT only. */
+    private fun openEnvironmentsThenRetry() {
+        openEnvironments()
+        if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullAfterConfiguring()
+    }
+
+    /**
+     * Opens the environment editor **on the connection this project uses**, when there is one. A
+     * "Configure…" that lands on a page with nothing selected leaves the reader to find the thing that
+     * just failed, which is the opposite of what the link promised.
+     */
+    private fun openEnvironments() {
+        val selected = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN)
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java) { page ->
+            selected?.let { page.select(EnvironmentsTreePanel.SelectionTarget.Connection(it.id)) }
+        }
+    }
+
+    private fun notifySuccess(
+        projectDir: Path,
+        environmentName: String,
+        written: List<PulledApp>,
+        failed: List<String>,
+        outsideContent: Boolean,
+        removedKeys: List<String>,
+    ) {
+        // Naming the environment is the point: with several of them configured, "pulled 2 apps" alone
+        // leaves the reader to remember which server that was.
+        val from = environmentName.ifBlank { "Flowable Design" }
         val title = if (written.size == 1) {
             val only = written.first()
-            "Pulled ${only.app?.name ?: only.appKey}${only.app?.version?.let { " v$it" } ?: ""} from Flowable Design"
+            "Pulled ${only.app?.name ?: only.appKey}${only.app?.version?.let { " v$it" } ?: ""} from $from"
         } else {
-            "Pulled ${written.size} apps from Flowable Design"
+            "Pulled ${written.size} apps from $from"
         }
-        var body = written.joinToString("<br>") { "${projectDir.relativize(it.target)} (${(it.size + 1023) / 1024} KB)" } +
-            "<br>Flowable index refreshed"
+        var body = written.joinToString("<br>") { pulled ->
+            val line = "${projectDir.relativize(pulled.target)} (${(pulled.size + 1023) / 1024} KB)"
+            // What this pull changed in the app, against the export that was on disk before it.
+            when (val d = pulled.diff) {
+                null -> "$line — first export"
+                else -> {
+                    val names = (d.changed + d.added).map { it.substringAfterLast('/') }
+                    val shown = if (names.isEmpty() || names.size > 6) "" else ": " + names.joinToString(", ")
+                    "$line — ${d.summary()}$shown"
+                }
+            }
+        } + "<br>Flowable index refreshed"
         if (outsideContent) {
             body += "<br>The target folder is outside the project's content roots — models in it will not be indexed."
         }
@@ -228,30 +432,56 @@ class DesignPullService(private val project: Project) {
                 "$shown$more<br>Code or models referencing them may now be broken."
         }
         val type = if (outsideContent || failed.isNotEmpty() || removedKeys.isNotEmpty()) NotificationType.WARNING else NotificationType.INFORMATION
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
-            .createNotification(title, body, type)
-        // The index was already rebuilt above, but any generated Atlas Explorer is now out of date —
-        // offer a one-click regenerate when such artifacts exist.
-        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
-        if (AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty()) {
-            notification.addAction(NotificationAction.createSimple("Regenerate Atlas Explorer") {
+        val notification = AtlasNotifications.groupFor(type).createNotification(title, body, type)
+        // The index was already rebuilt above, but any generated Atlas artifact is now out of date —
+        // offer a one-click regenerate when such artifacts exist: explorer pages, or the other selected
+        // artifacts (a CLAUDE.md an agent reads goes stale on a pull just the same).
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val outputDir = settings.atlasOutputDir
+        val hasArtifacts = AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty() ||
+            AtlasArtifactFiles.present(projectDir, outputDir, settings.atlasArtifacts).isNotEmpty()
+        for (action in pullBalloonActions(removedKeys, hasArtifacts, failed.any(::isUnauthorized))) when (action) {
+            PullAction.FIND_BROKEN -> notification.addAction(NotificationAction.createSimple("Find broken references") {
+                findBrokenReferences()
+            })
+            PullAction.REGENERATE -> notification.addAction(NotificationAction.createSimple(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) {
                 AtlasGenerationRunner.regenerate(project)
             })
+            PullAction.SIGN_OUT_RETRY -> addSignOutAndRetry(notification)
         }
         notification.notify(project)
         recordPullFinished(succeeded = true)
     }
 
+    /**
+     * What still names a key the pull removed. The Java half: the *Unknown Flowable model key* inspection
+     * over the Flowable project, which otherwise only flags the files someone happens to open — run without
+     * the scope dialog *Run Inspection by Name* raises, into the Inspection Results window (a key behind a
+     * generated constant shows up as a compile error on its own). The model half, archives included: Atlas
+     * Findings analyses again, and its *Missing model refs* lists every model still naming a key nothing
+     * defines. EDT, from the balloon.
+     */
+    private fun findBrokenReferences() {
+        if (project.isDisposed) return
+        // null when the profile does not know it — a plugin that was not loaded; disabled is still run
+        val wrapper = InspectionProjectProfileManager.getInstance(project).currentProfile.getInspectionTool(BROKEN_KEY_INSPECTION, project)
+        if (wrapper != null) {
+            val dir = ReadAction.computeBlocking<PsiDirectory?, RuntimeException> {
+                ProjectModelScope.scopedRoot(project)?.let { PsiManager.getInstance(project).findDirectory(it) }
+            }
+            val scope = dir?.let(::AnalysisScope) ?: AnalysisScope(project)
+            RunInspectionIntention.rerunInspection(wrapper, InspectionManager.getInstance(project) as InspectionManagerEx, scope, null)
+        }
+        AtlasFindingsService.getInstance(project).refresh()
+        ToolWindowManager.getInstance(project).getToolWindow(AtlasFindingsToolWindowFactory.ID)?.activate(null)
+    }
+
     private fun notifyFailure(message: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.group()
             .createNotification("Pull from Flowable Design failed", message, NotificationType.ERROR)
-            .addAction(NotificationAction.createSimple("Configure…") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, ConnectionsConfigurable::class.java)
-                if (FlowableAtlasProjectSettings.getInstance(project).isDesignConfigured()) pullInBackground()
-            })
-            .notify(project)
+            .addAction(NotificationAction.createSimple("Configure…") { openEnvironmentsThenRetry() })
+        if (isUnauthorized(message)) addSignOutAndRetry(notification)
+        notification.notify(project)
         recordPullFinished(succeeded = false)
     }
 
@@ -260,19 +490,32 @@ class DesignPullService(private val project: Project) {
         if (succeeded) {
             // Workspace-local on purpose: a timestamp in the VCS-shared project settings would be noise.
             PropertiesComponent.getInstance(project)
-                .setValue(LAST_PULL_PROPERTY, System.currentTimeMillis().toString())
+                .setValue(lastPullKey(project), System.currentTimeMillis().toString())
         }
         project.messageBus.syncPublisher(AtlasEvents.TOPIC).designPullFinished(succeeded)
     }
 
     companion object {
-        private const val GROUP_ID = "Flowable Atlas"
 
         /** Epoch millis of the last successful pull, in [PropertiesComponent] (workspace-local). */
         const val LAST_PULL_PROPERTY = "flowable.atlas.lastDesignPull"
 
+        /** The short name `FlowableBrokenKeyInspection` is registered under in plugin.xml. */
+        internal const val BROKEN_KEY_INSPECTION = "FlowableBrokenKey"
+
+        /**
+         * Scoped per sub-project **and per Design connection**: "last pull" is a statement about one
+         * server, and reporting DEV's timestamp while the project is pointed at PROD is worse than
+         * reporting nothing.
+         */
+        private fun lastPullKey(project: Project): String = AtlasScopedKeys.scoped(
+            LAST_PULL_PROPERTY,
+            AtlasProjectRootService.getInstance(project).activeSubProject(),
+            AtlasConnectionSelection.scopingId(project, ConnectionKind.DESIGN),
+        )
+
         fun lastPullMillis(project: Project): Long? =
-            PropertiesComponent.getInstance(project).getValue(LAST_PULL_PROPERTY)?.toLongOrNull()
+            PropertiesComponent.getInstance(project).getValue(lastPullKey(project))?.toLongOrNull()
 
         fun getInstance(project: Project): DesignPullService = project.service()
 

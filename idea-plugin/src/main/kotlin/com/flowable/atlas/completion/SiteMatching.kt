@@ -19,11 +19,13 @@ object SiteMatching {
     /** The [ApiSite] for argument [argIndex] of [call], or null if the call isn't a catalog site. */
     fun siteAt(call: PsiMethodCallExpression, argIndex: Int): ApiSite? {
         if (argIndex < 0) return null
-        val method = call.resolveMethod() ?: return null
-        val declaring = method.containingClass ?: return null
-        return FlowableApiCatalog.sitesForMethod(method.name).firstOrNull {
-            it.argIndex == argIndex && isReceiver(declaring, it.receiverFqn)
-        }
+        // The name first, resolution only for a name the catalog knows: this runs for nearly every call
+        // argument in a Java file (reference provider, inspection), and resolving each one was the cost.
+        val name = call.methodExpression.referenceName ?: return null
+        val candidates = FlowableApiCatalog.sitesForMethod(name).filter { it.argIndex == argIndex }
+        if (candidates.isEmpty()) return null
+        val declaring = call.resolveMethod()?.containingClass ?: return null
+        return candidates.firstOrNull { isReceiver(declaring, it.receiverFqn) }
     }
 
     /**

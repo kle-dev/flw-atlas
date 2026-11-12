@@ -1,5 +1,7 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.graph.CheckCatalog
+
 /**
  * Shared formatting helpers for the Markdown artifacts — the ones an LLM reads.
  *
@@ -13,7 +15,7 @@ package com.flowable.atlas.render
  * [cap] is the token-budget primitive the summary was already built on (it lived there privately);
  * it is shared now so every artifact elides long lists the same recognisable way.
  */
-internal object Fmt {
+object Fmt {
 
     /**
      * The basename the CLI/plugin give this project's artifacts (`<name>.summary.md`, …), so a
@@ -21,8 +23,90 @@ internal object Fmt {
      * an agent reading `<name>.summary.md` inside a repo has the files, not the command line.
      * Mirrors `os.path.splitext(os.path.basename(...))[0] or "project"`.
      */
+    /**
+     * `610 models (3 files · 27 archives)` — how much of a project Atlas read. `stats.models` counts
+     * *files* and used to be printed as "3 models" for a repository whose 27 Design exports held 610.
+     */
+    /**
+     * The health headline every text surface leads with: `3 defects · 41 advice`. Reads the two counts
+     * `Findings.apply` writes into `stats`, and says nothing for a class that is at zero — "0 defects" is
+     * worth a line only when it is the whole story, and the caller decides that.
+     */
+    fun healthHeadline(st: Map<*, *>?): String {
+        val d = (st?.get("defects") as? Number)?.toInt() ?: 0
+        val a = (st?.get("advice") as? Number)?.toInt() ?: 0
+        val parts = ArrayList<String>()
+        if (d > 0) parts.add("$d defect" + if (d == 1) "" else "s")
+        if (a > 0) parts.add("$a advice")
+        return parts.joinToString(" · ")
+    }
+
+    /**
+     * The open findings the headline counts as defects, errors first and otherwise in check order — what
+     * a text surface names under that headline. Selecting by severity instead named only the errors, so a
+     * project whose defects were all warnings (a gateway with no way out) announced "2 defects" and then
+     * listed none of them.
+     */
+    fun openDefects(findings: List<Map<String, Any?>>): List<Map<String, Any?>> =
+        findings.filter { it["waived"] == null && CheckCatalog.kind(it["check"].toString()) == CheckCatalog.DEFECT }
+            .sortedBy { if (it["severity"] == "error") 0 else 1 }
+
+    /** `⚠` for an error, `·` for anything milder — the marks the overview's findings list uses. */
+    fun severityMark(f: Map<String, Any?>): String = if (f["severity"] == "error") "⚠" else "·"
+
+    /** The per-check count lines of a health block, defects and advice on separate lines. */
+    fun healthLines(checks: Map<String, Any?>): List<String> {
+        val perCheck = checks.entries.filter { it.key != "open" && it.key != "waived" }
+        return listOf(CheckCatalog.DEFECT, CheckCatalog.ADVICE).mapNotNull { kind ->
+            val own = perCheck.filter { CheckCatalog.kind(it.key) == kind }
+            if (own.isEmpty()) null
+            else (if (kind == CheckCatalog.DEFECT) "Defects — " else "Advice — ") +
+                own.joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" }
+        }
+    }
+
+    fun modelScale(st: Map<*, *>): String {
+        val n = (st["modelCount"] as? Number)?.toInt()
+        val files = (st["models"] as? Number)?.toInt() ?: 0
+        val archives = (st["archives"] as? Number)?.toInt() ?: 0
+        if (n == null) return "$files model files"
+        val where = if (archives > 0) "$files files · $archives archives" else "$files files"
+        return "$n models ($where)"
+    }
+
+    /** [root] as the absolute path it names: `.`, `sub/..` and a trailing slash all resolve to the directory. */
+    private fun canonicalRoot(root: java.io.File): java.io.File =
+        java.io.File(root.path.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize()
+
+    /**
+     * The project's name as every artifact shows it — the summary's and the overview's heading, the
+     * explorer's and the ER page's title. Normalized, because `File(".").absoluteFile.name` is `.`: a
+     * project analysed from inside itself was headed `.` and, worse, every such project shared the pages'
+     * browser storage. Unlike [artifactName] it keeps an archive's extension (`app.zip`): it names what was
+     * read, not a file to write.
+     */
+    fun projectName(root: java.io.File): String = canonicalRoot(root).name.ifEmpty { "project" }
+
+    /**
+     * What the generated pages key their browser storage on — accepted findings, open tabs, recents, ER
+     * drafts. Every page opened from `file://` shares one localStorage, and two projects can share a name
+     * (`app`, or every checkout of one repository), so the name alone let one project's unsaved decisions
+     * show up — and get exported — in another's. A hash of the absolute path, not the path itself: a page is
+     * mailed to reviewers, and the author's directory layout is not theirs to read.
+     */
+    fun projectKey(root: java.io.File): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(canonicalRoot(root).path.toByteArray(Charsets.UTF_8))
+            .take(8).joinToString("") { "%02x".format(it) }
+
+    /**
+     * The `<name>` of every `<name>.*` artifact: [projectName] with its last extension cut, as Python's
+     * `os.path.splitext` did — a leading-dot name (`.DEMO-solution`) has no extension. The CLI, the plugin
+     * and every artifact that names a sibling file call this one function, so a file never points at a
+     * sibling written under another name.
+     */
     fun artifactName(root: java.io.File): String {
-        val base = java.io.File(root.path.trimEnd('/')).absoluteFile.name
+        val base = projectName(root)
         val dot = base.lastIndexOf('.')
         val stem = if (dot < 0) base else {
             var allDots = true
@@ -30,6 +114,26 @@ internal object Fmt {
             if (allDots) base else base.substring(0, dot)
         }
         return stem.ifEmpty { "project" }
+    }
+
+    /** Every graph node's label by id — for naming the models an expression finding sits in. */
+    fun nodeLabels(result: Map<String, Any?>): Map<String, String> {
+        val nodes = ((result["graph"] as? Map<*, *>)?.get("nodes") as? List<*>).orEmpty()
+        return nodes.mapNotNull { it as? Map<*, *> }.mapNotNull { n ->
+            val id = n["id"] as? String ?: return@mapNotNull null
+            id to ((n["label"] ?: n["key"])?.toString() ?: id.substringAfter(':'))
+        }.toMap()
+    }
+
+    /**
+     * `` in `Order Process`, `Fulfilment` (+2 more) `` — where an expression or binding finding is: the
+     * models holding the expression, which is no file of its own. `""` for any other finding, so a
+     * reader is never sent to grep for the expression text.
+     */
+    fun findingModels(f: Map<String, Any?>, labels: Map<String, String>, n: Int = 3): String {
+        val ms = (f["models"] as? List<*>)?.map { it.toString() }?.takeIf { it.isNotEmpty() } ?: return ""
+        return "in " + ms.take(n).joinToString(", ") { "`${labels[it] ?: it.substringAfter(':')}`" } +
+            if (ms.size > n) " (+${ms.size - n} more)" else ""
     }
 
     /** `a, b, c … (+7 more)` — the artifacts' one and only list-truncation shape. */
@@ -57,6 +161,22 @@ internal object Fmt {
         val s = scalar(v)?.takeIf { it.isNotEmpty() } ?: return ""
         return if (code) " $label=`$s`" else " $label=$s"
     }
+
+    /**
+     * A code span on one line that survives what is inside it: whitespace collapsed (a multi-line sentry
+     * condition otherwise spills over a dozen lines and ends the list it sits in), and a fence one
+     * backtick longer than any run inside the value, padded, as CommonMark allows. Inside a span `<` is
+     * literal, so a URL carrying `<cookie …/>` no longer reaches the page as raw HTML.
+     */
+    fun code(s: String): String {
+        val one = s.replace(WS, " ").trim()
+        if ('`' !in one) return "`$one`"
+        val run = Regex("`+").findAll(one).maxOf { it.value.length }
+        val fence = "`".repeat(run + 1)
+        return "$fence $one $fence"
+    }
+
+    private val WS = Regex("\\s+")
 
     /** Join the non-empty parts of a line, so an omitted [opt] never leaves a double space. */
     fun join(vararg parts: String): String =
@@ -99,7 +219,7 @@ internal object Fmt {
      * the rest of the report prints them (integral values without a trailing `.0`), because the extract
      * tree carries JSON numbers as [Double].
      */
-    private fun scalar(v: Any?): String? = when (v) {
+    fun scalar(v: Any?): String? = when (v) {
         null -> null
         is Boolean -> if (v) "yes" else "no"
         is Double -> if (v.isFinite() && v == Math.floor(v)) v.toLong().toString() else v.toString()

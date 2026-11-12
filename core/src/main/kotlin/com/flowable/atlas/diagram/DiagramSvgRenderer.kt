@@ -1,5 +1,7 @@
 package com.flowable.atlas.diagram
 
+import com.flowable.atlas.diagram.SvgText.esc
+import com.flowable.atlas.diagram.SvgText.fmt
 import kotlin.math.max
 import kotlin.math.min
 
@@ -27,7 +29,12 @@ object DiagramSvgRenderer {
     private const val LANE_FILL = "#f7f9fa"
 
     /** Render [geometry] to an SVG document, or null when there is nothing to draw. */
-    fun render(geometry: DiagramGeometry): String? {
+    fun render(geometry: DiagramGeometry): String? = picture(geometry)?.svg
+
+    /** The drawing of [geometry] with every element's box as a hotspot — the shapes, in the model's own
+     *  coordinates, which are the SVG's viewBox coordinates. Edges are drawn clickable but are no hotspot:
+     *  a point on a line is close to a shape as often as not. */
+    fun picture(geometry: DiagramGeometry): Picture? {
         if (geometry.isEmpty()) return null
         val box = boundingBox(geometry) ?: return null
         val (minX, minY, maxX, maxY) = box
@@ -44,19 +51,21 @@ object DiagramSvgRenderer {
         sb.append(defs())
         sb.append("""<rect x="${fmt(viewX)}" y="${fmt(viewY)}" width="${fmt(viewW)}" height="${fmt(viewH)}" fill="#ffffff"/>""")
 
-        // Containers (pool/lane/stage/subprocess) first, then edges, then the remaining shapes on top,
-        // so connectors do not hide task/event silhouettes and labels stay readable.
+        // Containers (pool/lane/stage/subprocess/decision service) first, then edges, then the remaining
+        // shapes on top, so connectors do not hide task/event silhouettes and labels stay readable.
         for (s in geometry.shapes) if (isContainer(s.kind)) drawShape(sb, s)
         for (e in geometry.edges) drawEdge(sb, e)
         for (s in geometry.shapes) if (!isContainer(s.kind)) drawShape(sb, s)
 
         sb.append("</svg>")
-        return sb.toString()
+        val hotspots = geometry.shapes.filter { it.elementId.isNotBlank() }
+            .map { Picture.Hotspot(it.elementId, it.x, it.y, it.width, it.height) }
+        return Picture(sb.toString(), Picture.Kind.DIAGRAM, Picture.Box(viewX, viewY, viewW, viewH), hotspots)
     }
 
     private fun isContainer(k: ShapeKind): Boolean =
         k == ShapeKind.POOL || k == ShapeKind.LANE || k == ShapeKind.SUBPROCESS ||
-            k == ShapeKind.EVENT_SUBPROCESS || k == ShapeKind.CMMN_STAGE
+            k == ShapeKind.EVENT_SUBPROCESS || k == ShapeKind.CMMN_STAGE || k == ShapeKind.DMN_DECISION_SERVICE
 
     private fun defs(): String =
         """<defs>""" +
@@ -109,13 +118,22 @@ object DiagramSvgRenderer {
      */
     private fun drawShape(sb: StringBuilder, s: DiaShape) {
         sb.append("<g")
-        if (s.elementId.isNotBlank()) sb.append(""" data-el="${esc(s.elementId)}"""")
+        if (s.elementId.isNotBlank()) {
+            sb.append(""" data-el="${esc(s.elementId)}"""")
+            // Reachable by keyboard and named for a screen reader — the explorer's ego graph does the
+            // same; the diagram was mouse-only. The explorer maps Enter/Space on a shape to a click.
+            val name = listOfNotNull(s.label?.takeIf { it.isNotBlank() }, s.typeLabel).joinToString(" — ")
+            sb.append(""" tabindex="0" role="button"""")
+            if (name.isNotBlank()) sb.append(""" aria-label="${esc(name)}"""")
+        }
         s.icon?.let { sb.append(""" data-icon="${it.slug}"""") }
         sb.append(">")
         tooltip(sb, s)
         when {
-            s.kind.isEvent -> drawEvent(sb, s)
+            // a CMMN event listener is a ring with its type inside and its name below, like an event
+            s.kind.isEvent || s.kind == ShapeKind.CMMN_EVENT_LISTENER -> drawEvent(sb, s)
             s.kind.isGateway -> drawGateway(sb, s)
+            s.kind == ShapeKind.DMN_DECISION_SERVICE -> drawDecisionService(sb, s)
             s.kind == ShapeKind.DATA_OBJECT -> drawDataObject(sb, s)
             s.kind == ShapeKind.TEXT_ANNOTATION -> drawTextAnnotation(sb, s)
             s.kind == ShapeKind.POOL || s.kind == ShapeKind.LANE -> drawLane(sb, s)
@@ -123,6 +141,8 @@ object DiagramSvgRenderer {
                 drawCriterion(sb, s)
             s.kind == ShapeKind.CMMN_MILESTONE || s.kind == ShapeKind.DMN_INPUT_DATA -> drawStadium(sb, s)
             s.kind == ShapeKind.DMN_DECISION -> drawRect(sb, s, rx = 0.0)
+            s.kind == ShapeKind.DMN_BKM -> drawBkm(sb, s)
+            s.kind == ShapeKind.DMN_KNOWLEDGE_SOURCE -> drawKnowledgeSource(sb, s)
             else -> drawRect(sb, s, rx = 8.0)   // task / sub-process / call activity / stage / bkm / generic
         }
         sb.append("</g>")
@@ -145,8 +165,8 @@ object DiagramSvgRenderer {
             """<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${fmt(s.width)}" height="${fmt(s.height)}" """ +
                 """rx="${fmt(rx)}" ry="${fmt(rx)}" fill="$fill" stroke="$STROKE" stroke-width="${fmt(strokeW)}"$dash/>""",
         )
-        if (s.kind == ShapeKind.SUBPROCESS) {
-            // collapsed-subprocess [+] marker, bottom-centre
+        if (s.kind == ShapeKind.SUBPROCESS && DiaMarker.COLLAPSED in s.markers) {
+            // collapsed-subprocess [+] marker, bottom-centre — an expanded sub-process shows its children
             val bx = s.centerX - 7
             val by = s.y + s.height - 16
             sb.append("""<rect x="${fmt(bx)}" y="${fmt(by)}" width="14" height="14" fill="none" stroke="$STROKE" stroke-width="1.2"/>""")
@@ -154,7 +174,7 @@ object DiagramSvgRenderer {
         }
         taskIcon(sb, s)
         markers(sb, s)
-        centeredLabel(sb, s)
+        if (s.kind == ShapeKind.CMMN_STAGE) topLabel(sb, s) else centeredLabel(sb, s)
     }
 
     // ---- type glyphs ---------------------------------------------------------------------------
@@ -197,6 +217,46 @@ object DiagramSvgRenderer {
         }
     }
 
+    /**
+     * A DRD decision service: a rounded container with its name top-left, as DMN draws it, and the line
+     * between the decisions it exposes (above) and the ones it encapsulates (below). Drawn before the
+     * edges ([isContainer]): the information requirements between its decisions cross it, and an opaque
+     * box painted after them hid every one.
+     */
+    private fun drawDecisionService(sb: StringBuilder, s: DiaShape) {
+        sb.append(
+            """<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${fmt(s.width)}" height="${fmt(s.height)}" """ +
+                """rx="12" ry="12" fill="$LANE_FILL" stroke="$STROKE" stroke-width="1.5"/>""",
+        )
+        if (s.divider.size >= 2) {
+            val pts = s.divider.joinToString(" ") { "${fmt(it.x)},${fmt(it.y)}" }
+            sb.append("""<polyline points="$pts" fill="none" stroke="$STROKE" stroke-width="1.3"/>""")
+        }
+        topLabel(sb, s)
+    }
+
+    /** A business knowledge model: a box with its top-left and bottom-right corners cut off, as DMN draws it. */
+    private fun drawBkm(sb: StringBuilder, s: DiaShape) {
+        val c = min(14.0, min(s.width, s.height) / 4)
+        val r = s.x + s.width
+        val b = s.y + s.height
+        val d = "M${fmt(s.x + c)},${fmt(s.y)} L${fmt(r)},${fmt(s.y)} L${fmt(r)},${fmt(b - c)} L${fmt(r - c)},${fmt(b)} " +
+            "L${fmt(s.x)},${fmt(b)} L${fmt(s.x)},${fmt(s.y + c)} Z"
+        sb.append("""<path d="$d" fill="$FILL" stroke="$STROKE" stroke-width="1.5"/>""")
+        centeredLabel(sb, s)
+    }
+
+    /** A knowledge source: a page whose bottom edge is a wave, as DMN draws it. */
+    private fun drawKnowledgeSource(sb: StringBuilder, s: DiaShape) {
+        val wave = min(10.0, s.height / 5)
+        val r = s.x + s.width
+        val base = s.y + s.height - wave
+        val d = "M${fmt(s.x)},${fmt(s.y)} L${fmt(r)},${fmt(s.y)} L${fmt(r)},${fmt(base)} " +
+            "C${fmt(r - s.width / 4)},${fmt(base - wave)} ${fmt(s.x + s.width / 4)},${fmt(base + 2 * wave)} ${fmt(s.x)},${fmt(base)} Z"
+        sb.append("""<path d="$d" fill="$FILL" stroke="$STROKE" stroke-width="1.5"/>""")
+        centeredLabel(sb, s)
+    }
+
     private fun drawStadium(sb: StringBuilder, s: DiaShape) {
         val r = min(s.width, s.height) / 2
         sb.append(
@@ -234,7 +294,7 @@ object DiagramSvgRenderer {
             """<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}" fill="$FILL" stroke="$STROKE" """ +
                 """stroke-width="${fmt(strokeW)}"$dash/>""",
         )
-        if (s.kind == ShapeKind.EVENT_INTERMEDIATE && r > 4) {
+        if ((s.kind == ShapeKind.EVENT_INTERMEDIATE || s.kind == ShapeKind.CMMN_EVENT_LISTENER) && r > 4) {
             sb.append(
                 """<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r - 3)}" fill="none" stroke="$STROKE" """ +
                     """stroke-width="1.3"$dash/>""",
@@ -310,6 +370,22 @@ object DiagramSvgRenderer {
         textBlock(sb, s.centerX, topY, lines, "middle")
     }
 
+    /**
+     * A stage's name belongs in its top-left corner, where CMMN and Design both put it — not in its
+     * middle. A case plan model is drawn *before* the plan items (see [isContainer]), so a centred label
+     * is either hidden behind the items painted over it or, in a stage tall enough to clear them, left
+     * floating in empty space that reads as a stray caption rather than the container's name. The same
+     * holds for a DMN decision service around its decisions.
+     */
+    private fun topLabel(sb: StringBuilder, s: DiaShape) {
+        val label = s.label?.takeIf { it.isNotBlank() } ?: return
+        // Clear the type glyph when there is one; [taskIcon] occupies the same corner.
+        val tx = s.x + if (s.icon != null) 26.0 else 10.0
+        val lines = wrap(label, maxChars(s.width - (tx - s.x) - 8), 2)
+        if (lines.isEmpty()) return
+        textBlock(sb, tx, s.y + 6, lines, "start")
+    }
+
     private fun belowLabel(sb: StringBuilder, s: DiaShape) {
         val label = s.label?.takeIf { it.isNotBlank() } ?: return
         val lines = wrap(label, maxChars(max(s.width, 90.0)), 2)
@@ -355,12 +431,27 @@ object DiagramSvgRenderer {
 
     private fun maxChars(widthPx: Double): Int = max(4, (widthPx / 6.6).toInt())
 
+    /**
+     * [text] in lines of at most [maxChars], broken at spaces — and inside a word that is longer than a
+     * line on its own. Task names are often one long token: an expression (`${vars:get(root.someReference)}`)
+     * or a camelCase name. Placed whole, such a token ran far past its shape, over its neighbours' labels.
+     */
     private fun wrap(text: String, maxChars: Int, maxLines: Int): List<String> {
         val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.isEmpty()) return emptyList()
         val lines = ArrayList<String>()
         var cur = ""
-        for (w in words) {
+        for (word in words) {
+            var w = word
+            if (w.length > maxChars) {
+                // Its pieces are never re-joined with a space; only the last one shares a line with what follows.
+                if (cur.isNotEmpty()) { lines.add(cur); cur = "" }
+                while (w.length > maxChars) {
+                    val cut = breakAt(w, maxChars)
+                    lines.add(w.substring(0, cut))
+                    w = w.substring(cut)
+                }
+            }
             cur = when {
                 cur.isEmpty() -> w
                 cur.length + 1 + w.length <= maxChars -> "$cur $w"
@@ -370,27 +461,26 @@ object DiagramSvgRenderer {
         if (cur.isNotEmpty()) lines.add(cur)
         if (lines.size <= maxLines) return lines
         val kept = lines.take(maxLines).toMutableList()
-        kept[maxLines - 1] = truncate(kept[maxLines - 1], max(1, maxChars - 1))
+        // The `…` goes on however short the last kept line is: a label cut after a line that happens to
+        // fit (`Reference)}` before a dropped `now please`) otherwise reads as complete. Splitting long
+        // tokens makes more labels run past the limit, so this is no longer the rare case.
+        kept[maxLines - 1] = kept[maxLines - 1].take(maxChars - 1).trimEnd() + "…"
         return kept
+    }
+
+    /**
+     * Where to cut a word longer than [max]: after the last `.`, `(`, `:`, `_`, `-`, `/` or `,`, or at the
+     * last camelCase hump, in the back half of the line — so `root.someReference` breaks at the dot and
+     * `setMetadataOfAll` before `Of` — and at [max] itself when the word has no such place.
+     */
+    private fun breakAt(w: String, max: Int): Int {
+        for (i in max downTo maxOf(1, max / 2)) {
+            val before = w[i - 1]
+            if (before in ".(:_-/," || (before.isLowerCase() && w.getOrNull(i)?.isUpperCase() == true)) return i
+        }
+        return max
     }
 
     private fun truncate(s: String, maxChars: Int): String =
         if (s.length <= maxChars) s else s.take(max(1, maxChars - 1)).trimEnd() + "…"
-
-    /** Locale-free number formatting: round to 2 decimals, drop a trailing `.0`. */
-    private fun fmt(v: Double): String {
-        val r = Math.round(v * 100.0) / 100.0
-        return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString()
-    }
-
-    private fun esc(s: String): String = buildString {
-        for (c in s) when (c) {
-            '&' -> append("&amp;")
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '"' -> append("&quot;")
-            '\'' -> append("&#39;")
-            else -> append(c)
-        }
-    }
 }

@@ -62,15 +62,26 @@ object XmlDiExtractor {
             val tag = resolvedTag(ref) ?: ""
             val f = resolvedFacts(ref)
             val resolved = DiagramIcons.resolve(f.stencil, f.flowableType, tag, f.eventDef)
+            val kind = DiagramKinds.shapeKind(tag, notation, f.stencil)
+            // BPMN DI says whether a sub-process is drawn expanded (its children laid out inside it) or
+            // collapsed (`isExpanded="false"`: a box with a [+]); the marker used to be painted on every
+            // sub-process, so an expanded one said "collapsed" over its own children.
+            val collapsed = kind == ShapeKind.SUBPROCESS &&
+                shape.attr("isExpanded")?.equals("false", ignoreCase = true) == true
+            val markers = if (collapsed) f.markers + DiaMarker.COLLAPSED else f.markers
             // CMMN DI references the planItem, but everything parsed from the model (plan tree,
             // parameters, script bodies) is keyed by the *definition* — emit the definition's id so
             // the explorer joins diagram ↔ details by id, not by a name heuristic.
             val elementId = planItemDefRef[ref] ?: ref
+            // A decision service's DI says where its output decisions end and its encapsulated ones begin.
+            val divider = if (kind != ShapeKind.DMN_DECISION_SERVICE) emptyList() else
+                shape.findChild("DMNDecisionServiceDividerLine")?.findChildren(names.waypoint)?.mapNotNull { wp ->
+                    val px = wp.attr("x")?.toDoubleOrNull() ?: return@mapNotNull null
+                    val py = wp.attr("y")?.toDoubleOrNull() ?: return@mapNotNull null
+                    Point(px, py)
+                }.orEmpty()
             shapes.add(
-                DiaShape(
-                    elementId, DiagramKinds.shapeKind(tag, notation, f.stencil), x, y, w, h, resolvedName(ref),
-                    resolved.icon, resolved.typeLabel, f.markers,
-                ),
+                DiaShape(elementId, kind, x, y, w, h, resolvedName(ref), resolved.icon, resolved.typeLabel, markers, divider),
             )
         }
 
@@ -115,10 +126,19 @@ object XmlDiExtractor {
             markers += if (mi.attr("isSequential") == "true") DiaMarker.MI_SEQUENTIAL else DiaMarker.MI_PARALLEL
         }
         if (el.findChild("standardLoopCharacteristics") != null) markers += DiaMarker.LOOP
-        // BPMN draws a non-interrupting boundary/event-subprocess start with a dashed outline
-        if (el.attr("cancelActivity") == "false") markers += DiaMarker.NON_INTERRUPTING
+        // BPMN draws a non-interrupting boundary event (`cancelActivity`) and a non-interrupting
+        // event-sub-process start (`isInterrupting`) with a dashed outline
+        if (el.attr("cancelActivity") == "false" || el.attr("isInterrupting") == "false") markers += DiaMarker.NON_INTERRUPTING
+        // `triggeredByEvent` is what makes a <subProcess> an event sub-process — BPMN's own definition. Only
+        // a Design export says so with a stencil as well, so plain BPMN XML drew a solid "Sub-process".
+        // A CMMN `<eventListener>` is typed by its `flowable:eventType`; Design draws the variable and
+        // signal ones from stencils of their own, and so does the painter.
+        val stencil = ext?.childText("stencilid")
+            ?: if (el.tag == "subProcess" && el.attr("triggeredByEvent") == "true") "EventSubProcess"
+            else if (el.tag == "eventListener") el.attr("eventType")?.trim()?.ifEmpty { null }?.let { "${it}EventListener" }
+            else null
         return ElementFacts(
-            stencil = ext?.childText("stencilid"),
+            stencil = stencil,
             flowableType = el.attr("type"),
             eventDef = el.children.firstOrNull { it.tag.endsWith(EVENT_DEF_SUFFIX) }?.tag,
             markers = markers,

@@ -1,6 +1,7 @@
 package com.flowable.atlas.render
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -107,6 +108,168 @@ class ProcessFlowOrderTest {
         val lines = render(process)
         assertTrue(lines.single { it.contains("`orphan`") }.contains("not reachable"))
         assertTrue(lines.none { it.contains("`work`") && it.contains("not reachable") })
+    }
+
+    /**
+     * A boundary event has no incoming flow, so it used to be a seed of the walk — listed right after the
+     * start event, before the task it hangs on, without naming that task, and "not reachable" when no flow
+     * left it either.
+     */
+    @Test
+    fun aBoundaryEventFollowsItsHostAndSaysWhichItIs() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "userTasks" to listOf(mapOf("id" to "idle"), mapOf("id" to "t1", "name" to "Work"), mapOf("id" to "esc", "name" to "Escalate")),
+            "events" to listOf(
+                mapOf("id" to "b1", "type" to "boundaryEvent", "def" to "timer", "value" to "PT1H",
+                    "attachedTo" to "t1", "cancelActivity" to "false"),
+                mapOf("id" to "b2", "type" to "boundaryEvent", "def" to "error", "attachedTo" to "t1"),
+                mapOf("id" to "b3", "type" to "boundaryEvent", "def" to "error", "attachedTo" to "idle"),
+                mapOf("id" to "start", "type" to "startEvent"),
+                mapOf("id" to "end", "type" to "endEvent"),
+                mapOf("id" to "end2", "type" to "endEvent"),
+            ),
+            "flows" to listOf(flow("start", "t1"), flow("t1", "end"), flow("b1", "esc"), flow("esc", "end2")),
+        )
+        val lines = render(process)
+        val order = elementOrder(lines)
+        assertEquals(listOf("start", "t1", "b1", "b2"), order.take(4))
+        assertTrue(order.toString(), order.indexOf("b1") < order.indexOf("esc"))
+        val b1 = lines.single { it.contains("`b1`") && it.startsWith("- 🔔") }
+        assertTrue(b1, b1.contains("on `t1` (non-interrupting)"))
+        assertFalse(b1, b1.contains("not reachable"))
+        // no flow leaves b2, but its host is reached — and an interrupting event is the default, unmarked
+        val b2 = lines.single { it.contains("`b2`") }
+        assertTrue(b2, b2.contains("on `t1`") && !b2.contains("non-interrupting") && !b2.contains("not reachable"))
+        // the host's `next:` is still its real flows
+        assertTrue(lines.single { it.startsWith("- 👤") && it.contains("`t1`") }.endsWith("next: `end`"))
+        // a host no flow reaches stays after the walk, and what hangs on it is as unreachable as it is
+        assertEquals(listOf("idle", "b3"), order.takeLast(2))
+        assertTrue(lines.single { it.contains("`b3`") }.contains("not reachable"))
+    }
+
+    @Test
+    fun anEventSubProcessStartsOnItsEventAndFollowsTheMainFlow() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "subProcesses" to listOf(mapOf("id" to "onCancel", "name" to "On cancel", "type" to "subProcess", "eventSubProcess" to true)),
+            "userTasks" to listOf(mapOf("id" to "undo", "parent" to "onCancel"), mapOf("id" to "work")),
+            "events" to listOf(
+                mapOf("id" to "cancelStart", "type" to "startEvent", "def" to "message", "value" to "cancel", "parent" to "onCancel"),
+                mapOf("id" to "start", "type" to "startEvent"),
+                mapOf("id" to "end", "type" to "endEvent"),
+            ),
+            "flows" to listOf(flow("cancelStart", "undo"), flow("start", "work"), flow("work", "end")),
+        )
+        val lines = render(process)
+        assertEquals(listOf("start", "work", "end", "onCancel", "cancelStart", "undo"), elementOrder(lines))
+        val sub = lines.single { it.contains("`onCancel`") && it.startsWith("- ▣") }
+        assertTrue(sub, sub.contains("starts on its event") && !sub.contains("not reachable"))
+    }
+
+    /**
+     * A loop stalls the walk at its join, and the event sub-process — parked because no flow enters it —
+     * was the next thing in the frontier: on a real project it opened in the middle of the main flow.
+     */
+    @Test
+    fun anEventSubProcessWaitsForTheMainFlowEvenWhenThatLoops() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "subProcesses" to listOf(mapOf("id" to "onCancel", "type" to "subProcess", "eventSubProcess" to true)),
+            "userTasks" to listOf(mapOf("id" to "undo", "parent" to "onCancel"), mapOf("id" to "work"), mapOf("id" to "fix")),
+            "gateways" to listOf(mapOf("id" to "join", "type" to "exclusiveGateway"), mapOf("id" to "ok", "type" to "exclusiveGateway")),
+            "events" to listOf(
+                mapOf("id" to "cancelStart", "type" to "startEvent", "def" to "signal", "parent" to "onCancel"),
+                mapOf("id" to "start", "type" to "startEvent"),
+                mapOf("id" to "end", "type" to "endEvent"),
+            ),
+            "flows" to listOf(
+                flow("cancelStart", "undo"),
+                flow("start", "join"), flow("join", "work"), flow("work", "ok"),
+                flow("ok", "end", "\${done}"), flow("ok", "fix"), flow("fix", "join"),
+            ),
+        )
+        assertEquals(listOf("start", "join", "work", "ok", "end", "fix", "onCancel", "cancelStart", "undo"),
+            elementOrder(render(process)))
+    }
+
+    /** An embedded sub-process runs start to end before the flow leaves it; its contents used to open the process. */
+    @Test
+    fun anEmbeddedSubProcessListsItsContentsBeforeWhatFollowsIt() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "subProcesses" to listOf(mapOf("id" to "review", "type" to "subProcess", "eventSubProcess" to false)),
+            "userTasks" to listOf(mapOf("id" to "check", "parent" to "review"), mapOf("id" to "archive")),
+            "events" to listOf(
+                mapOf("id" to "aStart", "type" to "startEvent", "parent" to "review"),
+                mapOf("id" to "aEnd", "type" to "endEvent", "parent" to "review"),
+                mapOf("id" to "start", "type" to "startEvent"),
+                mapOf("id" to "end", "type" to "endEvent"),
+            ),
+            "flows" to listOf(
+                flow("aStart", "check"), flow("check", "aEnd"),
+                flow("start", "review"), flow("review", "archive"), flow("archive", "end"),
+            ),
+        )
+        assertEquals(listOf("start", "review", "aStart", "check", "aEnd", "archive", "end"), elementOrder(render(process)))
+    }
+
+    @Test
+    fun aMultiInstanceLineSaysParallelOrSequentialAndWhatItCounts() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "userTasks" to listOf(mapOf("id" to "a"), mapOf("id" to "b")),
+            "multiInstance" to listOf(
+                mapOf("activity" to "a", "sequential" to "true", "cardinality" to "3"),
+                mapOf("activity" to "b", "sequential" to "false", "collection" to "\${items}",
+                    "completionCondition" to "\${nrOfCompletedInstances >= 2}"),
+            ),
+        )
+        val lines = render(process)
+        assertTrue(lines.toString(), lines.contains("    - 🔁 Multi-instance (sequential) · cardinality: `3`"))
+        assertTrue(lines.toString(), lines.contains("    - 🔁 Multi-instance (parallel) · collection: `\${items}` · " +
+            "completes when: `\${nrOfCompletedInstances >= 2}`"))
+    }
+
+    /**
+     * A call activity's mappings say what each source is. A literal `sourceExpression` printed bare read as
+     * a variable being copied, an expression sat outside a code span, and a mapping without a source read
+     * `None→draft`.
+     */
+    @Test
+    fun aCallActivitysMappingsTellAVariableFromALiteralAndAnExpression() {
+        fun io(dir: String, source: String?, target: String, expression: Boolean = false) = mapOf(
+            "element" to "call", "dir" to dir, "kind" to dir, "source" to source, "target" to target,
+        ) + (if (expression) mapOf("expression" to true) else emptyMap())
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "callActivities" to listOf(mapOf("id" to "call", "calledElement" to "DEMO-sub")),
+            "ioParameters" to listOf(
+                io("in", "orderId", "subOrderId"), io("in", "outreach", "category", expression = true),
+                io("in", "\${mail.id}", "mailId", expression = true), io("in", null, "draft"),
+                io("out", "total", "total"),
+            ),
+        )
+        val line = render(process).single { it.contains("`call`") }
+        assertTrue(line, line.endsWith("→ process `DEMO-sub` in(orderId→subOrderId) in(\"outreach\"→category) " +
+            "in(`\${mail.id}`→mailId) in(→draft) out(total→total)"))
+    }
+
+    /** A service task that only assigns variables says which, as a case's Init-Variables task does. */
+    @Test
+    fun aServiceTaskThatAssignsVariablesSaysWhatItAssigns() {
+        val process = mapOf(
+            "key" to "p", "file" to "p.bpmn",
+            "serviceTasks" to listOf(mapOf("id" to "init", "name" to "Reset", "delegateExpression" to "\${demoInit}")),
+            "ioParameters" to listOf(
+                mapOf("element" to "init", "dir" to "in", "kind" to "variableMapping", "source" to "false",
+                    "target" to "approved", "type" to "boolean"),
+                // an input parameter of another kind of task is not an assignment and stays off the line
+                mapOf("element" to "init", "dir" to "in", "kind" to "inputParameter", "source" to "x", "target" to "y"),
+            ),
+        )
+        val line = render(process).single { it.contains("`init`") }
+        assertTrue(line, line.endsWith("Reset → \${demoInit} set(approved=false)"))
     }
 
     @Test

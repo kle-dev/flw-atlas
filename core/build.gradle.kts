@@ -25,6 +25,9 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // A failure's message in the console, not only in the HTML report: a failing golden names the line
+    // and the JSON path that differ (GoldenFiles), which is no help one click away from the build log.
+    testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 
     // Files this module's tests compare but that live OUTSIDE its source sets, so Gradle cannot infer
     // them: the sync tests (ClaudeTemplateSyncTest, ChangelogSyncTest) read them straight off the repo
@@ -35,20 +38,28 @@ tasks.test {
     // CHANGELOG.md is generated from its <change-notes>: editing the notes must re-run the comparison.
     //
     // The same reasoning covers the documentation gates: SiteDocsCoverageTest reads `site/pages/*` and
-    // the sources those pages must stay in step with, SiteDemoProjectTest reads the sample project, and
-    // DocsVersionSyncTest reads FEATURES.md. Without them declared, renaming every `guessedVars`
-    // mention in site/pages/checks.md left `test` UP-TO-DATE and `build` reported success on a page that
-    // no longer documented the check (verified the same way as above).
+    // the sources those pages must stay in step with, and SiteDemoProjectTest reads the sample project.
+    // Without them declared, renaming every `guessedVars` mention in site/pages/checks.md left `test`
+    // UP-TO-DATE and `build` reported success on a page that no longer documented the check (verified
+    // the same way as above). README.md is here because its check count and CLAUDE.md import line are
+    // held to the code, and cli/build.gradle.kts because the frontend tasks `check` runs are held to
+    // the development page.
     inputs.files(
         rootProject.file("CLAUDE.template.md"),
         rootProject.file("CHANGELOG.md"),
-        rootProject.file("FEATURES.md"),
+        rootProject.file("README.md"),
         rootProject.file("idea-plugin/src/main/resources/META-INF/plugin.xml"),
         rootProject.file("idea-plugin/src/main/resources/messages/FlowableAtlasBundle.properties"),
         rootProject.file("cli/src/main/kotlin/com/flowable/atlas/cli/Main.kt"),
+        rootProject.file("cli/build.gradle.kts"),
         rootProject.file("build.gradle.kts"),
         rootProject.fileTree("site/pages"),
         rootProject.fileTree("site/flowable-demo"),
+        // PluginIconsSyncTest: the generated icon set must match TYPE_ICONS / --c-* (scripts/plugin-icons.mjs).
+        rootProject.fileTree("idea-plugin/src/main/resources/icons"),
+        // WaiverWriterParityTest runs the explorer's waiver block through this script straight off the
+        // repo; explorer.js, which it reads, is a main resource and already an input.
+        rootProject.file("scripts/waiver-selftest.mjs"),
     ).withPropertyName("syncedRepoFiles").optional()
 }
 
@@ -67,6 +78,8 @@ val updateGoldens by tasks.registering(Test::class) {
         includeTestsMatching("com.flowable.atlas.graph.GoldenExtractionTest")
         includeTestsMatching("com.flowable.atlas.render.SummaryRendererTest")
         includeTestsMatching("com.flowable.atlas.render.OverviewRendererTest")
+        includeTestsMatching("com.flowable.atlas.render.ChangesRendererTest")
+        includeTestsMatching("com.flowable.atlas.render.FlowStoriesTest")
         includeTestsMatching("com.flowable.atlas.render.ClaudeTemplateSyncTest")
         // CHANGELOG.md is generated from the plugin descriptor's <change-notes>; re-baseline it here
         // together with the other generated repo files instead of hand-editing it.

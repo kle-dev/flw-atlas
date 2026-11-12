@@ -26,11 +26,14 @@ class LiquibaseChangelogExtractorTest : BasePlatformTestCase() {
     private var tempDir: Path? = null
 
     override fun tearDown() {
+        // Read before super.tearDown(): UsefulTestCase clears the test's own fields there, so reading it in
+        // the finally below found null every time and each run left its ZIPs in $TMPDIR.
+        val dir = tempDir
         try {
             super.tearDown()
         } finally {
-            tempDir?.let { dir ->
-                runCatching { Files.walk(dir).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
+            dir?.let {
+                runCatching { Files.walk(it).sorted(Comparator.reverseOrder()).forEach { p -> Files.deleteIfExists(p) } }
             }
         }
     }

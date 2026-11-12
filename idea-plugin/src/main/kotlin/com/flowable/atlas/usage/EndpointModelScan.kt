@@ -1,6 +1,7 @@
 package com.flowable.atlas.usage
 
 import com.flowable.atlas.index.FlowableIndex
+import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.parsing.JavaParser
 import com.flowable.atlas.parsing.RestCallScanner
 import com.intellij.openapi.application.ReadAction
@@ -12,12 +13,11 @@ import com.intellij.openapi.vfs.VirtualFile
  * endpoint counterpart to [ModelReferenceScan] (which links Java symbols). Every URL-carrying model
  * field counts, not just an HTTP service task's `requestUrl`: see [RestCallScanner.URL_FIELDS].
  *
- * Path matching reuses the exact, tested `:core` [JavaParser.matchRest] used by the Atlas graph, so the
- * IDE navigation and the generated explorer agree on what "a model calls this endpoint" means. Only
- * clean (segment-suffix) matches count; the loose shared-last-segment matches are dropped to keep
- * gutter navigation free of false links. On top of the path, the model's `requestMethod` is compared
- * to the endpoint verb **when both are concrete** — so a GET task no longer lights up a POST-only
- * handler on the same path — while an unknown verb on either side falls back to a path-only match.
+ * Matching is the exact, tested `:core` [JavaParser.matchRest] used by the Atlas graph — path and verb —
+ * so the IDE navigation and the generated explorer agree on what "a model calls this endpoint" means.
+ * Only clean (the endpoint's path spelled out at the end of the URL, same verb) matches count; wrong-verb
+ * hits are dropped to keep gutter navigation free of false links. A verb that is unknown on either side
+ * (no `requestMethod`, an expression, a handler mapped to `ANY`) falls back to a path-only match.
  */
 object EndpointModelScan {
 
@@ -25,41 +25,52 @@ object EndpointModelScan {
     fun pathMatches(url: String, path: String): Boolean =
         JavaParser.matchRest(url, listOf(mapOf("path" to path))).any { it["loose"] != true }
 
-    /** True when [call] hits [endpoint]: a clean path match and (when both verbs are concrete) same verb. */
-    fun calls(call: RestCallScanner.RestRef, endpoint: EndpointPsi.Endpoint): Boolean =
-        meaningful(endpoint) && pathMatches(call.url, endpoint.path) && verbMatches(call.method, endpoint.verb)
-
-    /** Model verb vs endpoint verb: only discriminates when both are known (endpoint ≠ `ANY`, model set). */
-    private fun verbMatches(modelMethod: String?, endpointVerb: String): Boolean =
-        endpointVerb == "ANY" || modelMethod.isNullOrBlank() || modelMethod.equals(endpointVerb, ignoreCase = true)
+    /** True when [call] hits [endpoint]: a clean path match and (when both verbs are concrete) same verb —
+     *  among [all] the project's endpoints, so a handler that spells out more of the path wins as Spring
+     *  routes it, and a variable handler is not credited with the call as well. */
+    fun calls(call: RestCallScanner.RestRef, endpoint: EndpointPsi.Endpoint, all: List<EndpointPsi.Endpoint> = emptyList()): Boolean {
+        if (!meaningful(endpoint)) return false
+        val candidates = (all + endpoint).distinct().filter(::meaningful)
+        return JavaParser.matchRest(call.url, candidates.map { mapOf("path" to it.path, "http" to it.verb) }, call.method)
+            .any { it["loose"] != true && it["path"] == endpoint.path && it["http"] == endpoint.verb }
+    }
 
     /** A path worth matching — a blank / root `/` endpoint would match everything, so it is ignored. */
     private fun meaningful(endpoint: EndpointPsi.Endpoint): Boolean =
         endpoint.path.isNotBlank() && endpoint.path != "/"
 
     /** Cheap cached-index check: does any indexed model call [endpoint]? Drives the gutter pass. */
-    fun anyModelCalls(index: FlowableIndex, endpoint: EndpointPsi.Endpoint): Boolean =
-        index.restCalls.any { calls(it, endpoint) }
+    fun anyModelCalls(index: FlowableIndex, endpoint: EndpointPsi.Endpoint, all: List<EndpointPsi.Endpoint> = emptyList()): Boolean =
+        index.restCalls.any { calls(it, endpoint, all) }
 
-    /** Offset ranges in [text] of every model URL that hits one of [endpoints] — for Find Usages. */
-    fun usageRanges(text: String, endpoints: List<EndpointPsi.Endpoint>): List<IntRange> =
-        RestCallScanner.scan(text)
-            .filter { c -> endpoints.any { calls(RestCallScanner.RestRef(c.url, c.method), it) } }
+    /** Offset ranges in [text] — the content of the model file [fileName] — of every model URL that hits
+     *  one of [endpoints], for Find Usages. What counts as a call is the `:core` parsers' answer
+     *  ([RestCallScanner.calls]), the same the explorer draws. */
+    fun usageRanges(
+        text: String, fileName: String, endpoints: List<EndpointPsi.Endpoint>, modelType: String? = null,
+        all: List<EndpointPsi.Endpoint> = emptyList(),
+    ): List<IntRange> =
+        RestCallScanner.calls(text, fileName, modelType)
+            .filter { c -> endpoints.any { calls(RestCallScanner.RestRef(c.url, c.method), it, all) } }
             .map { it.range }
 
     /**
-     * Model files (and archive entries) calling one of [endpoints]. Runs its own read action, so it must
-     * be called off the EDT. Returns empty for an empty endpoint list.
+     * Model files (and archive entries) calling one of [endpoints]. Takes the read lock only to list the
+     * files, and must be called off the EDT. Returns empty for an empty endpoint list.
      */
-    fun affectedModelFiles(project: Project, endpoints: List<EndpointPsi.Endpoint>): List<VirtualFile> {
-        if (endpoints.none { meaningful(it) }) return emptyList()
-        return ReadAction.compute<List<VirtualFile>, RuntimeException> {
-            if (project.isDisposed) return@compute emptyList()
-            val found = LinkedHashSet<VirtualFile>()
-            ModelReferenceScan.forEachModelText(project) { vf, text ->
-                if (usageRanges(text, endpoints).isNotEmpty()) found.add(vf)
-            }
-            found.toList()
+    fun affectedModelFiles(project: Project, endpoints: List<EndpointPsi.Endpoint>): List<VirtualFile> =
+        affectedModelUsages(project, endpoints).keys.toList()
+
+    /** The same files, each with the offset of its first calling URL — what the gutter click opens at. */
+    fun affectedModelUsages(project: Project, endpoints: List<EndpointPsi.Endpoint>): Map<VirtualFile, Int> {
+        if (endpoints.none { meaningful(it) }) return emptyMap()
+        val all = ReadAction.computeBlocking<List<EndpointPsi.Endpoint>, RuntimeException> { EndpointPsi.projectEndpoints(project) }
+        val found = LinkedHashMap<VirtualFile, Int>()
+        ModelReferenceScan.forEachModelTextUnlocked(project) { vf, text ->
+            val first = usageRanges(text, vf.name, endpoints, ModelFiles.typeOf(vf)?.parserKey, all).minOfOrNull { it.first }
+                ?: return@forEachModelTextUnlocked
+            found.putIfAbsent(vf, first)
         }
+        return found
     }
 }

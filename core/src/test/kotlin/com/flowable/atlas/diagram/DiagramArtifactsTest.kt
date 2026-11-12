@@ -46,10 +46,26 @@ class DiagramArtifactsTest {
     }
 
     @Test
+    fun keysThatClashKeepEveryDiagram() {
+        val out = DiagramArtifacts.render(
+            resultWith(
+                node("process", "DEMO-onboarding", "DEMO-onboarding.bpmn20.xml"),
+                node("process", "demo-onboarding", "DEMO-onboarding.bpmn20.xml"),   // differs only in case
+                node("process", "DEMO-onboarding", "DEMO-onboarding.bpmn20.xml"),   // the same key again
+            ),
+            root,
+        )
+        assertEquals(
+            listOf("DEMO-onboarding.svg", "process-demo-onboarding.svg", "process-DEMO-onboarding-2.svg"),
+            out.keys.toList(),
+        )
+    }
+
+    @Test
     fun skipsNonDiagramTypesModelsWithoutDiAndUnreadableFiles() {
         val out = DiagramArtifacts.render(
             resultWith(
-                node("form", "DEMO-form", "DEMO-onboarding.bpmn20.xml"),   // non-diagram type
+                node("form", "DEMO-form", "DEMO-onboarding.bpmn20.xml"),   // a form whose file is no form
                 node("process", "DEMO-nolayout", "DEMO-nolayout.bpmn"),     // no DI
                 node("process", "DEMO-missing", "does-not-exist.bpmn"),     // unreadable
             ),
@@ -115,5 +131,53 @@ class DiagramArtifactsTest {
     fun emptyOrGraphlessResultYieldsNothing() {
         assertTrue(DiagramArtifacts.render(emptyMap(), root).isEmpty())
         assertTrue(DiagramArtifacts.render(mapOf("graph" to mapOf("nodes" to emptyList<Any?>())), root).isEmpty())
+    }
+
+    @Test
+    fun drawsFormsAndDecisionTablesToo() {
+        // the same pictures the explorer and the IDE show: a form's wireframe, a decision table without a layout
+        val formDir = java.io.File(javaClass.classLoader.getResource("formlayout")!!.toURI())
+        val forms = DiagramArtifacts.render(resultWith(node("form", "DEMO-onboarding-form", "DEMO-onboarding.form")), formDir)
+        assertEquals(setOf("DEMO-onboarding-form.svg"), forms.keys)
+        assertTrue(forms.values.single().contains("data-el="))
+        val dmnDir = java.io.File(javaClass.classLoader.getResource("dmntable")!!.toURI())
+        val tables = DiagramArtifacts.render(resultWith(node("decision", "DEMO-eligibility", "DEMO-eligibility.dmn")), dmnDir)
+        assertEquals(setOf("DEMO-eligibility.svg"), tables.keys)
+    }
+
+    /** A model that is gone loses its drawing; the folder keeps whatever is not an SVG, and goes when it is empty. */
+    @Test
+    fun writeKeepsTheFolderToExactlyTheseDrawings() {
+        val dir = Files.createTempDirectory("atlas-diagrams").toFile()
+        try {
+            val drawings = File(dir, "DEMO.diagrams")
+            DiagramArtifacts.write(drawings, mapOf("a.svg" to "<svg/>", "gone.svg" to "<svg/>"))
+            val update = DiagramArtifacts.write(drawings, mapOf("a.svg" to "<svg/>"))
+            assertEquals(listOf("a.svg"), update.written.map { it.name })
+            assertEquals(listOf("gone.svg"), update.removed.map { it.name })
+            assertEquals(setOf("a.svg"), drawings.list()!!.toSet())
+            // A key that changed only its case is drawn under its new spelling, on any file system — a
+            // case-sensitive one kept the old file beside the new one.
+            DiagramArtifacts.write(drawings, mapOf("A.svg" to "<svg/>"))
+            assertEquals(setOf("A.svg"), drawings.list()!!.toSet())
+
+            File(drawings, "notes.txt").writeText("mine")
+            DiagramArtifacts.write(drawings, emptyMap())
+            assertEquals("a file of the user's keeps the folder", setOf("notes.txt"), drawings.list()!!.toSet())
+            File(drawings, "notes.txt").delete()
+            File(drawings, "b.svg").writeText("<svg/>")
+            DiagramArtifacts.write(drawings, emptyMap())
+            assertTrue("nothing left to draw, nothing left", !drawings.exists())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    /** A project given as one model file labels it by its name; its bytes are the file itself. */
+    @Test
+    fun aSingleModelFileIsItsOwnRoot() {
+        val file = File(root, "DEMO-onboarding.bpmn20.xml")
+        val out = DiagramArtifacts.render(resultWith(node("process", "DEMO-onboarding", file.name)), file)
+        assertEquals(setOf("DEMO-onboarding.svg"), out.keys)
     }
 }

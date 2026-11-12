@@ -2,14 +2,14 @@ package com.flowable.atlas.hint
 
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
-import com.flowable.atlas.settings.FlowableAtlasSettings
+import com.intellij.codeInsight.hints.declarative.HintFormat
 import com.intellij.codeInsight.hints.declarative.InlayHintsCollector
 import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
 import com.intellij.codeInsight.hints.declarative.InlayTreeSink
 import com.intellij.codeInsight.hints.declarative.InlineInlayPosition
 import com.intellij.codeInsight.hints.declarative.SharedBypassCollector
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
@@ -26,20 +26,16 @@ import com.intellij.psi.PsiLiteralExpression
  * Matched by **value** (every literal, not only catalogued API call sites) because that is where these
  * keys actually appear — a generated/hand-written constants class. The name comes straight from the
  * model index ([FlowableIndex.keysOfType]); an action whose name is missing or equal to its key adds
- * nothing and gets no hint. Toggle under Settings → Editor → Inlay Hints → Values → "Action names",
- * or Settings → Tools → Flowable Atlas → Inline Hints ([FlowableAtlasSettings.showActionNameInlay]).
+ * nothing and gets no hint. Toggle under Settings → Editor → Inlay Hints → Values → "Action names" — the IDE's page is the one
+ * switch; a second one in Atlas' own settings meant two boxes the daemon had to honour separately.
  */
 class FlowableActionNameInlayProvider : InlayHintsProvider {
 
     override fun createCollector(file: PsiFile, editor: Editor): InlayHintsCollector? {
-        if (!FlowableAtlasSettings.getInstance().showActionNameInlay) return null
         val service = file.project.service<FlowableModelIndexService>()
         // Never build the (blocking) index from a hint pass. If it isn't ready yet, kick a background
         // build and show nothing this pass; hints appear once the index exists.
-        val index = service.cachedOrNull() ?: run {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return null
-        }
+        val index = service.cachedOrRequest() ?: return null
         val names = actionNames(index)
         return if (names.isEmpty()) null else Collector(names)
     }
@@ -47,10 +43,14 @@ class FlowableActionNameInlayProvider : InlayHintsProvider {
     private class Collector(private val names: Map<String, String>) : SharedBypassCollector {
         override fun collectFromElement(element: PsiElement, sink: InlayTreeSink) {
             if (element !is PsiLiteralExpression) return
+            // a test fixture's literal is not a key the inspections judge — and not one to label either
+            if (element.containingFile?.virtualFile?.path?.let(ModelPaths::isTestSource) == true) return
             val name = (element.value as? String)?.let { names[it] } ?: return
             sink.addPresentation(
                 InlineInlayPosition(element.textRange.endOffset, relatedToPrevious = true),
-                hasBackground = true,
+                // HintFormat.default is the boxed inlay the `hasBackground = true` overload used to mean;
+                // that overload is deprecated in favour of passing the format itself.
+                hintFormat = HintFormat.default,
             ) { text(name) }
         }
     }

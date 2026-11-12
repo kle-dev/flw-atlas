@@ -10,51 +10,94 @@ registers languages and file types.
 
 | | |
 |---|---|
-| Installs on | IntelliJ IDEA **2026.1** and later (`since-build 261`, `until-build 299.*`) |
-| Verified against | **2026.2** — the Atlas Hub footer states this, and flags a running IDE outside the range in either direction |
-| Compiled against | The 2026.1 SDK, so one artifact loads on later versions |
+| Installs on | IntelliJ IDEA **2026.2** and later (`since-build 262`, `until-build 299.*`) |
+| Verified against | **2026.2** — what `verifyPlugin` actually runs against; a bug report submitted from Atlas states the running IDE's branch and whether it is inside that range |
+| Compiled against | The 2026.2 SDK — the floor, the compile target and the verified branch are one and the same, so one artifact loads on every later version |
 | Requires | Java 21+; the Java, XML and JSON platform modules |
 | Uses if present | The embedded browser (JCEF), for the explorer tab and the SSO login. Without it the explorer opens in an external browser instead |
 | Distribution | A ZIP attached to each [release](https://github.com/kle-dev/flw-atlas/releases/latest), signed when a signing key is configured. Not on the JetBrains Marketplace, but the release publishes an `updatePlugins.xml`, so adding it as a plugin repository puts Atlas in the IDE's normal update flow — see [getting started](../../start/#the-intellij-plugin). `until-build` stays deliberately wide, so an IDE upgrade cannot make the plugin vanish |
 
 ## Actions
 
-All actions live under **Tools → Flowable Atlas**, and are also reachable through *Find Action*.
-**None of them has a keyboard shortcut** — the Hub is the plugin's visible surface, and there are no
-context-menu or main-toolbar entries.
+All actions live under **Tools → Flowable Atlas**, and are also reachable through *Find Action*. The
+Hub is the plugin's visible surface, so there are no main-toolbar entries and only one shortcut:
+*Go to Model…* and *Find in Models…* are the same search with two endings, named after the platform's
+own pair: *Go to File* takes you to one place and closes, *Find in Files* leaves a list. `⇧⏎` in the
+popup switches from the first to the second without retyping.
+
+**Go to Model…** is `Ctrl+Alt+Shift+M` (`⌥⇧⌘M` on macOS), because it is the one action that competes
+with Shift-Shift for the hand; rebind it under *Settings → Keymap → Plugins → Flowable Atlas*. A
+right-click on a **folder, a model file, an archive or a `.json`** in the Project view offers *Open in
+Atlas Explorer* (on a model), *Compare Model with Archive* and *Generate Atlas Explorer…* — the actions
+that are about the thing under the cursor — and nothing on any other file. On a folder of another of the
+repository's Flowable projects than the active one, the last reads *Generate Atlas Explorer for
+apps/billing…*, and makes that project the active one before it generates — the switch the Hub's picker
+makes, so that project's settings apply. In the editor, *Copy Model Key*
+and *Compare Model with Archive* sit together at the bottom of the context menu, behind one separator. The `.json` is in that list for the comparison: a model
+generated into the project folder is a `.json` that counts as a model only inside a Design `*-models/`
+folder, which is precisely the file the comparison is wanted on.
+
+Every action's own text is the whole sentence — what *Find Action*, a balloon and a Hub button say. Where
+the context already says half of it, the entry is shorter: under **Generate** the entries read *Atlas
+Explorer…*, *Model Constants*, *Liquibase Changelogs → From Data Object…*, and in a Hub block whose title
+is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opener is **Open Atlas …**.
 
 | Action | Also in |
 |---|---|
-| Atlas Hub | — |
-| Open Atlas Explorer | Atlas Hub toolbar |
-| Open Expression Playground | — |
-| Search Models… | Atlas Hub, *Model Index* |
-| Generate → Generate Atlas Explorer… | Atlas Hub toolbar and link |
-| Generate → Generate Model Constants… | Atlas Hub link |
-| Generate → Liquibase → From Data Object… | — |
-| Generate → Liquibase → From App(s)… | — |
-| Generate → Data-Object DTOs → From Data Object… | — |
-| Generate → Data-Object DTOs → From App(s)… | — |
-| Pull from Flowable Design | Atlas Hub toolbar and link |
-| Configure Design Connection… | Atlas Hub link |
-| Rebuild Model Index | Atlas Hub link |
+| Open Atlas Hub | — |
+| Open Atlas Findings | The Atlas Hub's health row, *3 defects · 41 advice*; before any analysis it reads *Analyze findings* and runs one first |
+| Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
+| Open Atlas ER Diagram Designer | The Atlas Hub's ⋮. Only while the project generates the [ER diagram page](../../erd/); opens the newest `*.erd.html`, and generates one into the output folder first when there is none |
+| Open Atlas Playground | Atlas Hub toolbar and its *Playground* block |
+| Go to Model… | Atlas Hub toolbar and the model count in its header; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
+| Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |
+| Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
+| Compare Model with Archive | Project view context menu, on a model file or a `.json`; editor context menu, which is how an entry inside a `.bar`/`.zip` is reached. Its text names the direction it is about to take — *Compare with Model in Archive* on a file in the project, *Compare with Model in Project* on an entry in an archive |
+| Open in Atlas Explorer | Project view context menu, on a model file — the model's page in the newest generated explorer; on a model the index does not hold, a balloon says why: outside the active Flowable project, in a build folder, or no readable key. The editor offers the same step as an intention on a key, and on a Java class, method or REST handler a model uses |
+| Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu, where on another Flowable project's folder it names that project and switches to it first |
+| Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull. Refreshes the explorer pages in place when the explorer is all that is selected, else the whole selected set in the output folder — also when the selection has no page and only its CLAUDE.md, graph or guide are there. Its icon is the platform's *build* hammer, so it cannot be mistaken for the explorer tab's *Reload* beside it |
+| Generate Model Constants | Atlas Hub ⋮ menu |
+| Generate Liquibase Changelog from Data Object… | — |
+| Generate Liquibase Changelogs from Apps… | — |
+| Generate DTOs from Data Object… | — |
+| Generate DTOs from Apps… | — |
+| Switch Design Environment… | Atlas Hub, *Design Pull* block |
+| Pull from Flowable Design | Atlas Hub, *Design Pull* block — the button names the environment |
+| Switch Work Environment… | Atlas Hub, *Playground* block; the playground itself |
+| Open Environment in Browser | Atlas Hub ⋮ menu. A submenu: every address in the catalog — Design, Work, Control, Hub — grouped by environment, one item each, opened in the browser. It follows neither the pull's nor the playground's environment: it asks, every time |
+| Manage Environments… | Atlas Hub ⋮ menu, its attention line when an environment was removed, and the *Design Pull* block while none exists |
+| Rebuild Model Index | Atlas Hub ⋮ menu, and beside the model count in its header |
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
+A question nobody has to answer before they can go on is a balloon, not a dialog: *Open Atlas Explorer*
+with no page to open says so and offers *Generate Atlas Explorer…*, and every *Show Details* — a
+generator log, the index's per-type breakdown — opens as a read-only editor tab, whatever its length.
+The balloons come in two groups, so one can be silenced without the other — see
+[Notifications](#notifications).
+
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
-Action*: the Hub's *Refresh*; the explorer tab's *Regenerate*, *Reload* and *Open in Browser*; the
-Expression Playground's dialect toggles, scope selector, *Evaluate Against App*, *Show Sub-Expression
-Values* and settings popup; and the Script Playground's language and context selectors with *Load Script
-from Model…*.
+Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Back*, *Forward*, *Reload* and *Open in Browser*; the
+Atlas Playground's dialect toggles, scope selector, *Evaluate Against Work* (Ctrl+Enter) and *Show
+Sub-Expression Values* — each disabled, not hidden, in the other dialect — and its gear menu with *Stack
+Panels*, *Expression Settings…* and *Manage Environments…*; and the Script Playground's language and
+context selectors with *Load Script from Model…*, *Load Example…* and a gear holding *Stack Panels*.
 
 ## Tool windows
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | Flowable Project · Model Index · Atlas Explorer · Flowable Design · footer. See [the Hub](../#the-atlas-hub) |
-| **Flowable Expressions** | Bottom stripe (secondary) | Two tabs: *Expressions* and *Scripts*. See [the playgrounds](../#the-playgrounds) |
+| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · a health row with the last analysis's defects and advice, a link into Atlas Findings · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key, opens the explorer page, or removes one entry or all) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
+| **Atlas Findings** | Bottom stripe | Every finding of the project from the same in-process analysis the explorer is built from, as a tree: *Defects*, then — when asked for through the eye — *Advice* and *Accepted*, each by check; an advice finding wears the information icon rather than a warning. A status line says how current the analysis is and offers *Analyze Again* once a model changed since; generating the explorer brings it up to date without a second analysis. A detail pane beside the tree explains the selected check — why it matters, what to do, a link to the checks page — and opens the finding's model in the explorer. Double-click or Enter opens the finding at its line, else at its element or what it names; one with no file of its own (a variable, a service operation, an expression several models hold) opens in the model it lives in, asking which when there are several. *Accept…* asks for a reason (an empty one is refused) and writes one rule per selected finding to the `waivers.json` beside the explorer the analysis came from (the output folder's, unless the page was generated elsewhere), the file the explorer's Save writes, then regenerates the explorer pages beside it, or analyses again when there are none. Swing, so it works under Remote Development and without JCEF |
+| **Atlas Playground** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
-The generated explorer also opens as an editor tab with two tabs of its own: **Atlas Explorer** (the
-page, in the embedded browser) and **Flowable Expressions**.
+The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);
+its toolbar opens the Atlas Playground. Inside the IDE the page can also write back: when
+you [accept a finding](../../explorer/#accepting-a-finding), **Save to waivers.json** writes it beside the
+report through the IDE's own file system, so it shows up in the Git tool window like any other edit, and
+then regenerates the explorer so the counts, badges and the CI gate follow the decision. A balloon names
+the file and opens it. Every generation from the IDE reads that `waivers.json` back, exactly as the CLI
+does, and prefills the `by` of a new rule with the project's git identity (`git config user.name`). In a
+plain browser the same button offers the file as a download instead.
 
 ## Inspections
 
@@ -62,12 +105,18 @@ page, in the embedded browser) and **Flowable Expressions**.
 
 | Inspection | Where | Default | Flags |
 |---|---|---|---|
-| Unknown Flowable model key | Java | on, warning | A key literal — or a constant reference — at a Flowable API call site that matches no indexed key of that site's type. Quick fix to the nearest real key (literals only) |
-| Unknown Flowable model key (model XML) | BPMN / CMMN / DMN | on, warning | The same, for cross-reference attributes and extension-element text. Values containing `${` or `#{` are skipped |
+| Unknown Flowable model key | Java | on, warning | A key literal — or a constant reference — at a Flowable API call site that matches no indexed key of that site's type. Quick fixes: replace the literal with the nearest real key, or change the constant's value to it — in the constants class, with a preview saying so |
+| Unknown Flowable model key (model XML) | BPMN / CMMN / DMN | on, warning | The same, for cross-reference attributes and extension-element text, with the quick fix on both. Values containing `${` or `#{` are skipped, and so are the models the platform ships itself, when the site expects their type (the `_flowableMailEvent` event, the `F07-deactivateUser` form). A form key may name a page and a data-object key a master-data model, as at run time. In a monorepo the message names the sub-project whose index the key is unknown in |
+| Unknown Flowable model key (model JSON) | Forms, pages, data objects, services, events, channels, actions, documents, apps, agents | on, warning | The same, at the reference sites Ctrl+click follows — a component's subform, data object, service, action, process or case; a data object's backing service; an app's models; a channel's event — the report's *missing reference* defect, in the editor. A `{{binding}}` is skipped; a form key may name a page and a data-object key a master-data model, as at run time. Quick fix to the nearest key |
+| Unknown Flowable message, signal or task name | Java | on, warning | A message (`startProcessInstanceByMessage`, `messageEventReceived`) or signal (`signalEventReceived`) that no model declares — a `<message name>`, a `<signal name>`, or a bare `messageRef`/`signalRef`, which the engine takes as the name — or the `signalRef` of a case's signal event listener, which the same call reaches. A task key or activity id only when the chain names its model (`processDefinitionKey("…")`), never with `or()` or a `…Like` pattern. Silent when a model computes such a name at run time, when a process is known only from Design JSON, and in test sources. Quick fix to the nearest name |
 | Invalid Flowable data-object value field | Java | on, warning | A `value("field", …)` that is not an input parameter of the operation named earlier in the same fluent chain. Quick fix to the closest valid field |
-| Liquibase column not defined in Flowable model | XML | on, warning | A changelog column that maps to no field of the backing `.service` model |
-| Unknown Flowable expression function or namespace | Expressions | on, warning | An unknown namespace, function or `flw.*` member, and dialect misuse. Quick fixes: replace with the nearest name, or add it to the project allowlist |
+| Liquibase column not defined in Flowable model | XML | on, warning | A changelog column that maps to no field of the backing `.service` model, unless a later change set — in this file or another of the project's changelogs — drops or renames it; the message names that service Quick fix: open the backing service model at its key; in a monorepo the message names the sub-project whose index was consulted |
+| Unknown Flowable expression function or namespace | Expressions | on, warning | An unknown namespace, function or `flw.*` member, dialect misuse, and a `variables:` call with a number of arguments the engine cannot bind. Quick fixes: replace with the nearest name, or add it to the project allowlist (not for the argument count, which is an engine rule) |
 | Expression root is not a known variable, bean, or root object | Expressions | **off**, weak warning | A backend root identifier that is not a catalogued engine root, an indexed variable, or a name used elsewhere in the project |
+
+Every inspection carries a description in *Settings → Editor → Inspections → Flowable*, and every fix a
+family name that says what it does (*Replace with a known model key*), so *Fix all* groups fixes by kind, not by
+the value they insert.
 
 Two things are validated outside the inspection system. **Expression syntax** is painted by an
 annotator, because the daemon's inspections do not run inside the playground's editor field. And Atlas
@@ -77,29 +126,45 @@ engine rather than from the file.
 
 ## Gutter icons
 
-Four, all on Java code:
+Four, each with a mark of its own so the gutter says which relationship it is — three on Java code, the
+fourth on Java code and inside model files. Each is its own switch under *Settings → Editor → General →
+Gutter Icons*, named *Flowable: Java referenced by models*, *Flowable: bot used by actions*, *Flowable:
+REST handler called by models* and *Flowable: model picture*:
 
-| Icon on | Goes to |
-|---|---|
-| A class or method referenced by a model | The models that reference it ("Flowable Models") |
-| A `BotService` implementation | The `.action` models that use that bot |
-| A Spring REST handler | The models that call that endpoint |
-| A model-key literal or resolvable constant | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
+| Icon | On | Goes to |
+|---|---|---|
+| a link | A class or method a model uses — a method called on one of its class's Spring beans (`${orderService.place(…)}`), a class whose bean is an expression's root or whose name a `class` attribute spells out | The models that use it ("Flowable Models"), each opened at the reference itself — the `${bean…}` in a deployment XML, not its first line. A method of the same name on another class is not marked |
+| a bot | A `BotService` implementation | The `.action` models that use that bot, each opened at its `botKey` |
+| a globe | A Spring REST handler of a controller (not a `@FeignClient` or `@HttpExchange` client, not a test source) | The models that call that endpoint — a REST button, an HTML component, a REST data source in use, a service operation (with its base URL), an HTTP task; not a link — each opened at the calling URL. A call marks only the handler that spells out most of its path, with its verb (a button that names none is a GET) |
+| a route | A model-key literal or resolvable constant in Java; inside a model file, the file's own key and every reference to a process, case, decision or form (`calledElement`, `caseRef`, `processRef`, a form's `processReference`, `flowable:formKey`, …) | That model, opened beside its picture — shown only when a picture actually exists |
+
+The tooltip says what the mark knows: how many actions use the bot, which verbs and paths the models call,
+which model's diagram opens (*Process diagram: DEMO-P001*). A click that finds no model any more — one
+changed since the index was built — says so beside the mark instead of doing nothing. When several models sit behind a mark, a chooser
+lists each with its type's icon, its key and its file — `app.zip → processes/x.bpmn` for a packed model — and
+typing filters by key or name.
 
 ## Navigation
 
 | Gesture | From | To |
 |---|---|---|
-| Ctrl/⌘-click | A key literal or key-argument constant at a Flowable API site | The model file(s) declaring it, narrowed to that site's types |
-| Ctrl/⌘-click | `operation("…")` / `value("…", …)` | The backing `.service` model |
-| Ctrl/⌘-click | A cross-reference attribute in model XML | The referenced model |
-| Ctrl/⌘-click | Any literal whose value is a known key | Its model — **only** with *Recognize model keys anywhere in code* enabled |
-| Ctrl-Q / F1 | A key literal | Key, model type, name, backing table for a service or data object, and the file |
-| Find Usages | A Java method, field or class | Every model that references it by name, inside `${…}` / `#{…}` or a `class` / `delegateExpression` / `expression` attribute |
+| Ctrl/⌘-click | A key literal or key-argument constant at a Flowable API site | The key's declaration in the model file(s) declaring it — the `id` of the process, the `"key"` of the form — narrowed to that site's types |
+| Ctrl/⌘-click | A message, signal, task key, activity id or form outcome at a Flowable API site — `signalEventReceived("…")`, `taskDefinitionKey("…")` | Its declaration in every model that has it — `<signal name>`, `<userTask id>` — or only in the model the chain names (`processDefinitionKey("…")`). Not a variable name, which no model declares |
+| Ctrl/⌘-click | `operation("…")` / `value("…", …)` | The backing `.service` model, at its key |
+| Ctrl/⌘-click | A cross-reference in model XML — an attribute (`calledElement`, `formKey`, `caseRef`, …) or an extension element's text (`eventType`, `channelKey`, `sla-definition-key`, …), CDATA-wrapped or not | The referenced model, at its key |
+| Ctrl/⌘-click | A model key in a JSON model — a data object's backing service or dictionary, a form component's subform, data object, service, action, process or case, a document's forms, an action's form, an app's models, an agent's tools, a channel's event | The referenced model, at its key. The sites are the ones the report draws edges for, from one shared catalog, and an unknown key there is flagged by *Unknown Flowable model key (model JSON)* |
+| Ctrl/⌘-click | The root of a backend expression that names a Spring bean — `orderService` in `${orderService.process(x)}`, injected in a model or in the playground | The project class that declares a bean of that name — a stereotype (named explicitly or after the class), the type a `@Bean` method returns, a Spring Data repository; Ctrl-Q then shows that class's documentation. A root that is a variable resolves to nothing and stays unmarked, even beside a class of that name |
+| Ctrl/⌘-click | The key of `environment.getProperty('…')` / `propertyConfigurationService.getProperty("…")` in a backend expression | The line of every `application*.properties` / `application*.yml` of the project that sets it, one per profile, matched in Spring's relaxed form. Test profiles are left out; a property set nowhere resolves to nothing |
+| Click | An element of a process, case, decision, form or page in the model editor's picture — outlined, with a hand pointer, while the pointer is over it | The element's declaration in the text beside it, so the Structure tool window follows; the focus stays on the picture. Ctrl/⌘ + wheel zooms about the pointer, a drag pans, Ctrl/⌘ + `=`, `-`, `0` zoom in, out and fit, and the toolbar adds *Actual Size* and shows the zoom in percent. A double click on a subform, or ⌘-click on macOS and Ctrl-click elsewhere, opens the form it embeds |
+| Ctrl/⌘-click | Any literal whose value is a known key | Its model, at its key — **only** with *Recognize model keys anywhere in code* enabled |
+| Ctrl-Q / F1 | A key literal in Java; a cross-reference or the file's own key inside a model file | A documentation card: key and type, the name, the backing table for a service or data object, the project-relative file (archive → entry for a packed model) |
+| Ctrl-Q / F1 | A message, signal, task key, activity id or form outcome in Java | What it is and which model declares it — *Signal · in DEMO-P001* — with that model's file |
+| Find Usages | A model's own key, in its file — the `id` of a process, case or decision, the `"key"` of a JSON model | Every model that references it (a call activity's `calledElement`, a `formKey`, a service mapping, an extension element's text) and every Java call site that names it at a Flowable API position |
+| Find Usages | A Java method, field or class | Every model that uses it: a method or field called or read on one of its class's beans inside `${…}` / `#{…}`, a class as an expression's bean or by its exact FQN in a `class` attribute |
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
 | Find Usages | A Spring REST handler | The models whose HTTP task, REST button, service operation or REST data source calls that URL |
-| Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations |
-| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, and a live full-text search over model content showing the matched line |
+| Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations — plus every named element inside a model: user tasks, activities, variables, messages, signals, an event's payload fields, a form's or page's fields and outcomes, each opening its model at the declaration — a variable a form or page binds at the `{{…}}` that names it — and labelled *User task · in DEMO-P001*. A model row carries its type's icon, a bot row the bot icon, and opens the file at the key's declaration |
+| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, the elements inside the models (ranked under the models, shown with their model in grey), and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier; the typed fragment is highlighted even mid-key, and the row's tooltip holds type, name and archive path. `⇧⏎` hands the whole result set to the Find tool window as a list that stays open |
 
 Two more behaviours belong here even though they are not navigation. Renaming a Java symbol that models
 reference raises a warning with *Show affected models*, because the refactoring engine cannot rewrite an
@@ -107,6 +172,10 @@ expression string. And anything models reference is reported as **implicitly use
 offering to delete code a process depends on.
 
 ## Code completion
+
+Every item carries an icon: a model key its type's icon (the explorer's glyph in the explorer's colour), an
+operation the method icon, an input value the parameter icon, a variable, message or outcome the platform's
+variable, constant and property icons, a Liquibase column or table the database icons.
 
 | Where | Completes |
 |---|---|
@@ -117,7 +186,7 @@ offering to delete code a process depends on.
 | Member positions | DMN decision variables, event payload names, master-data field names |
 | Model XML | Cross-reference attribute values, extension-element text, and event payload names from the sibling `eventType` |
 | Liquibase changelogs | Column names and table names from the backing service, plus the matching Liquibase column type ranked first |
-| Expressions | Root objects, namespaces, functions, `flw.*` members (including nested), your own custom functions, variables and form fields, and — after `bean.` — that Java class's methods and getter-derived properties |
+| Expressions | Root objects, namespaces, functions, `flw.*` members (including nested), your own custom functions and values, variables — in a form or page, the ones it binds, never its component ids — and, after `bean.`, that Java class's methods and getter-derived properties |
 | Script bodies | The root objects the selected script context binds, and their members **with parameter signatures** |
 
 The catalog covers `org.flowable.*` and `com.flowable.*` across process, case, decision, form, event,
@@ -128,18 +197,27 @@ covers every service that extends it.
 
 ## Inlay hints
 
-*Settings → Editor → Inlay Hints → Values.* Both on by default.
+*Settings → Editor → Inlay Hints → Values.* All on by default, and that page is the only switch.
 
-- **Data object table names** — the backing table beside an otherwise opaque data-object key.
-- **Action names** — the action's display name beside its key.
+- **Data object table names** — the backing table beside an otherwise opaque data-object key, in Java.
+- **Action names** — the action's display name beside its key, in Java.
+- **Model names** — inside a BPMN, CMMN or JSON model, the referenced model's name beside the key that
+  names it: after `calledElement`, `formKey`, an `eventType`'s text, a data object's backing service, a
+  form component's subform. Listed once per language (XML, JSON).
 
 ## Intentions
 
 *Alt-Enter*, category **Flowable**:
 
 - **Generate Java DTO for this Flowable data object** — on a data-object key.
-- **Open in Expression Playground** — on any injected expression, pre-filled with its dialect and its
-  model's scope.
+- **Open in Atlas Playground** — on any injected expression, pre-filled with its dialect, its
+  model's scope and the instance kind the model implies (process for BPMN, case for CMMN).
+- **Open in Atlas Explorer** — on a model key in Java (a literal or a constant at a Flowable API site;
+  any literal equal to a known key with *Recognize model keys anywhere in code*), and inside a model file
+  on a cross-reference or on the file's own key: opens the newest generated explorer inside the IDE on
+  that model's page — who references it, what it uses, its findings, its diagram. On the name of a Java
+  class, method or REST handler that a model uses, it opens that class's, method's or endpoint's page
+  instead; on a class no model knows it is not offered. Offers to generate an explorer when there is none.
 
 ## Settings
 
@@ -149,11 +227,9 @@ Applies to every project.
 
 | Option | Default |
 |---|---|
-| List extra completion domains at an empty prefix | on |
-| Inline hint: data object table names | on |
-| Inline hint: action names | on |
-| Recognize model keys anywhere in code | **off** |
 | Also index raw Flowable Design workspace sources | **off** |
+| Recognize model keys anywhere in code | **off** |
+| List extra completion domains at an empty prefix | on |
 
 ### → Expressions
 
@@ -163,47 +239,111 @@ Applies to every project.
 | Treat `${…}` / `#{…}` in Java string literals as Flowable expressions | **off** |
 | Project allowlist — a table of entries typed *Namespace*, *Function* or *Grounding root* | empty |
 | Discover project custom functions | on |
-| Customisation source (file or folder) | empty = auto-discover |
+| Customization source (a file or folder, relative to the active Flowable project) — only while discovery is on | empty = auto-discover |
 
 The allowlist is the same store the Alt-Enter quick fix writes to. See
 [the allowlist](../../expressions/#the-allowlist).
 
 ### → Generation
 
+What Atlas writes into the project, and where: which artifacts *Generate Atlas Explorer…* produces, and
+the folder a Design pull lands in. The three generators with shapes of their own are child pages — on one
+page they were four screens of fields with no hierarchy. Every folder field on these pages is project-relative, and its
+browse button writes the chosen folder relative to the active Flowable project (an absolute path only
+for a folder outside it). Unticking every artifact is not a way to generate nothing: the selection
+falls back to the explorer HTML. Generating into the output folder also drops a `.gitignore` there that keeps
+the generated artifacts out of the repository and nothing else — `waivers.json` and any file of yours stay
+visible — the same file the CLI writes. With *Diagrams (SVG)* ticked, a regeneration also removes the
+drawings of models that no longer exist from `<name>.diagrams/`.
+
+
 | Option | Default |
 |---|---|
 | Atlas output folder | `atlas-output` |
-| Artifacts: Explorer HTML · Summary · Overview · Graph JSON · CLAUDE.md · Diagrams (SVG) | Explorer HTML only |
+| Artifacts: Explorer HTML · ER diagram designer (HTML) · Summary · Overview · Graph JSON · CLAUDE.md · Playwright guide for Flowable Work (+ project map) · Diagrams (SVG). The [Playwright guide](../../artifacts/#playwrightmd-driving-flowable-work-in-a-browser) is `<project>.playwright.md`, written with its project map `<project>.playwright-map.md`; with it chosen, the generated CLAUDE.md says when to read it, and with Graph JSON chosen too, its lookups query the graph beside it. The Summary and the Overview point only at the artifacts chosen with them, and say how to generate the others. The CLAUDE.md names no CLI jar — one model is read in the Overview — and counts on the Summary, the Overview and the Graph JSON only when all three are chosen with it. The [ER diagram designer](../../erd/) is `<project>.erd.html`, linked to the explorer when both are chosen; it opens in the same editor tab, whose *Regenerate* rewrites it | Explorer HTML only |
+| Pulled models folder — where *Pull from Flowable Design* writes the app archives; which environment and which apps is chosen in the Atlas Hub | `flowable-models` |
+
+#### → Generation → Model Constants
+
+| Option | Default |
+|---|---|
+| Model constants class (FQCN) — validated as you type; renaming it leaves the file generated under the old name where it is, no longer kept in sync, and says so | blank → `flowable.FlowableModelKeys` |
+| Keep the generated class in sync | on |
+| Constant identifier: *The key — P_0001* / *The name — ORDER_FULFILMENT* / *Name and key — ORDER_FULFILMENT_P_0001* | name and key |
+| Constant format: *A class of String constants per model type* / *An enum per model type* | class |
+
+The identifier and the format are stored per Flowable project; the class name and keeping it in sync are
+shared by the whole repository, and the page's scope line says so. The class itself holds the keys of the
+Flowable project it was generated in, and is kept in sync only while that project is the active one: picking
+another in the Atlas Hub leaves it as it is, and the page says which project it follows. Generating it by
+hand leaves *Keep the generated class in sync* as you set it.
+
+#### → Generation → Liquibase
+
+| Option | Default |
+|---|---|
 | Liquibase output folder | `src/main/resources/liquibase` |
-| Liquibase file name pattern (`{key} {name} {service} {servicePrefix} {serviceNo} {table}`) | `{key}` |
-| Liquibase rename (regex find / replace) | empty |
+| File name pattern (`{key} {name} {service} {servicePrefix} {serviceNo} {table}`) | `{key}` |
+| Rename (regex find / replace) | empty |
+
+#### → Generation → Data-Object DTOs
+
+| Option | Default |
+|---|---|
 | DTO package | `flowable.dto` |
-| DTO class name suffix | `Dto` |
-| DTO class name pattern (`{name} {shortName} {key} {app} {suffix}`) | `{name}{suffix}` |
-| DTO sub-package per app | off |
-| Model constants class (FQCN) | blank → `flowable.FlowableModelKeys` |
-| Keep the generated constants class in sync | on |
-| Constant identifier: key / name / name and key | name and key |
-| Constant format: class of `String`s, or enum | class |
+| Class name suffix | `Dto` |
+| Class name pattern (`{name} {shortName} {key} {app} {suffix}`) | `{name}{suffix}` |
+| Rename (regex find / replace) | empty |
+| Sub-package per app | off |
 
-### → Connections
+### → Environments
 
-**Flowable Design** — server URL; username and password *or* an access token (with a *Create Token…*
-dialog and a link to Design's own token page); *Refresh Workspaces*, which doubles as the connection
-test; workspace; apps; target folder (default `flowable-models`, validated to be inside the project).
+The DEV/QA/UAT/PROD list, **shared by every project in this IDE**. A tree of environments on the left,
+the selected node's form on the right; `+` adds an environment or a connection, the copy button clones
+the selected environment with its connections (it is disabled on a connection), the share button puts an
+environment into — or takes it out of — the project's committed file, and the arrows reorder — the list is
+a pipeline, and alphabetical would put PROD second. *Apply* with something missing — a name, a URL —
+selects the environment or connection it is about, beside the message saying what is missing.
 
-**Flowable Inspect** — app base URL, username, password, and *Detect from project*. Shared with the
-Expression Playground's backend evaluation.
+| Node | Fields |
+|---|---|
+| Environment | Name · *Ask before pulling from or evaluating against this environment* (**Protected**) |
+| Flowable Design | Server URL · authentication (username and password *or* an access token, with a *Create Token…* dialog and a link to Design's own token page) · *Test Connection* |
+| Flowable Work | Server URL · *Detect from Project* · username · password · browser session (*Sign in via Browser…*, *Paste Session…*) · *Test Connection* |
+| Flowable Control | Server URL only — handed to the browser by *Open Environment in Browser*, never called: no username, no password, no *Test Connection* |
+| Flowable Hub | Server URL only, the same as Control |
 
-Non-secret values go to a committed file under `.idea`. Passwords and tokens go to the IDE's password
-safe, never to a shared file.
+The explanations that used to stand under the sign-in buttons as paragraphs — why *Create Token…* fails
+behind SSO, when a browser session is what gets you in — are help marks beside those buttons now. The
+dialogs behind them refuse what cannot work before they close: *Paste Session…* a paste with no Cookie,
+Authorization or CSRF header in it, *Sign In to Flowable* until a session cookie for the server has been
+seen, and *Create Token…* a blank username (a blank validity is a token that does not expire).
+
+An environment holds **at most one address of each kind — Design, Work, Control, Hub — and may hold any
+subset of them**: a QA stage with a running app and no Design server is an ordinary thing, shown without
+any warning. Two
+environments **may** point at the same server: one Design server commonly hosts a DEV workspace and a
+QA workspace, and they share the one saved credential that URL has, which is right — same server, same
+login.
+
+### Where the rest is chosen
+
+There is no page for "which environment this project uses". The Design environment, its workspace and
+its apps are picked in the Atlas Hub, beside the models they fetch; the runtime environment is picked in
+the Atlas Playground, beside the expression it evaluates. That is deliberate: a settings page
+holding a second copy of those choices could not be told apart from the Hub's, and the pair drifting was
+the whole reason the feature was rebuilt.
+
+The workspace and app selection is stored **per environment** in the committed `.idea` settings — a
+workspace key belongs to one server, so one value could be right for at most one environment. Which
+environment is selected lives in your workspace file, since connection ids are per IDE.
 
 ### Elsewhere
 
 - *Settings → Editor → Color Scheme → **Flowable Expression*** — parentheses levels 1–5, brackets,
   strings, numbers, operators, dot, comma, identifiers.
-- *Settings → Editor → Inlay Hints → Values* — the two hints above.
-- *Settings → Editor → Inspections → Flowable* — the six inspections above.
+- *Settings → Editor → Inlay Hints → Values* — the hints above.
+- *Settings → Editor → Inspections → Flowable* — the eight inspections above.
 
 ### Scopes and monorepos
 
@@ -214,31 +354,48 @@ choice never lands in version control.
 
 ## File types
 
+Every model extension below shows its type's icon in the Project view, the editor tabs and every file
+list — the same glyph in the same colour as its explorer page, light and dark — and a `.bar` shows an
+archive icon. The icon is decided from the file name alone, so the Project view never waits on it.
+
 | Extension | Treated as | What Atlas adds |
 |---|---|---|
-| `.bpmn`, `.bpmn20.xml` | XML | Keys, members, expression and script injection, XML key completion and validation, diagram from `bpmndi` |
-| `.cmmn`, `.cmmn.xml` | XML | The same, plus CMMN script fields and criteria; diagram from `cmmndi` |
-| `.dmn`, `.dmn.xml` | XML | Decision variables for `variable(…)` completion; diagram from `dmndi`, else the decision table is painted |
+| `.bpmn`, `.bpmn20.xml` | XML | Keys, members, expression and script injection, XML key completion and validation, diagram from `bpmndi`, and schema-backed element and attribute completion and validation |
+| `.cmmn`, `.cmmn.xml` | XML | The same, plus CMMN script fields and criteria; diagram from `cmmndi`; schema-backed as above |
+| `.dmn`, `.dmn.xml` | XML | Decision variables for `variable(…)` completion; diagram from `dmndi`, else the decision table is painted; schema-backed at DMN 1.1, 1.2 and 1.3 |
 | `.form` | JSON | Frontend and backend expression injection; fields and outcomes feed completion |
 | `.action` | JSON | Script injection into the bot script; `botKey` ↔ `BotService` linking; action-name inlay hint |
-| `.data` | JSON | Field mappings drive DTO generation, `value(…)` validation, Liquibase synthesis and table hints |
-| `.service` | JSON | Operations drive cascade completion; columns and table drive the Liquibase inspection |
+| `.data` | JSON | Field mappings drive DTO generation, `value(…)` validation and table hints — and the guessed Liquibase changelog of a data object with no database service |
+| `.service` | JSON | Operations drive cascade completion; columns and table drive the Liquibase inspection, and its column mappings, lookup id and relations the changelog Generate → Liquibase builds |
 | `.masterdata` | JSON | Field names for master-data query completion |
 | `.event`, `.channel` | JSON | Payload names for event parameter completion |
 | `.page`, `.dictionary`, `.query`, `.sequence`, `.sla`, `.agent`, `.tpl`, `.policy`, `.extractor`, `.knowledgebase`, `.dashboardcomponent`, `.document`, `.palette`, `.app` | JSON | Indexed by key, completed, navigable, hoverable, searchable — and they open with their content instead of a "file type not associated" panel |
-| `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking |
+| `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking. An entry above 32 MB is skipped, as it is by Generate |
 | Liquibase changelog XML | XML | Column, table and type completion; the coverage inspection |
-| Design workspace `*-models/*.json` | JSON | Indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
-| `*.explorer.html` | — | Opens as the Atlas Explorer tab, plus a Flowable Expressions tab |
+| Design workspace `*-models/*.json` | JSON | Inside a `.bar` / `.zip`, the forms, pages, actions and data objects are always models. Loose in the repository, indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
+| `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Atlas Playground |
+
+A file type is registered for the whole IDE, not per project, and several model extensions mean something
+else outside Flowable: a Helm chart's `_helpers.tpl`, a systemd `.service` unit, a Java `.policy` file.
+So `.page`, `.data`, `.query`, `.sequence`, `.sla`, `.event`, `.service`, `.tpl`, `.policy`, `.document` and
+`.app` are treated as JSON only when the file holds a JSON object — its first character after any
+whitespace is `{`, followed by a quote or `}` — in a folder or inside an archive alike. Any other file with
+one of those extensions keeps its own type. The remaining model extensions are JSON by name, even while
+the file is still empty.
 
 ## Notifications
 
-One group, **Flowable Atlas**, used for generation results, model-index rebuilds, Design pulls, rename
-warnings, and the code generators. Generation failures offer *Show details* or *Open log*.
+Two groups, so either can be silenced in *Settings → Appearance & Behavior → Notifications* without the
+other. **Flowable Atlas: finished jobs** says a job finished: the model index was rebuilt, artifacts, DTOs
+or changelogs were generated, waivers were saved. **Flowable Atlas: needs attention** carries what asks for
+attention: a warning, a failed pull or generation (with *Show details* or *Open log*), a rename not applied
+to the models, an archive that could not be read, or why nothing happened.
 
-## Known gap: the error reporter
+## Reporting a problem
 
-The 0.13.0 release notes announce *"Report a problem straight from the error dialog"*. The reporter is
-implemented, but it is **not registered in the plugin descriptor**, so it does not appear in the IDE.
-Until that is fixed, hand over an Atlas exception the old way: *Help → Show Log in Finder/Explorer*, then
-attach `idea.log` to an [issue](https://github.com/kle-dev/flw-atlas/issues/new).
+An exception raised by Atlas shows up in the IDE's error dialog with a **Report Flowable Atlas
+Problem…** button. It assembles the report — the stack trace, the plugin and IDE versions, whether the
+running IDE is inside the verified range — copies it to your clipboard and opens the
+[issue tracker](https://github.com/kle-dev/flw-atlas/issues/new) in your browser. Nothing is transmitted
+by the plugin itself: review the text before pasting, because a stack trace can carry model keys, file
+paths and expression text from your project.

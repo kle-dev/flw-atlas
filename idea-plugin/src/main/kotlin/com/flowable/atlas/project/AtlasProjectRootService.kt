@@ -5,14 +5,24 @@ import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.parsing.ProjectDetection
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import org.jetbrains.annotations.TestOnly
 
 /**
  * Resolves *which* Flowable project Atlas operates on when the open IntelliJ project's root holds
@@ -27,12 +37,40 @@ import java.nio.file.Path
  * [com.flowable.atlas.design.DesignPullService]'s last-pull timestamp.
  */
 @Service(Service.Level.PROJECT)
-class AtlasProjectRootService(private val project: Project) {
+class AtlasProjectRootService(private val project: Project) : Disposable {
 
     private val LOG = logger<AtlasProjectRootService>()
 
     @Volatile
     private var detectedCache: List<ProjectDetection.SubProject>? = null
+
+    init {
+        // The detection is a walk over the project's folders and build files; a folder added to a monorepo
+        // used to appear in the picker after a restart only. A structural change — a folder or a build
+        // file created, deleted, moved or renamed — drops the cache, and the Hub's next refresh re-detects.
+        project.messageBus.connect(this).subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+                override fun after(events: MutableList<out VFileEvent>) {
+                    if (events.any { changesStructure(it) }) detectedCache = null
+                }
+            },
+        )
+    }
+
+    private fun changesStructure(e: VFileEvent): Boolean {
+        val name = e.path.substringAfterLast('/')
+        val marker = name in BUILD_FILES
+        return when (e) {
+            is VFileCreateEvent -> e.isDirectory || marker
+            is VFileDeleteEvent -> e.file.isDirectory || marker
+            is VFileMoveEvent -> e.file.isDirectory || marker
+            is VFilePropertyChangeEvent -> e.propertyName == VirtualFile.PROP_NAME && (e.file.isDirectory || marker)
+            else -> false
+        }
+    }
+
+    override fun dispose() {}
 
     /** The active sub-project's root-relative path; `""` when the whole project is used. */
     fun activeSubProject(): String =
@@ -82,25 +120,56 @@ class AtlasProjectRootService(private val project: Project) {
     /** The cached detection result, or `null` if it has not been computed — never scans here. */
     fun detectedOrNull(): List<ProjectDetection.SubProject>? = detectedCache
 
+    /** Stands in for a detection walk in a test. */
+    @TestOnly
+    internal fun setDetectedForTest(detected: List<ProjectDetection.SubProject>?) {
+        detectedCache = detected
+    }
+
     /** Detect sub-projects on a pooled thread (never the EDT), cache it, then run [onDone] with it. */
     fun detectAsync(onDone: (List<ProjectDetection.SubProject>) -> Unit) {
         val base = project.basePath ?: return
+        // One walk at a time: the Hub asks on every refresh until a result exists, and a burst of
+        // events (settings applied, environments changed, index updated) used to queue a full
+        // detection per event. The running walk's onDone refreshes the Hub for all of them.
+        if (!detecting.compareAndSet(false, true)) return
         ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
-            // Warn: an empty result disables the whole sub-project switcher, so "detection crashed"
-            // must not look like "this is a single-project repo".
-            val detected = runCatching { ProjectDetection.detect(File(base)) }
-                .onFailure { LOG.warn("Flowable sub-project detection failed under $base", it) }
-                .getOrDefault(emptyList())
-            detectedCache = detected
-            onDone(detected)
+            try {
+                if (project.isDisposed) return@executeOnPooledThread
+                // Warn: an empty result disables the whole sub-project switcher, so "detection crashed"
+                // must not look like "this is a single-project repo".
+                val detected = runCatching { ProjectDetection.detect(File(base)) }
+                    .onFailure { LOG.warn("Flowable sub-project detection failed under $base", it) }
+                    .getOrDefault(emptyList())
+                detectedCache = detected
+                onDone(detected)
+            } finally {
+                detecting.set(false)
+            }
         }
     }
 
+    private val detecting = java.util.concurrent.atomic.AtomicBoolean()
+
     companion object {
+        /** The files whose presence makes a folder a project to [ProjectDetection]. */
+        private val BUILD_FILES = setOf("pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts")
+
         /** Whether the user has made an explicit project choice, in [PropertiesComponent] (workspace-local). */
         const val PROJECT_CHOSEN_PROPERTY = "flowable.atlas.projectChosen"
 
         fun getInstance(project: Project): AtlasProjectRootService = project.service()
+
+        /**
+         * The detected sub-project [selected] lies in — the deepest one when they nest — or null when it is
+         * in none of them. Compared as paths, not strings: `apps/bill` is no prefix of `apps/billing`.
+         */
+        internal fun owningSubProject(base: Path, detected: List<ProjectDetection.SubProject>, selected: Path): String? {
+            val sel = selected.toAbsolutePath().normalize()
+            val root = base.toAbsolutePath().normalize()
+            return detected.map { it.relPath }
+                .filter { it.isNotBlank() && sel.startsWith(root.resolve(it).normalize()) }
+                .maxByOrNull { root.resolve(it).normalize().nameCount }
+        }
     }
 }

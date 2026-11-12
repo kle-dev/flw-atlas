@@ -159,45 +159,60 @@
 .ide .srow{display:flex; align-items:center; gap:7px; padding:3px 12px; color:#c7cbd1}
 .ide .srow.sel{background:#2e436e; color:#fff}
 .ide .srow.sub{padding-left:30px}
-/* explorer-inside-IDE mockup */
+/* explorer-inside-IDE mockup — its faint grey (#636e79) is the explorer's light --ink-faint, so a mockup's
+   advice, counts and paths read as the page does */
 .ide .exp{flex:1; display:flex; min-height:0; background:#fafafa; color:#131e29; font-family:-apple-system,"Segoe UI",sans-serif}
 .ide .exps{width:186px; flex:none; background:#fff; border-right:1px solid #e2e8f0; padding:11px 0; font-size:12px}
-.ide .expsl{padding:0 13px 5px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#79848f; font-weight:600}
+.ide .expsl{padding:0 13px 5px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#636e79; font-weight:600}
 .ide .expsr{display:flex; align-items:center; gap:7px; padding:3px 13px; color:#4c5b6a}
 .ide .expsr.on{background:#e5f0ff; color:#131e29; font-weight:500; border-left:2px solid #0f55d6; padding-left:11px}
 .ide .expsr .dt{width:6px; height:6px; border-radius:50%; flex:none}
-.ide .expsr .ct{margin-left:auto; font-size:10px; color:#79848f; font-family:ui-monospace,monospace}
+.ide .ti{width:11px; height:11px; flex:none}
+.ide .expsr .ct{margin-left:auto; font-size:10px; color:#636e79; font-family:ui-monospace,monospace}
 .ide .expm{flex:1; min-width:0; padding:13px 15px; overflow:hidden}
 .ide .exph{font-size:16px; font-weight:600; color:#131e29}
 .ide .expsub{font-size:11.5px; color:#4c5b6a; margin-top:2px}
-.ide .mcards{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:#e2e8f0; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; margin-top:11px}
-.ide .mcard{background:#fff; padding:8px 11px}
-.ide .mv{font-size:20px; font-weight:600; color:#131e29; line-height:1.15; font-variant-numeric:tabular-nums}
-.ide .mk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; margin-top:1px}
-.ide .hcards{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:9px}
-.ide .hcard{background:#fff; border:1px solid #e2e8f0; border-left:4px solid; border-radius:6px; padding:7px 10px}
-.ide .hv{font-size:17px; font-weight:600; line-height:1.2; font-variant-numeric:tabular-nums}
-.ide .hk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f}
-.ide .rowlist{margin-top:11px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
+.ide .minv{display:grid; grid-template-columns:repeat(3,1fr); gap:0 18px}
+.ide .minvh{font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#636e79; margin-bottom:3px}
+.ide .minvr{display:flex; align-items:center; gap:6px; padding:2px 0; font-size:11.5px; color:#4c5b6a}
+.ide .minvr span{margin-left:auto; font-size:10px; color:#636e79; font-variant-numeric:tabular-nums}
+.ide .mhks{display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid #e2e8f0}
+.ide .mhk{padding:7px 10px; display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 6px}
+.ide .mhk+.mhk{border-left:1px solid #e2e8f0}
+.ide .mhn{font-size:17px; font-weight:600; line-height:1}
+.ide .mhl{font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#4c5b6a}
+.ide .mht{flex-basis:100%; display:flex; gap:4px}
+.ide .mchip{font-size:9.5px; color:#4c5b6a; border:1px solid #cbd5e1; border-radius:999px; padding:0 6px}
+.ide .dcols{display:grid; grid-template-columns:1fr 1fr; gap:0 18px; margin-top:12px; align-items:start}
+.ide .dlbl{display:flex; align-items:center; gap:8px; font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#4c5b6a; margin-bottom:7px}
+.ide .dbtn{font-size:10px; font-weight:500; letter-spacing:0; text-transform:none; color:#0f55d6; border:1px solid #0f55d6; background:#eff6ff; border-radius:5px; padding:1px 7px}
+.ide .hlist{border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
+.ide .hrow{display:grid; grid-template-columns:3px 2.2ch auto 1fr; align-items:center; gap:8px; padding:5px 10px 5px 0; border-bottom:1px solid #e2e8f0; font-size:12px; color:#131e29; min-height:28px}
+.ide .hrow:last-child{border-bottom:0}
+.ide .hbar{align-self:stretch; display:block}
+.ide .hn{font-weight:600; text-align:right; font-variant-numeric:tabular-nums}
+.ide .hl{font-weight:500; white-space:nowrap}
+.ide .hs{color:#636e79; font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ide .rowlist{border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
 .ide .rl{display:flex; align-items:center; gap:8px; padding:5px 11px; border-bottom:1px solid #e2e8f0; font-size:12px; color:#131e29}
 .ide .rl:last-child{border-bottom:0}
-.ide .rl .rk2{margin-left:auto; font-size:10px; color:#79848f; font-family:ui-monospace,monospace}
+.ide .rl .rk2{margin-left:auto; font-size:10px; color:#636e79; font-family:ui-monospace,monospace}
 .ide .rl .dt{width:6px; height:6px; border-radius:50%; flex:none}
-.ide .expsearch{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:#79848f; border:1px solid #e2e8f0; border-radius:999px; padding:2px 9px; background:#fff}
+.ide .expsearch{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:#636e79; border:1px solid #e2e8f0; border-radius:999px; padding:2px 9px; background:#fff}
 
 /* key/value detail grid inside the explorer mockup */
 .ide .kvgrid{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:#e2e8f0; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; margin-top:10px}
 .ide .kvc{background:#fff; padding:6px 10px}
-.ide .kvk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f}
+.ide .kvk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#636e79}
 .ide .kvv{font-size:11.5px; color:#131e29; font-family:ui-monospace,monospace}
 .ide .ptbl{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:9px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden}
-.ide .ptbl th{text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; font-weight:600; padding:5px 9px; background:#f8fafc; border-bottom:1px solid #e2e8f0}
+.ide .ptbl th{text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#636e79; font-weight:600; padding:5px 9px; background:#f8fafc; border-bottom:1px solid #e2e8f0}
 .ide .ptbl td{padding:4px 9px; border-bottom:1px solid #e2e8f0; color:#131e29; font-family:ui-monospace,monospace}
 .ide .ptbl tr:last-child td{border-bottom:0}
 .ide table.ptbl.pm{table-layout:fixed}
 .ide table.ptbl.pm td:nth-child(1){width:78px}
 .ide table.ptbl.pm td:nth-child(2){width:40%; overflow:hidden; text-overflow:ellipsis}
-.ide table.ptbl.pm td:nth-child(3){width:24px; color:#79848f; text-align:center}
+.ide table.ptbl.pm td:nth-child(3){width:24px; color:#636e79; text-align:center}
 .ide .tag{font-size:9.5px; border-radius:999px; padding:0 7px; border:1px solid; font-family:-apple-system,sans-serif}
 .ide .tag.i{color:#047857; border-color:#6ee7b7; background:#ecfdf5}
 .ide .tag.o{color:#1d4ed8; border-color:#93c5fd; background:#eff6ff}
@@ -206,16 +221,16 @@
 .ide .sec{margin-top:10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
 .ide .sech{display:flex; align-items:center; gap:7px; padding:6px 10px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:11.5px; color:#131e29; font-weight:600}
 .ide .sech.shut{border-bottom:0}
-.ide .sech .tri{color:#79848f; font-size:9px; width:9px; flex:none}
+.ide .sech .tri{color:#636e79; font-size:9px; width:9px; flex:none}
 .ide .sech .cnt{font-family:ui-monospace,monospace; font-weight:400; color:#4c5b6a; font-size:10.5px}
-.ide .sech .rt{margin-left:auto; font-weight:400; color:#79848f; font-size:10.5px; font-family:ui-monospace,monospace}
+.ide .sech .rt{margin-left:auto; font-weight:400; color:#636e79; font-size:10.5px; font-family:ui-monospace,monospace}
 .ide .secb{padding:8px 10px}
 .ide .grow{display:flex; align-items:center; gap:7px; font-size:11.5px; color:#131e29; font-family:ui-monospace,monospace; margin:7px 0 3px}
 .ide .grow:first-child{margin-top:0}
 .ide .loc{border:1px solid #cbd5e1; border-radius:4px; color:#0f55d6; font-size:10px; padding:0 4px; flex:none; background:#fff}
 .ide .lk{color:#0f55d6}
 .ide .chips{display:flex; align-items:center; gap:5px; margin-bottom:7px}
-.ide .filt{flex:1; min-width:0; border:1px solid #e2e8f0; border-radius:4px; padding:2px 7px; font-size:11px; color:#79848f; background:#fff; font-family:-apple-system,sans-serif}
+.ide .filt{flex:1; min-width:0; border:1px solid #e2e8f0; border-radius:4px; padding:2px 7px; font-size:11px; color:#636e79; background:#fff; font-family:-apple-system,sans-serif}
 .ide .xall{font-size:10.5px; color:#0f55d6; font-family:ui-monospace,monospace}
 /* diagram viewport + info card (interactive diagram) */
 .ide .dgwrap{margin-top:10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
@@ -224,7 +239,7 @@
 .ide .dgview{position:relative; padding:9px; background:#fff}
 .ide .icard{position:absolute; background:#fff; border:1px solid #cbd5e1; border-radius:7px; box-shadow:0 14px 34px -10px rgba(0,0,0,.28); padding:9px 11px; width:274px; font-size:11px; color:#131e29}
 .ide .icard .it{font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px}
-.ide .icard .ik{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; margin-top:7px}
+.ide .icard .ik{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#636e79; margin-top:7px}
 .ide .icard .iv{font-family:ui-monospace,monospace; font-size:10.5px; color:#131e29}
 .ide .icard .btn2{margin-top:8px; padding-top:7px; border-top:1px solid #e2e8f0; color:#0f55d6; font-size:11px}
 /* plan-model tree (CMMN) */
@@ -234,7 +249,62 @@
 .ide .dia{color:#59476b}
 .ide .code2{background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; padding:6px 8px; font-family:ui-monospace,monospace; font-size:10.5px; color:#131e29; white-space:pre; overflow:hidden; margin-top:4px}
 
+/* the detail page since 0.22: hero, facts, section chips, column-headed tables, cards, code */
+.ide .xhero{display:flex; align-items:flex-start; gap:10px; margin-top:2px}
+.ide .xtile{width:30px; height:30px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; flex:none; background:color-mix(in srgb, var(--tc) 14%, transparent); color:var(--tc)}
+.ide .xtile .ti{width:16px; height:16px}
+.ide .xmain{flex:1; min-width:0}
+.ide .xtitle{font-size:17px; font-weight:600; color:#131e29; line-height:1.2; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .xident{font-size:11px; color:#4c5b6a; margin-top:2px; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .xident .mono,.ide .mono{font-family:ui-monospace,monospace}
+.ide .xident .dim,.ide .dim{color:#636e79}
+.ide .xdesc{font-size:11.5px; color:#4c5b6a; margin-top:4px; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .xfacts{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px 16px; margin:10px 0 0; padding-top:8px; border-top:1px solid #e2e8f0}
+.ide .xfacts dt{font-size:9px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#636e79; font-family:-apple-system,sans-serif}
+.ide .xfacts dd{margin:2px 0 0; font-size:11.5px; color:#131e29; font-family:-apple-system,sans-serif}
+.ide .xchips{display:flex; flex-wrap:wrap; gap:5px; margin:10px 0 2px}
+.ide .xchip{display:inline-flex; align-items:center; gap:5px; border:1px solid #d2d6da; border-radius:999px; padding:1px 8px; font-size:10.5px; color:#4c5b6a; background:#fff; font-family:-apple-system,sans-serif}
+.ide .xchip b{font-weight:400; color:#636e79; font-variant-numeric:tabular-nums}
+.ide .xsec{margin-top:10px; border-top:1px solid #e2e8f0; padding-top:7px}
+.ide .xsech{display:flex; align-items:center; gap:7px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#4c5b6a; font-family:-apple-system,sans-serif}
+.ide .xsech .tri{color:#636e79; font-size:9px; width:9px; flex:none}
+.ide .xsech .cnt{font-weight:500; color:#636e79; font-variant-numeric:tabular-nums}
+.ide .xsech .hint{font-weight:400; letter-spacing:0; text-transform:none; color:#636e79; font-size:10.5px; margin-left:2px}
+.ide .xsech .rt{margin-left:auto; font-weight:400; letter-spacing:0; text-transform:none; color:#636e79; font-size:10.5px}
+.ide .xgrph{display:flex; align-items:baseline; gap:7px; font-size:11.5px; font-weight:600; color:#4c5b6a; margin:10px 0 6px; font-family:-apple-system,sans-serif}
+.ide .xgrph .tri{color:#636e79; font-size:9px; width:9px; flex:none}
+.ide .xgrph .cnt{font-weight:500; color:#636e79; font-variant-numeric:tabular-nums}
+.ide .xgrph .hint{font-weight:400; color:#636e79; font-size:10.5px}
+.ide .xrelh{margin:9px 0 4px; font-size:11.5px; font-weight:600; color:#131e29}
+.ide .xrelh .dim{font-weight:400; color:#636e79; font-size:10.5px}
+.ide .xrel{display:flex; align-items:center; gap:10px; padding:5px 0; border-top:1px solid #e2e8f0; font-size:11px}
+.ide .xrell{width:150px; flex:none; color:#4c5b6a}
+.ide .xrelb{margin-left:160px}
+.ide .xtbl{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:7px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; font-family:-apple-system,sans-serif}
+.ide .xtbl th{text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:#636e79; font-weight:600; padding:4px 9px; background:#f8fafc; border-bottom:1px solid #e2e8f0}
+.ide .xtbl td{padding:4px 9px; border-bottom:1px solid #e2e8f0; color:#131e29; vertical-align:baseline; white-space:nowrap}
+.ide .xtbl tr:last-child td{border-bottom:0}
+.ide .xtbl .mono{font-family:ui-monospace,monospace}
+.ide .xtag{font-size:9px; font-weight:500; text-transform:uppercase; letter-spacing:.04em; border:1px solid #d2d6da; border-radius:4px; padding:0 5px; color:#4c5b6a; font-family:-apple-system,sans-serif; white-space:nowrap}
+.ide .xdir{font-size:9px; font-weight:500; text-transform:uppercase; letter-spacing:.04em; font-family:-apple-system,sans-serif}
+.ide .xdir.i{color:#1d4ed8} .ide .xdir.o{color:#047857} .ide .xdir.e{color:#b91c1c}
+.ide .xcard{margin-top:7px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
+.ide .xcardh{display:flex; align-items:center; gap:7px; padding:6px 10px; font-size:11.5px; color:#131e29; font-family:-apple-system,sans-serif; font-weight:500}
+.ide .xcardh .xid{font-family:ui-monospace,monospace; font-weight:400; font-size:10px; color:#636e79}
+.ide .xcardh .rt{margin-left:auto; font-weight:400; color:#636e79; font-size:10.5px}
+.ide .xcardh.open{border-bottom:1px solid #e2e8f0}
+.ide .xcardb{padding:6px 10px 8px}
+.ide .xcardb .xtbl{margin-top:2px}
+.ide .xcodeh{display:flex; gap:8px; align-items:center; padding:3px 10px; font-size:9.5px; color:#636e79; background:#f8fafc; font-family:-apple-system,sans-serif}
+.ide .xcode{background:#fafafa; border-top:1px solid #e2e8f0; padding:6px 10px; font-family:ui-monospace,monospace; font-size:10.5px; color:#131e29; white-space:pre; line-height:1.55; overflow:hidden}
+.ide .xcode .ln{display:inline-block; min-width:2em; margin-right:8px; color:#636e79; text-align:right}
+.ide .xpg{display:grid; grid-template-columns:1fr; gap:1px; background:#e2e8f0; border-top:1px solid #e2e8f0}
+.ide .xpr{display:flex; gap:9px; align-items:baseline; background:#fff; padding:3px 10px; font-family:ui-monospace,monospace; font-size:11px}
+.ide .xpr .pn{flex:1; color:#4c5b6a}
+.ide .xpr .pk{color:#636e79; font-family:-apple-system,sans-serif; font-size:9.5px}
+
 /* playground */
+
 .ide .pg{flex:1; display:flex; flex-direction:column; min-height:0; background:#2b2d30; font-family:-apple-system,"Segoe UI",sans-serif}
 .ide .pgt{height:31px; flex:none; display:flex; align-items:center; gap:7px; padding:0 11px; border-bottom:1px solid #1e1f22}
 .ide .seg{display:flex; border:1px solid #4a4d52; border-radius:5px; overflow:hidden; font-size:11.5px}

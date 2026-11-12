@@ -1,9 +1,9 @@
 package com.flowable.atlas.settings
 
+import com.intellij.ui.dsl.builder.selected
 import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.AlignX
@@ -14,12 +14,13 @@ import com.intellij.ui.dsl.builder.panel
 /**
  * Settings → Tools → Flowable Atlas → Expressions: validation toggles, the project's expression
  * allowlist (one table over namespaces / functions / grounding roots — the same store the
- * Alt-Enter quick-fix writes to) and custom-function discovery for Atlas generation.
+ * Alt-Enter quick-fix writes to) and custom-function discovery — for the editor's expression checks and
+ * completion as much as for Atlas generation; the editor's catalog follows an Apply of this page.
  */
-class ExpressionsConfigurable(private val project: Project) : BoundSearchableConfigurable(
+class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
+    project,
     FlowableAtlasBundle.message("configurable.atlas.expressions"),
-    helpTopic = "",
-    _id = "com.flowable.atlas.settings.expressions",
+    "com.flowable.atlas.settings.expressions",
 ) {
 
     private val allowlist = AllowlistTablePanel()
@@ -28,6 +29,7 @@ class ExpressionsConfigurable(private val project: Project) : BoundSearchableCon
         val app = FlowableAtlasSettings.getInstance()
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return panel {
+            scopeLine(project)
             group("Validation") {
                 row {
                     checkBox("Validate expression syntax")
@@ -42,10 +44,14 @@ class ExpressionsConfigurable(private val project: Project) : BoundSearchableCon
                                 "Squiggles for malformed expressions also require \"Validate expression syntax\" above.",
                         )
                         .bindSelected(app::injectJavaExpressions)
+                        // Injection results are cached per PSI element: open Java files keep the old
+                        // picture until highlighting re-runs.
+                        .onApply { restartHighlightingEverywhere("Flowable Atlas Java expression injection toggled") }
                 }
                 row {
                     comment(
-                        "Unknown-function warnings &amp; codebase grounding are inspections with per-profile " +
+                        "The two boxes above apply to every project in this IDE. " +
+                            "Unknown-function warnings &amp; codebase grounding are inspections with per-profile " +
                             "severity: Settings → Editor → Inspections → Flowable.",
                     )
                 }
@@ -72,9 +78,10 @@ class ExpressionsConfigurable(private val project: Project) : BoundSearchableCon
                 }
             }
             group("Custom functions") {
+                lateinit var discover: com.intellij.ui.dsl.builder.Cell<javax.swing.JCheckBox>
                 row {
-                    checkBox("Discover project custom functions")
-                        .comment("Read externals.additionalData functions from the project's frontend customization during Atlas generation (the CLI's default too).")
+                    discover = checkBox("Discover project custom functions")
+                        .comment("Read externals.additionalData functions from the project's frontend customization, for the editor's checks and completion and for Atlas generation (the CLI's default too).")
                         .bindSelected(settings::customFunctionsEnabled)
                 }
                 row("Customization source:") {
@@ -82,10 +89,13 @@ class ExpressionsConfigurable(private val project: Project) : BoundSearchableCon
                         FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor()
                             .withTitle("Select Customization Source"),
                         project,
+                        projectRelativeChooser(project),
                     )
                         .align(AlignX.FILL)
-                        .comment("Optional: a specific file or folder to read custom functions from (project-relative); leave empty for auto-discovery.")
+                        .comment("Optional: a specific file or folder to read custom functions from (relative to the active Flowable project); leave empty for auto-discovery.")
                         .bindText(settings::customFunctionsPath)
+                        // A source for a discovery that is switched off is a field that does nothing.
+                        .enabledIf(discover.selected)
                 }
             }
         }

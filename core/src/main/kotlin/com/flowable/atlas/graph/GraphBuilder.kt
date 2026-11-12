@@ -9,7 +9,9 @@ import com.flowable.atlas.expr.ExprWrappers
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.parsing.Constants
+import com.flowable.atlas.parsing.JavaParser
 import com.flowable.atlas.parsing.ModelKinds
+import com.flowable.atlas.parsing.PlatformDefaultModels
 
 /**
  * The navigable-graph builder — a faithful port of `flowable_atlas.py` `_build_graph`
@@ -33,24 +35,66 @@ object GraphBuilder {
     private val ROOT_IDENT_RE = Regex("(?<![\\w.\$])([A-Za-z_][\\w]*)")
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
     private val STR_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
-    private val MUSTACHE_HEAD_RE = Regex("^\\$?([A-Za-z_][\\w]*)")
+    // A `$` root (`$currentUser`, `$searchText`, `$route`, `$errors`, …) is the forms runtime's own — never
+    // a variable — so only an unprefixed head counts.
+    private val MUSTACHE_HEAD_RE = Regex("^([A-Za-z_][\\w]*)")
     private val DATAOBJ_QUERY_RE = Regex("dataObjectDefinitionKey=|/query/")
-    private val ENDPOINTS_PLATFORM_RE = Regex("(?:^|[/{\$\\s])endpoints\\.")
+
+    /** The operation keys the data-object runtime invokes itself for a bound data object
+     *  (`DataObjectOperations`). The service registry picks an operation by key, so an operation that is
+     *  merely *of* the lookup type — `findByEmail` — is not one of them. */
+    private val DATA_OBJECT_ENGINE_OPS = setOf("findById", "create", "update", "delete")
 
     /** Model types rendered as Freemarker (not JUEL) — their `${…}` must not be validated. */
     private val FREEMARKER_MODEL_TYPES = setOf("query", "template", "document")
 
-    /** Well-known Flowable platform service-task beans (engine-provided, not project source). */
-    private val FLOWABLE_PLATFORM_BEANS = setOf(
-        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
-        "createDocumentService", "serviceRegistryService", "agentService",
-        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
-        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
-    )
+    /**
+     * `${email.inbound.channel.imap-url:imap://localhost/inbox}` — a Spring property placeholder, the
+     * shape a channel's URL or an agent's model name takes when the environment fills it in. It is not
+     * JUEL (the `:default` is a syntax error there, and JUEL never wrote `-` into a name) and its
+     * segments are not variables: reading `imap`, `localhost` and `inbox` as process variables is how
+     * one channel URL produced four phantom variables. Elsewhere a dotted name with no default is a
+     * property path and stays an expression — `${order.total}` is one; in a channel model every `${…}`
+     * is a placeholder, because the environment configures adapters and nothing in a channel is JUEL.
+     */
+    // The default may hold anything but a `(`: `${vars:bogus(}` and `${ns:fn(x)}` are calls, not defaults.
+    private val CONFIG_PLACEHOLDER_RE = Regex("^[#$]\\{\\s*([A-Za-z][\\w.-]*)\\s*(:[^}(]*)?}$")
+    private val PLACEHOLDER_MODEL_TYPES = setOf("channel")
+    private fun isConfigPlaceholder(text: String, usedTypes: Set<String>): Boolean {
+        val m = CONFIG_PLACEHOLDER_RE.find(text) ?: return false
+        if (usedTypes.isNotEmpty() && PLACEHOLDER_MODEL_TYPES.containsAll(usedTypes)) return true
+        val key = m.groupValues[1]
+        return m.groupValues[2].isNotEmpty() || (key.contains('.') && key.contains('-'))
+    }
 
     /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
-    private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
+    private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic", "property")
+
+    /** Model types whose `${x}` / `{{x}}` name a parameter of the call they define, not a variable. */
+    private val CONTRACT_SCOPED_TYPES = setOf("service", "query", "agent")
+    private val NS_CALL_AFTER_RE = Regex("^:[A-Za-z_]\\w*\\s*\\(")
+    private val FTL_BUILTIN_RE = Regex("\\?\\??[A-Za-z_]\\w*")
+
+    /** Method names too generic to say anything about their first argument. */
+    private val GENERIC_METHOD_NAMES = setOf(
+        "get", "put", "set", "add", "remove", "contains", "containsKey", "getOrDefault", "equals", "of", "format",
+        "append", "info", "debug", "warn", "error", "trace", "log", "println", "print",
+    )
+    private val ENUM_ENTRY_RE = Regex("[A-Z][A-Z0-9_]*")
+
+    /** Model types one record may mean interchangeably: a `.form` can hold a page, a `.data` master data. */
+    private val TYPE_FAMILY = mapOf(
+        "form" to listOf("page"), "page" to listOf("form"),
+        "dataObject" to listOf("masterData"), "masterData" to listOf("dataObject"),
+    )
+
+    /** Node types that are not models: code, correlation names, harvested text, and the derived nodes.
+     *  What is left is what `stats.modelCount` counts — including apps, which a reader calls models too. */
+    private val NON_MODEL_NODE_TYPES = setOf(
+        "java", "endpoint", "group", "external", "bot", "liquibase", "expression", "binding", "variable",
+        "string", "method", "customFunction", "serviceOperation",
+    ) + NAMED_REF_KINDS
 
     /** How many write/read sites a variable node lists before the count alone has to speak. A busy name
      *  like `total` can have hundreds, and every one of them ships inside the explorer's HTML payload. */
@@ -61,12 +105,7 @@ object GraphBuilder {
         "\\b(?:variables|vars|var)\\s*:\\s*([A-Za-z]\\w*)\\s*\\(\\s*['\"]([A-Za-z_]\\w*)['\"]")
 
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
-    private val MUSTACHE_IGNORE = setOf(
-        "endpoints", "item", "index", "ctx", "root", "parent", "event", "self",
-        "first", "last", "start", "pageSize", "flw", "payload", "temp", "filter",
-        "sortColumn", "sortDirection", "orderBy", "sortBy", "total", "response",
-        "page", "size", "data", "value", "params",
-    )
+    private val MUSTACHE_IGNORE = Constants.FRONTEND_SCRATCH_ROOTS
 
     /**
      * Build the graph, enrich models with `_uses`, pop `_matchEps` and set `result["graph"]` /
@@ -81,6 +120,7 @@ object GraphBuilder {
         resolved: List<Map<String, Any?>>,
         allJava: Map<String, Map<String, Any?>>,
         beanMethods: Map<String, Set<String>>,
+        knownBeans: Set<String>,
         byKey: LinkedHashMap<String, MutableList<Pair<String, String>>>,
         exprAllowlist: Set<String>? = null,
         custom: CustomFunctionCatalog? = null,
@@ -103,10 +143,32 @@ object GraphBuilder {
             return nid
         }
 
-        fun kn(key: Any?): String? = (key as? String)?.let { keyToNode[it] }
+        /** The node of a model whose type is known — `(type, key)`, then the type's family (form and page,
+         *  data object and master data), and nothing else: a key two types share is two models. With no
+         *  type, the first-wins key-only map. */
+        fun knt(type: Any?, key: Any?, strict: Boolean = true): String? {
+            val k = key as? String ?: return null
+            val t = (type as? String)?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it } ?: return keyToNode[k]
+            nodes["$t:$k"]?.let { return it["id"] as String }
+            for (sib in TYPE_FAMILY[t].orEmpty()) nodes["$sib:$k"]?.let { return it["id"] as String }
+            return if (strict) null else keyToNode[k]
+        }
+
+        /**
+         * The node a record points at. A typed id (`form:x`, as [Ctx.modelId] writes them) resolves to that
+         * node only — or to its sibling in the same family, a `page:x` for a `form:x` — never to another type
+         * of the same key: that fallback handed a page's bindings to a same-key case, and a call mapped into
+         * a missing process to a same-key form. Only a bare key (a Java class, a record with no type) goes
+         * through the first-wins map.
+         */
+        fun kn(key: Any?): String? {
+            val k = key as? String ?: return null
+            if (k in nodes) return k
+            if (':' !in k) return keyToNode[k]
+            return knt(k.substringBefore(':'), k.substringAfter(':'), strict = true)
+        }
 
         // --- model nodes from buckets (explicit semantic order — key_to_node is first-wins). ---
-        val nodeTypeByBucket = ModelKinds.MODEL_KINDS.associate { it.bucket to it.nodeType }
         val modelBucketOrder = listOf(
             "apps", "processes", "cases", "decisions", "forms", "dataObjects",
             "services", "agents", "channels", "events", "dictionaries", "policies", "actions",
@@ -114,24 +176,25 @@ object GraphBuilder {
         for (bucket in modelBucketOrder) {
             for (o in bucketList(bucket)) {
                 val om = o as Map<String, Any?>
-                val ntype = if (bucket == "forms") (om["modelType"] as? String ?: "form")
-                else nodeTypeByBucket.getValue(bucket)
-                addNode(ntype, om["key"], om["name"], om["file"], o)
+                addNode(ModelKinds.nodeType(bucket, om), om["key"], om["name"], om["file"], o)
             }
         }
         for (o in bucketList("liquibase")) {
             val lb = o as Map<String, Any?>
+            // two files of one name (`v2/customer.xml`, `v3/customer.xml`) are labelled with their folders
             addNode(
-                "liquibase", lb["key"], basename(lb["file"] as? String), lb["file"],
-                linkedMapOf(
+                "liquibase", lb["key"], (lb["label"] as? String) ?: basename(lb["file"] as? String), lb["file"],
+                linkedMapOf<String, Any?>(
                     "tables" to lb["tables"], "effectiveTables" to lb["effectiveTables"],
                     "columns" to lb["columns"], "coverage" to lb["coverage"], "authority" to lb["authority"],
-                ),
+                ).apply {
+                    for (k in listOf("origin", "logicalFilePath", "columnsIn", "dropped", "droppedTables", "changeSets", "revisions", "includesMissing")) lb[k]?.let { put(k, it) }
+                },
             )
         }
         for (o in bucketList("others")) {
             val om = o as Map<String, Any?>
-            addNode(om["modelType"] as? String ?: "other", om["key"], om["name"], om["file"], o)
+            addNode(ModelKinds.nodeType("others", om), om["key"], om["name"], om["file"], o)
         }
 
         // all model keys (for CODE -> MODEL references); liquibase keys are file-derived, so excluded.
@@ -144,6 +207,28 @@ object GraphBuilder {
             }
         }
 
+        // The methods the project declares — a literal handed to one of them (`startReview("DEMO-R1")`) may be
+        // a key passed on to the engine. Collection and logging names are left out: a project's own `get`
+        // does not make `map.get("customer")` a reference.
+        val projectMethods = allJava.values.flatMap { jc ->
+            (jc["methods"] as? List<*>).orEmpty().mapNotNull { (it as? Map<*, *>)?.get("name") as? String }
+        }.toSet() - GENERIC_METHOD_NAMES
+        /** Whether anything in [jc]'s source says the literal [s] might name a model: a constant or a
+         *  comparison holds it, or it is an enum entry's or a project method's first argument. */
+        fun literalNamesAModel(jc: Map<String, Any?>, s: String): Boolean {
+            if (s in (jc["literalFacts"] as? List<*>).orEmpty()) return true
+            val calls = ((jc["literalCalls"] as? Map<*, *>)?.get(s) as? List<*>).orEmpty().filterIsInstance<String>()
+            return calls.any { it in projectMethods || ENUM_ENTRY_RE.matches(it) }
+        }
+
+        // every model node by key, in registration order — a key two types share has two owners
+        val modelNodesByKey = LinkedHashMap<String, MutableList<String>>()
+        for (n in nodes.values) {
+            if (n["type"] in NON_MODEL_NODE_TYPES) continue
+            val k = n["key"]?.toString() ?: continue
+            modelNodesByKey.getOrPut(k) { ArrayList() }.add(n["id"] as String)
+        }
+
         // --- which java classes are referenced by models + functional roles (delegate / listener) ---
         val referencedJava = HashSet<String>()
         val delegateFqns = HashSet<String>()
@@ -153,18 +238,29 @@ object GraphBuilder {
             if (fqn.isEmpty()) continue
             referencedJava.add(fqn)
             val rel = r["rel"] as String
-            if (rel == "serviceTask-delegate" || rel == "task-delegate") delegateFqns.add(fqn)
+            // A delegate is what `class` or `delegateExpression` hands the task to. `expression` calls a
+            // method on a bean, which makes the bean no delegate — six plain services carried the role.
+            if ((rel == "serviceTask-delegate" || rel == "task-delegate") && r["factory"] != true) delegateFqns.add(fqn)
             else if (rel.startsWith("executionListener") || rel.startsWith("taskListener") ||
-                rel.startsWith("planItemLifecycleListener")
+                rel.startsWith("planItemLifecycleListener") || rel.startsWith("caseLifecycleListener")
             ) listenerFqns.add(fqn)
         }
 
+        // A `@Bean` method's bean is the type it returns: its called methods are that class's, not those of
+        // the configuration class that declares the factory.
+        val factoryBeansOf = LinkedHashMap<String, MutableSet<String>>()
+        for (jc in allJava.values) {
+            for ((b, t) in (jc["beanTypes"] as? Map<*, *>).orEmpty()) {
+                val fqn = JavaTypes.resolve(t as String, jc, allJava.keys) ?: continue
+                factoryBeansOf.getOrPut(fqn) { LinkedHashSet() }.add(b as String)
+            }
+        }
         fun calledMethodsFor(jc: Map<String, Any?>): List<String> {
             val out = LinkedHashSet<String>()
+            val factories = (jc["beanTypes"] as? Map<*, *>)?.keys.orEmpty()
             val bset = LinkedHashSet<String>()
-            bset.addAll(jc["beanNames"] as Collection<String>)
-            val primary = jc["primary"] as String
-            bset.add(primary.replaceFirstChar { it.lowercase() })
+            (jc["beanNames"] as Collection<String>).filterTo(bset) { it !in factories }
+            bset.addAll(factoryBeansOf[jc["fqn"] as String].orEmpty())
             for (b in bset) out.addAll(beanMethods[b] ?: emptySet())
             return out.sorted()
         }
@@ -198,14 +294,6 @@ object GraphBuilder {
             ) javaNode(jc)
         }
 
-        // index java simple-name -> fqn for dependency (DI) edges; names shared by several classes
-        // resolve first-wins, so edges through them are flagged `suspect`.
-        val simpleToFqn = LinkedHashMap<String, String>()
-        val ambiguousSimple = HashSet<String>()
-        for ((fqn, jc) in allJava) {
-            if (simpleToFqn.putIfAbsent(jc["primary"] as String, fqn) != null) ambiguousSimple.add(jc["primary"] as String)
-        }
-
         // --- endpoint nodes ---
         for (o in bucketList("endpoints")) {
             val ep = o as Map<String, Any?>
@@ -215,7 +303,7 @@ object GraphBuilder {
                 linkedMapOf(
                     "controller" to ep["controller"], "handler" to ep["handler"], "line" to ep["line"],
                     "http" to ep["http"], "path" to ep["path"],
-                ),
+                ).also { d -> ep["params"]?.let { d["params"] = it } },
             )
         }
 
@@ -223,15 +311,24 @@ object GraphBuilder {
         for (g in ctx.groups) addNode("group", g, g, null, linkedMapOf<String, Any?>())
 
         // --- expression / binding nodes (with the models that use them) ---
+        // Expressions the harvester may have cut short (a `{` left inside the body) get no verdict —
+        // counted, so "n expressions were not judged" is a number the report can state instead of a
+        // silence nobody can tell from "all fine".
+        var exprSkippedNested = 0
+        val placeholders = HashSet<String>()
         fun usageNodes(ntype: String, usage: Map<String, MutableSet<String>>) {
             val dialect = if (ntype == "expression") ExpressionDialect.BACKEND else ExpressionDialect.FRONTEND
             for ((text, keys) in usage) {
-                val used = keys.filter { it in keyToNode }.map { keyToNode.getValue(it) }.toSortedSet().toList()
+                val used = keys.mapNotNull { kn(it) }.toSortedSet().toList()
                 if (used.isEmpty()) continue
                 val data = linkedMapOf<String, Any?>("usedBy" to used)
                 val usedTypes = used.mapNotNull { nodes[it]?.get("type") as? String }.toSet()
-                if (!FREEMARKER_MODEL_TYPES.containsAll(usedTypes)) {
+                if (ntype == "expression" && isConfigPlaceholder(text, usedTypes)) {
+                    data["placeholder"] = true
+                    placeholders.add(text)
+                } else if (!FREEMARKER_MODEL_TYPES.containsAll(usedTypes)) {
                     var problems = validateHarvestedExpr(text, dialect, custom)
+                    if (problems == null) { exprSkippedNested++; data["notValidated"] = "nested braces — harvested text may be truncated" }
                     if (problems != null && problems.isNotEmpty() && exprAllowlist != null) {
                         problems = problems.filter { !exprProblemAllowlisted(it, exprAllowlist) }
                     }
@@ -244,15 +341,32 @@ object GraphBuilder {
         usageNodes("binding", ctx.mustacheUse)
 
         // --- variable nodes ---
-        val beans = LinkedHashSet<String>()
-        beans.addAll(FLOWABLE_PLATFORM_BEANS)
+        // What the resolver decided is a bean (platform, Java, declared bare, or named like one) — every
+        // other `${x.method()}` root is a variable and gets its node and its read below.
+        // A class's decapitalised name is a bean only where a stereotype declares it (then it is among its
+        // `beanNames`): a variable `customer` beside a plain `Customer` class used to lose its node.
+        val beans = LinkedHashSet<String>(knownBeans)
         beans.addAll(beanMethods.keys)
-        for (r in ctx.refs) if (r["kind"] == "bean") beans.add(r["value"].toString())
-        for (jc in allJava.values) {
-            beans.addAll((jc["beanNames"] as? Collection<String>) ?: emptyList())
-            val primary = jc["primary"] as? String
-            if (!primary.isNullOrEmpty()) beans.add(primary.replaceFirstChar { it.lowercase() })
+        for (jc in allJava.values) beans.addAll((jc["beanNames"] as? Collection<String>) ?: emptyList())
+
+        // A form embedded only through bound subforms (`value: "{{address}}"`) writes its fields under that
+        // binding — `street` is `address.street` — so none of its names is a variable of its own. Recorded
+        // as top-level, `street` tied the child form to every unrelated model with a `street`. A form that
+        // is also opened on its own (a task's formKey, an unbound subform) keeps its top-level names.
+        val boundEmbedding = HashMap<String, Boolean>()
+        for (n in nodes.values) {
+            if (n["type"] != "form" && n["type"] != "page") continue
+            for (f in ((n["data"] as? Map<*, *>)?.get("fields") as? List<*>).orEmpty()) {
+                val fm = f as? Map<*, *> ?: continue
+                val child = knt("form", fm["subform"] as? String) ?: continue
+                val bound = (fm["value"] as? String)?.contains("{{") == true
+                boundEmbedding[child] = (boundEmbedding[child] ?: true) && bound
+            }
         }
+        val openedOnItsOwn = resolved.asSequence()
+            .filter { it["targetType"] == "model" && it["rel"] != "subform" && it["rel"] != "contains" }
+            .mapNotNull { knt(it["targetNodeType"], it["value"]) }.toSet()
+        val scopedSubforms = boundEmbedding.filter { it.value && it.key !in openedOnItsOwn }.keys
 
         val varUsages = LinkedHashMap<String, LinkedHashMap<String, LinkedHashSet<String>>>()
         // Variables backed by something stronger than a script's bare-identifier read. Everything a
@@ -260,7 +374,7 @@ object GraphBuilder {
         // resting on that alone is flagged rather than silently presented as a fact.
         val solidVars = LinkedHashSet<String>()
         fun addUsage(v: String, k: Any?, snippet: String, solid: Boolean = true) {
-            if (v in beans) return
+            if (v in beans || k.toString() in scopedSubforms) return
             varUsages.getOrPut(v) { LinkedHashMap() }.getOrPut(k.toString()) { LinkedHashSet() }.add(snippet)
             if (solid) solidVars.add(v)
         }
@@ -280,7 +394,7 @@ object GraphBuilder {
             // context, so a Java `setVariable("authenticatedUserId", …)` would stand alone as a write
             // with no readers and be reported as unused.
             if (v in beans || v in Constants.FLOWABLE_CONTEXT || v in Constants.JAVA_LITERALS) return
-            if (model == null) return
+            if (model == null || model.toString() in scopedSubforms) return
             val rec = linkedMapOf<String, Any?>("model" to model.toString(), "via" to via)
             element?.let { rec["element"] = it }
             elementName?.let { rec["elementName"] = it }
@@ -296,38 +410,90 @@ object GraphBuilder {
         /** One variable's write or read sites, with the model keys resolved to node ids so the frontend
          *  can link every row, and a site in an unknown model dropped. */
         fun sites(recs: Set<Map<String, Any?>>?): List<Map<String, Any?>> =
-            (recs ?: emptySet()).filter { it["model"] in keyToNode }
+            (recs ?: emptySet()).filter { kn(it["model"]) != null }
                 .map { rec ->
                     val out = LinkedHashMap(rec)
-                    out["model"] = keyToNode.getValue(rec["model"].toString())
+                    out["model"] = kn(rec["model"])!!
                     // A callee that is not in this project cannot be searched for readers, so the
                     // dangling key is replaced by a flag saying exactly that. Dropping it silently would
                     // turn "we cannot see the model this goes to" into "nobody reads it".
                     (rec["scope"] as? String)?.let { s ->
-                        val node = keyToNode[s]
+                        val node = kn(s)
                         if (node != null) out["scope"] = node else { out.remove("scope"); out["scopeUnresolved"] = true }
                     }
                     out
                 }
                 .sortedBy { "${it["model"]}|${it["via"]}|${it["element"]}" }
 
+        // In a service, a query or an agent a `${x}` / `{{x}}` is a parameter of the call — an operation's
+        // input, a query's request parameter, an agent operation's input — never a process variable: the
+        // same name in three unrelated models used to be one variable they shared.
+        fun contractScoped(k: String) = k.substringBefore(':') in CONTRACT_SCOPED_TYPES
+
+        // Reads that may only credit a variable something else already names: a name further into a
+        // binding than its head (`{{a && b}}`, `{{flw.formatDate(x, 'DD')}}`), and an instance field
+        // reached through a scope token (`${root.businessKey}`). Taken as variables of their own they made
+        // up names — a lambda's parameter, an enum-like word, the instance's end time — that nothing
+        // writes; as credit they keep a written variable from being reported unread. Applied once every
+        // other site is in.
+        data class Credit(val v: String, val k: String, val snippet: String, val via: String)
+        val credits = ArrayList<Credit>()
+        /** `root.x` and `parent.x` read a variable of another instance — which is all the via says. */
+        fun scopeVia(token: String, own: String) = when (token) {
+            "root" -> "rootScope"
+            "parent" -> "parentScope"
+            else -> own
+        }
+        fun readThroughScope(token: String, v: String, k: String, snippet: String, own: String) {
+            val via = scopeVia(token, own)
+            if (v in Constants.INSTANCE_FIELDS) { credits.add(Credit(v, k, snippet, via)); return }
+            addUsage(v, k, snippet)
+            addSite(v, k, Ctx.READ, via)
+        }
         for ((expr, keys) in ctx.exprUse) {
-            for (v in varsInExpr(expr)) for (k in keys) {
-                addUsage(v, k, expr)
-                addSite(v, k, Ctx.READ, "expression")
+            if (expr in placeholders) continue
+            val scoped by lazy { Constants.hierarchyReads(exprBody(expr), Constants.HIERARCHY_TOKENS) }
+            for (k in keys) {
+                if (contractScoped(k)) continue
+                val type = k.substringBefore(':')
+                // a channel's `#{headers['x']}` is SpEL over the message, not EL over a scope
+                if (type == "channel" && expr.startsWith("#{")) continue
+                // Freemarker: `${x?upper_case}` names the built-in after `?`, and a `<#list … as x>` local is
+                // no variable of the scope the template renders against
+                val vars = if (type in FREEMARKER_MODEL_TYPES) varsInExpr(FTL_BUILTIN_RE.replace(expr, " "), beans) - ctx.freemarkerLocals[k].orEmpty()
+                           else varsInExpr(expr, beans)
+                for (v in vars) {
+                    addUsage(v, k, expr)
+                    addSite(v, k, Ctx.READ, "expression")
+                }
+                // `${root.x}` / `${parent.x}` / `${self.x}`: the scope token is context, but the name after
+                // it is a variable of that scope. A template's `${root.x}` is already read as `template`.
+                if (type !in FREEMARKER_MODEL_TYPES) for ((token, v) in scoped) readThroughScope(token, v, k, expr, "expression")
             }
             // `${variables:get('x')}` names its variable as a string, which the identifier scan blanks
             // out — without this a variable read only that way looked as if nothing read it.
             for (v in varFnReads(expr)) for (k in keys) {
+                if (contractScoped(k)) continue
                 addUsage(v, k, expr)
                 addSite(v, k, Ctx.READ, "variablesFn")
             }
         }
+        // A custom function's namespace is the project's own frontend code, not a variable of that name.
+        val functionRoots = custom?.namespaces?.keys.orEmpty()
         for ((ph, keys) in ctx.mustacheUse) {
-            val v = varInMustache(ph) ?: continue
+            val head = varInMustache(ph)?.takeIf { it !in functionRoots }
+            val body = bindingBody(ph)
+            // `{{root.x}}` / `{{parent.x}}`: Work hands the form the root and the parent instance's variables
+            val scoped = Constants.hierarchyReads(body, Constants.FRONTEND_HIERARCHY_TOKENS)
+            val later = laterBindingNames(body, head) - functionRoots
             for (k in keys) {
-                addUsage(v, k, ph)
-                addSite(v, k, Ctx.READ, "binding")
+                if (contractScoped(k)) continue
+                if (head != null) {
+                    addUsage(head, k, ph)
+                    addSite(head, k, Ctx.READ, "binding")
+                }
+                for ((token, v) in scoped) readThroughScope(token, v, k, ph, "binding")
+                for (v in later) credits.add(Credit(v, k, ph, "binding"))
             }
         }
         // No site for the undirected bucket: it lumps `resultVariableName` (a write) together with
@@ -369,10 +535,14 @@ object GraphBuilder {
             val v = f["variable"] as? String ?: continue
             val model = f["model"]
             addUsage(v, model, paramSnippet(f))
-            varParams.getOrPut(v) { ArrayList() }.add(linkedMapOf(
+            // `side` says which end of the mapping this variable is — `orderId → orderId` binds it twice,
+            // once read to hand over, once written in the callee — and the callee says where it went
+            varParams.getOrPut(v) { ArrayList() }.add(linkedMapOf<String, Any?>(
                 "model" to model, "element" to f["element"], "dir" to f["dir"],
                 "source" to f["source"], "target" to f["target"],
-            ))
+            ).apply {
+                for (k in listOf("kind", "side", "calleeKind", "calleeKey", "calleeOp")) f[k]?.let { put(k, it) }
+            })
         }
         for (o in bucketList("apps")) {
             val am = o as Map<String, Any?>
@@ -391,30 +561,42 @@ object GraphBuilder {
                 }
             }
         }
+        // Every site that may create a variable is in; the credit-only reads join the names that exist.
+        for (c in credits) if (c.v in varUsages) {
+            addUsage(c.v, c.k, c.snippet)
+            addSite(c.v, c.k, Ctx.READ, c.via)
+        }
 
         for ((v, perModel) in varUsages) {
-            val usedBy = perModel.keys.filter { it in keyToNode }.map { keyToNode.getValue(it) }.toSortedSet().toList()
+            // A script's bare `demoLookupBean.createTaskQuery()` names a Spring bean, which the script's
+            // binding resolves by name like a variable. With nothing but that bare mention behind it, a name
+            // shaped like a bean is one; a name anything else reads or writes keeps its node and its read.
+            if (v !in solidVars && Constants.looksLikeBeanName(v)) continue
+            val usedBy = perModel.keys.mapNotNull { kn(it) }.toSortedSet().toList()
             if (usedBy.isEmpty()) continue
             val scopes = usedBy.mapNotNull { nodes[it]?.get("type") as? String }.toSortedSet().toList()
-            val usages = perModel.entries.filter { it.key in keyToNode }.map { (k, snips) ->
-                linkedMapOf<String, Any?>("model" to keyToNode.getValue(k), "snippets" to snips.sorted().take(10))
+            val usages = perModel.entries.filter { kn(it.key) != null }.map { (k, snips) ->
+                linkedMapOf<String, Any?>("model" to kn(k), "snippets" to snips.sorted().take(10))
             }
             val data = linkedMapOf<String, Any?>("usedBy" to usedBy, "scopes" to scopes, "usages" to usages)
-            val flows = (varParams[v] ?: emptyList()).filter { it["model"] in keyToNode }
-                .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
+            // Once each: a model that sits in the project twice — in an app archive and beside it — is
+            // parsed twice and kept once, but its mappings arrived here from both readings, so every
+            // variable of such a project listed each of them twice.
+            val flows = (varParams[v] ?: emptyList()).filter { kn(it["model"]) != null }
+                .map { it + mapOf("model" to kn(it["model"])) }.distinct()
             if (flows.isNotEmpty()) data["ioParams"] = flows
             // Which scripts touch this variable, and on which element — the detail view lists them and
             // the explorer's search jumps straight to that script.
-            val scripts = (varScripts[v] ?: emptyList()).filter { it["model"] in keyToNode }
-                .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
+            val scripts = (varScripts[v] ?: emptyList()).filter { kn(it["model"]) != null }
+                .map { it + mapOf("model" to kn(it["model"])) }.distinct()
             if (scripts.isNotEmpty()) data["scriptSites"] = scripts
-            // Where the name is written and where it is read. The counts are the uncapped truth while the
-            // lists are capped: a variable in a real project can have hundreds of sites, and the whole
-            // list ships inside the HTML payload.
+            // Where the name is written and where it is read — complete here, because UnusedVariables
+            // decides on these lists (a silencing site must not fall off the end); capped for display only
+            // after that decision, below.
             val writes = sites(varWrites[v])
             val reads = sites(varReads[v])
-            if (writes.isNotEmpty()) data["writes"] = writes.take(VAR_SITES_LISTED)
-            if (reads.isNotEmpty()) data["reads"] = reads.take(VAR_SITES_LISTED)
+            if (writes.isNotEmpty()) data["writes"] = writes
+            if (reads.isNotEmpty()) data["reads"] = reads
             data["writeCount"] = writes.size
             data["readCount"] = reads.size
             // Nothing but a bare identifier in a script backs this name: real often enough to be worth
@@ -435,10 +617,10 @@ object GraphBuilder {
             }
         }
         for ((lit, perModel) in strUsages) {
-            val usedBy = perModel.keys.filter { it in keyToNode }.map { keyToNode.getValue(it) }.toSortedSet().toList()
+            val usedBy = perModel.keys.mapNotNull { kn(it) }.toSortedSet().toList()
             if (usedBy.isEmpty()) continue
-            val usages = perModel.entries.filter { it.key in keyToNode }.map { (k, snips) ->
-                linkedMapOf<String, Any?>("model" to keyToNode.getValue(k), "snippets" to snips.sorted().take(10))
+            val usages = perModel.entries.filter { kn(it.key) != null }.map { (k, snips) ->
+                linkedMapOf<String, Any?>("model" to kn(k), "snippets" to snips.sorted().take(10))
             }
             addNode("string", lit, lit, null, linkedMapOf("usedBy" to usedBy, "usages" to usages))
         }
@@ -465,13 +647,20 @@ object GraphBuilder {
             for ((disp, kind, ns, member) in customFunctionEntries(custom)) {
                 val params = sigs[disp]
                 val label = if (params != null) "$disp($params)" else disp
+                val code = custom.code[disp]
                 addNode(
-                    "customFunction", disp, label, null,
-                    linkedMapOf(
+                    "customFunction", disp, label, code?.takeIf { it.inProject }?.file,
+                    linkedMapOf<String, Any?>(
                         "kind" to kind, "namespace" to ns, "member" to member, "signature" to params,
                         "sources" to custom.sources, "usedBy" to (cfnUsed[disp]?.sorted() ?: emptyList<String>()),
                         "bindings" to (cfnBindings[disp]?.sorted() ?: emptyList<String>()),
-                    ),
+                    ).apply {
+                        // the function itself, so its page shows what `{{ns.fn(x)}}` actually runs
+                        if (code != null) {
+                            put("code", code.text); put("codeFile", code.file); put("line", code.line)
+                            if (code.truncated) put("codeTruncated", true)
+                        }
+                    },
                 )
             }
         }
@@ -495,6 +684,26 @@ object GraphBuilder {
                 if (svcKey == null) continue
                 val consumerNode = kn(u["consumer"]) ?: continue
                 opUsedBy.getOrPut("$svcKey#$op") { LinkedHashSet() }.add(consumerNode)
+            }
+            // A data object bound to a service is served by that service's findById/create/update/delete:
+            // the engine calls them whenever an instance is read or written, from a data-object task, a
+            // page's data table, the REST API. Nothing in a model names those operations, so without this
+            // every generated CRUD operation was "unused" — 74 of 74 on one real project. A `search`
+            // operation is different: something has to name it (a data table's operation key), so it is
+            // credited only when something does.
+            val svcOps = HashMap<String, Map<String, Any?>>()
+            for (o in bucketList("services")) {
+                val svc = o as Map<String, Any?>
+                (svc["key"] as? String)?.let { svcOps[it] = svc }
+            }
+            for ((doKey, svcKey) in doToService) {
+                val svc = svcOps[svcKey] ?: continue
+                for (opAny in (svc["operations"] as? List<*> ?: emptyList<Any?>())) {
+                    val op = opAny as? Map<String, Any?> ?: continue
+                    if (op["key"] !in DATA_OBJECT_ENGINE_OPS) continue
+                    val opKey = op["key"] ?: continue
+                    opUsedBy.getOrPut("$svcKey#$opKey") { LinkedHashSet() }.add("dataObject:$doKey")
+                }
             }
             for (o in bucketList("services")) {
                 val svc = o as Map<String, Any?>
@@ -538,11 +747,14 @@ object GraphBuilder {
 
         // ------------------------------------------------------------------ edges
         val edges = ArrayList<LinkedHashMap<String, Any?>>()
-        fun addEdge(s: String?, t: String?, rel: String, suspect: Boolean = false, dynamic: Boolean = false) {
+        fun addEdge(s: String?, t: String?, rel: String, suspect: Boolean = false, dynamic: Boolean = false,
+                    colocated: Boolean = false, via: String? = null) {
             if (!s.isNullOrEmpty() && !t.isNullOrEmpty() && s != t) {
                 val e = linkedMapOf<String, Any?>("s" to s, "t" to t, "rel" to rel)
                 if (suspect) e["suspect"] = true
                 if (dynamic) e["dynamic"] = true
+                if (colocated) e["colocated"] = true
+                if (via != null) e["via"] = listOf(via)
                 edges.add(e)
             }
         }
@@ -550,9 +762,9 @@ object GraphBuilder {
         // model -> model / java (a `suspect` ref — incompatible cross-type fallback, ref-by-id,
         // ambiguous simple-name match — keeps the flag on its edge so the explorer can mark it)
         for (r in resolved) {
-            val s = kn(r["from"])
+            val s = knt(r["fromType"], r["from"])
             val t: String? = when {
-                r["targetType"] == "model" -> kn(r["value"])
+                r["targetType"] == "model" -> knt(r["targetNodeType"], r["value"])
                 truthy(r["targetFqn"]) -> "java:${r["targetFqn"]}"
                 else -> null
             }
@@ -564,35 +776,45 @@ object GraphBuilder {
         for (r in resolved) {
             val rel = r["rel"] as String
             val fqn = r["targetFqn"] as? String
-            if (rel.startsWith("calls ") && !fqn.isNullOrEmpty()) {
+            // a method called on a factory bean of a library type is that type's, not the factory's class
+            if (rel.startsWith("calls ") && !fqn.isNullOrEmpty() && r["factory"] != true) {
                 val mname = rel.substring(6).trim().trimEnd('(', ')')
                 val mid = "method:$fqn#$mname"
                 val info = methodsCalled.getOrPut(mid) { Triple(fqn, mname, LinkedHashSet()) }
-                kn(r["from"])?.let { info.third.add(it) }
+                knt(r["fromType"], r["from"])?.let { info.third.add(it) }
             }
         }
         for ((mid, info) in methodsCalled) {
             val (fqn, mname, callers) = info
             val cls = "java:$fqn"
             val label = fqn.substringAfterLast(".") + "." + mname + "()"
+            // Where the method is declared, so its page opens it: the parser knows each method's line.
+            val jc = allJava[fqn]
+            // declared in the class only where the class declares it — an inherited method is not
+            val line = (jc?.get("methods") as? List<*>)?.firstNotNullOfOrNull { m ->
+                (m as? Map<*, *>)?.takeIf { it["name"] == mname }?.get("line")
+            }
+            val declared = line != null && cls in nodes
             addNode(
-                "method", mid.substringAfter(":"), label, null,
-                linkedMapOf("name" to mname, "class" to fqn, "declaredIn" to (if (cls in nodes) cls else null)),
+                "method", mid.substringAfter(":"), label, if (line != null) jc?.get("file") else null,
+                linkedMapOf<String, Any?>("name" to mname, "class" to fqn, "declaredIn" to (if (declared) cls else null))
+                    .apply { if (line != null) put("line", line) },
             )
             for (c in callers) addEdge(c, mid, "calls")
-            if (cls in nodes) addEdge(mid, cls, "declared-in")
+            if (declared) addEdge(mid, cls, "declared-in")
         }
 
         // expression --calls--> method / java class
         val beanFqn = LinkedHashMap<String, String>()
         for (r in resolved) {
             val fqn = r["targetFqn"] as? String
-            if (r["kind"] == "bean" && !fqn.isNullOrEmpty()) beanFqn[r["value"] as String] = fqn
+            if (r["kind"] == "bean" && !fqn.isNullOrEmpty() && r["factory"] != true) beanFqn[r["value"] as String] = fqn
         }
         for (expr in ctx.exprUse.keys) {
             val enode = "expression:$expr"
             if (enode !in nodes) continue
-            val body = EXPR_STRIP_RE.replace(expr, "")
+            // a call spelled inside a string literal — `${auditLog.log('orderService.cancel()')}` — is text
+            val body = STR_IN_EXPR_RE.replace(EXPR_STRIP_RE.replace(expr, ""), " ")
             for (cm in Constants.METHOD_CALL_FULL_RE.findAll(body)) {
                 val fqn = beanFqn[cm.groupValues[1]] ?: continue
                 val mid = "method:$fqn#${cm.groupValues[2]}"
@@ -615,14 +837,20 @@ object GraphBuilder {
                         "file" to null, "data" to linkedMapOf<String, Any?>(),
                     )
                 }
-                addEdge(kn(r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
+                addEdge(knt(r["fromType"], r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
                 continue
             }
             val data: LinkedHashMap<String, Any?> = when {
                 kind == "bean" || kind == "class" -> {
-                    val platform = kind == "bean" && r["value"] in FLOWABLE_PLATFORM_BEANS
+                    val platform = kind == "bean" && r["value"] in Constants.FLOWABLE_PLATFORM_BEANS
                     linkedMapOf("platform" to platform, "kind" to kind)
                 }
+                // a model the platform ships — its events, default forms, permission decisions, templates —
+                // is consumed, never defined, by a project; matched by kind, so a call activity naming a
+                // platform form's key is still a missing process
+                r["targetType"] == "model" &&
+                    PlatformDefaultModels.provides(ReferenceResolver.modelKind(kind), r["value"] as String) ->
+                    linkedMapOf("kind" to kind, "platform" to true)
                 r["targetType"] == "model" -> linkedMapOf("kind" to kind, "missingModel" to true)
                 else -> {
                     // No node type exists for this ref kind — surface it instead of silently
@@ -635,28 +863,26 @@ object GraphBuilder {
                 }
             }
             val value = r["value"] as String
-            val nid = "external:$value"
+            // One node per missing thing, not per spelling: a missing form and a missing process of the
+            // same key are two gaps, and one shared node said "missing form" about the call activity too.
+            var nid = "external:$value"
+            val prev = nodes[nid]
+            if (prev != null && (prev["data"] as? Map<*, *>)?.get("kind") != kind) nid = "external:$kind:$value"
             if (nid !in extSeen) {
                 extSeen.add(nid)
                 nodes[nid] = linkedMapOf(
                     "id" to nid, "type" to "external", "label" to value, "key" to value, "file" to null, "data" to data,
                 )
             }
-            addEdge(kn(r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
+            addEdge(knt(r["fromType"], r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
         }
 
-        // dynamic (expression-valued) references — best-effort resolved by the reference resolver
-        // (constant-backed `${ident}` → model), else an expression placeholder node. Both variants
-        // carry `dynamic=true` so the explorer renders them dashed and they stay filterable.
+        // dynamic (expression-valued) references — an expression placeholder node, with `dynamic=true`
+        // so the explorer renders the edge dashed and it stays filterable.
         for (r in (result["dynamicRefs"] as? List<Map<String, Any?>> ?: emptyList())) {
-            val s = kn(r["from"]) ?: continue
+            val s = knt(r["fromType"], r["from"]) ?: continue
             val rel = r["rel"] as? String ?: continue
             val kind = r["kind"] as? String ?: continue
-            val resolvedNode = (r["resolvedValue"] as? String)?.let { kn(it) }
-            if (resolvedNode != null) {
-                addEdge(s, resolvedNode, rel, dynamic = true)
-                continue
-            }
             if (!(kind.startsWith("model:") || kind in ReferenceResolver.MODEL_KIND_NAMES)) continue
             val value = r["value"] as? String ?: continue
             val nid = "external:$value"
@@ -670,40 +896,65 @@ object GraphBuilder {
             addEdge(s, nid, rel, dynamic = true)
         }
 
-        // rest calls -> endpoint (matched) or external url
+        fun isRoute(url: String) = url.contains("#/") || url.trimStart().startsWith("#")
+
+        /** The node of a URL outside the project: a client-side route, Flowable's own API, or elsewhere — a
+         *  URL something calls (`external_url`) or only links to (`link`), which no count of calls includes. */
+        fun externalUrl(url: String, method: Any?, route: Boolean, link: Boolean = false): String {
+            val nid = "external:$url"
+            if (nid !in extSeen) {
+                extSeen.add(nid)
+                nodes[nid] = linkedMapOf(
+                    "id" to nid, "type" to "external", "label" to url, "key" to url, "file" to null,
+                    "data" to linkedMapOf<String, Any?>(),
+                )
+            }
+            val data = nodes[nid]!!["data"] as MutableMap<String, Any?>
+            if (method != null) data.putIfAbsent("method", method)
+            when {
+                route -> data["route"] = true
+                JavaParser.callsFlowableApi(url) -> { data["platform"] = true; data["flowableApi"] = true }
+                link -> if (data["external_url"] != true) data["link"] = true
+                else -> { data["external_url"] = true; data.remove("link") }
+            }
+            return nid
+        }
+
+        // rest calls -> endpoint (matched) or external url. The edge carries the URLs that reach it as
+        // written (`via`), so the page can tell which of a model's calls an endpoint answers without a
+        // matcher of its own — a second copy of the rules is a second set of answers.
         for (rc in ctx.restCalls) {
-            val s = kn(rc["source"])
+            val s = kn(rc["sourceId"] ?: rc["source"])
             val matchEps = rc["_matchEps"] as? List<Map<String, Any?>>
             if (!matchEps.isNullOrEmpty()) {
                 for (ep in matchEps) {
-                    addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "rest-call", suspect = ep["loose"] == true)
+                    addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "rest-call", suspect = ep["loose"] == true,
+                        via = rc["url"] as? String)
                 }
                 continue
             }
             val url = rc["url"] as? String ?: continue
             if (DATAOBJ_QUERY_RE.containsMatchIn(url)) continue
-            val data = linkedMapOf<String, Any?>("method" to rc["method"])
-            val rel: String
-            if (url.contains("#/") || url.trimStart().startsWith("#")) {
-                data["route"] = true; rel = "navigates-to"
-            } else if (ENDPOINTS_PLATFORM_RE.containsMatchIn(url)) {
-                data["platform"] = true; data["flowableApi"] = true; rel = "rest-call"
-            } else {
-                data["external_url"] = true; rel = "rest-call"
+            val route = isRoute(url)
+            addEdge(s, externalUrl(url, rc["method"], route), if (route) "navigates-to" else "rest-call")
+        }
+
+        // links -> the endpoint a browser opens (a report, a download), else the page or route it goes to
+        val codeEndpoints = bucketList("endpoints").filterIsInstance<Map<String, Any?>>()
+        for (lk in ctx.links) {
+            val s = kn(lk["sourceId"] ?: lk["source"]) ?: continue
+            val url = lk["url"] as? String ?: continue
+            val eps = JavaParser.matchRest(url, codeEndpoints, "GET").filter { it["loose"] != true }
+            if (eps.isNotEmpty()) {
+                for (ep in eps) addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "navigates-to")
+                continue
             }
-            val nid = "external:$url"
-            if (nid !in extSeen) {
-                extSeen.add(nid)
-                nodes[nid] = linkedMapOf(
-                    "id" to nid, "type" to "external", "label" to url, "key" to url, "file" to null, "data" to data,
-                )
-            }
-            addEdge(s, nid, rel)
+            addEdge(s, externalUrl(url, null, isRoute(url), link = true), "navigates-to")
         }
 
         // group -> model (access)
         for (a in ctx.access) {
-            val t = kn(a["model"])
+            val t = knt(a["modelType"], a["model"])
             for (g in (a["groups"] as List<String>)) {
                 if (g.contains("\${") || g.contains("{{")) continue
                 addEdge("group:$g", t, a["action"] as String)
@@ -722,21 +973,29 @@ object GraphBuilder {
         for ((fqn, jc) in allJava) {
             val snode = "java:$fqn"
             if (snode !in nodes) continue
+            // the type a field or constructor parameter names, as the source's imports and package say —
+            // `import org.flowable.task.api.Task` is not the project's own `Task`
             for (dep in (jc["deps"] as? Collection<String> ?: emptyList())) {
-                val dfqn = simpleToFqn[dep]
-                if (dfqn != null && dfqn != fqn && "java:$dfqn" in nodes) {
-                    addEdge(snode, "java:$dfqn", "uses", suspect = dep in ambiguousSimple)
-                }
+                val dfqn = JavaTypes.resolve(dep, jc, allJava.keys)
+                if (dfqn != null && dfqn != fqn && "java:$dfqn" in nodes) addEdge(snode, "java:$dfqn", "uses")
             }
-            // a literal passed to a known key-taking API is a confident reference; any other
-            // literal that merely equals a model key ("status", "customer", …) only a suspect one
+            // A literal passed to a known key-taking API is a confident reference to a model of the type
+            // that API takes — `caseDefinitionKey("X")` is the case X, whatever else is called X. A literal
+            // that merely equals a model key ("status", "customer", …), or one handed to the untyped
+            // `key(…)` while several types share it, is only a suspect one.
             val keyed = jc["keyedStrings"] as? Collection<*> ?: emptyList<Any?>()
+            val keyedKinds = jc["keyedKinds"] as? Map<*, *> ?: emptyMap<Any?, Any?>()
             for (s in (jc["strings"] as? Collection<*> ?: emptyList<Any?>())) {
                 if (s !in modelKeys) continue
-                val t = kn(s)
-                if (t != null && t.substringBefore(":") !in setOf("liquibase", "java", "endpoint", "group")) {
-                    addEdge(snode, t, "references", suspect = s !in keyed)
+                val kinds = (keyedKinds[s] as? Collection<*>).orEmpty()
+                if (s in keyed && kinds.isNotEmpty()) {
+                    for (k in kinds) nodes["$k:$s"]?.let { addEdge(snode, it["id"] as String, "references") }
+                    continue
                 }
+                val owners = modelNodesByKey[s].orEmpty()
+                val t = owners.firstOrNull() ?: continue
+                if (s !in keyed && !literalNamesAModel(jc, s as String)) continue
+                addEdge(snode, t, "references", suspect = s !in keyed || owners.size > 1)
             }
             // external-worker subscriptions: the class polls a topic — meets the BPMN/CMMN
             // `external-topic` refs in the shared topic node
@@ -778,13 +1037,13 @@ object GraphBuilder {
             val bot = a["botKey"]
             if (!truthy(bot)) continue
             val botStr = bot.toString()
-            val anode = kn(a["key"])
-            val botNode = kn(botStr)
+            // Typed on both ends: by key alone the action was whichever model came first under its key,
+            // and the bot key — never a key of a model — matched a group, a form or a variable of that name.
+            val anode = knt("action", a["key"])
             val jc = allJava.values.firstOrNull { j ->
                 botStr in (j["beanNames"] as Collection<String>) || j["primary"] == botStr
             }
             when {
-                botNode != null -> addEdge(anode, botNode, "bot")
                 botStr in botToFqn -> addEdge(anode, "java:${botToFqn[botStr]}", "bot")
                 jc != null -> addEdge(anode, "java:${jc["fqn"]}", "bot")
                 else -> {
@@ -838,11 +1097,14 @@ object GraphBuilder {
         }
 
         // app -> model membership (co-located models)
-        val appByContainer = LinkedHashMap<String, String?>()
+        // Every app of a container — an export can hold several `.bar`s, each its own container, and an
+        // archive can hold two apps; keeping only the last one per container credited one app's models to
+        // the other.
+        val appByContainer = LinkedHashMap<String, MutableList<String>>()
         for (o in bucketList("apps")) {
             val am = o as Map<String, Any?>
-            val c = containerOf(am["file"] as? String)
-            if (c != null) appByContainer[c] = kn(am["key"])
+            val c = containerOf(am["file"] as? String) ?: continue
+            knt("app", am["key"])?.let { appByContainer.getOrPut(c) { ArrayList() }.add(it) }
         }
         if (appByContainer.isNotEmpty()) {
             val nonModel = setOf(
@@ -855,10 +1117,14 @@ object GraphBuilder {
                 if (n["type"] in nonModel) continue
                 val key = n["key"]
                 val containers = LinkedHashSet<String?>()
-                for ((_, f) in (byKey[key] ?: emptyList())) containers.add(containerOf(f))
+                // the copies of *this* model only — a form X beside app A says nothing about the case X
+                // that sits beside app B
+                for ((t, f) in (byKey[key] ?: emptyList())) if (t == n["type"]) containers.add(containerOf(f))
                 containers.add(containerOf(n["file"] as? String))
+                // a member only because it sits beside the app — the app definition does not list it, which
+                // the app's completeness table tells apart from a declared member
                 for (c in containers) {
-                    if (c != null && c in appByContainer) addEdge(appByContainer[c], n["id"] as String, "contains")
+                    for (app in appByContainer[c].orEmpty()) addEdge(app, n["id"] as String, "contains", colocated = true)
                 }
             }
         }
@@ -870,9 +1136,19 @@ object GraphBuilder {
         // the cross-model half has to follow the resolved edges, which did not exist yet at that point.
         // The nodes are the same instances that go into `result`, so stamping them in place is enough.
         val readsEverything = LinkedHashSet<String>()
-        for (k in ctx.varScopeReadsAll) keyToNode[k]?.let { readsEverything.add(it) }
+        for (k in ctx.varScopeReadsAll) kn(k)?.let { readsEverything.add(it) }
         for ((fqn, jc) in allJava) if (jc["readsAllVariables"] == true) readsEverything.add("java:$fqn")
         UnusedVariables.decide(nodes, edges, ctx.varReadsUnknown, readsEverything, MUSTACHE_IGNORE)
+        // Decided; now the lists are display. A variable in a real project can have hundreds of sites and
+        // the whole list ships inside the HTML payload, so the counts stay the truth and the lists are capped.
+        for (n in nodes.values) {
+            if (n["type"] != "variable") continue
+            val d = n["data"] as MutableMap<String, Any?>
+            for (k in listOf("writes", "reads")) {
+                val l = d[k] as? List<*> ?: continue
+                if (l.size > VAR_SITES_LISTED) d[k] = l.take(VAR_SITES_LISTED)
+            }
+        }
 
         // dedupe edges — when the same (s,t,rel) exists both flagged and unflagged, the strongest
         // signal wins: a clean occurrence clears `suspect`/`dynamic` from the kept edge.
@@ -885,6 +1161,11 @@ object GraphBuilder {
             } else {
                 if (prev["suspect"] == true && e["suspect"] != true) prev.remove("suspect")
                 if (prev["dynamic"] == true && e["dynamic"] != true) prev.remove("dynamic")
+                // declared in the app definition as well as sitting beside it: a declared member
+                if (prev["colocated"] == true && e["colocated"] != true) prev.remove("colocated")
+                (e["via"] as? List<*>)?.let { more ->
+                    prev["via"] = ((prev["via"] as? List<*>).orEmpty() + more).distinct()
+                }
             }
         }
         val uniq = ArrayList<Map<String, Any?>>(edgeByKey.values)
@@ -893,6 +1174,8 @@ object GraphBuilder {
         result["graph"] = linkedMapOf("nodes" to nodeList, "edges" to uniq)
         result["stats"] = linkedMapOf(
             "models" to ctx.modelFileCount,
+            // files vs models: 27 archives can hold 610 models, and "3 models" for that is not a count
+            "modelCount" to nodes.values.count { it["type"] !in NON_MODEL_NODE_TYPES },
             "archives" to ctx.archiveFileCount,
             "java" to ctx.javaFileCount,
             "endpoints" to bucketList("endpoints").size,
@@ -900,6 +1183,7 @@ object GraphBuilder {
             "nodes" to nodeList.size,
             "edges" to uniq.size,
             "suspectEdges" to uniq.count { it["suspect"] == true },
+            "exprSkippedNested" to exprSkippedNested,
             "dynamicEdges" to uniq.count { it["dynamic"] == true },
             "scriptIssues" to countScriptIssues(result),
         )
@@ -921,7 +1205,7 @@ object GraphBuilder {
                 is List<*> -> v.forEach { walk(it) }
             }
         }
-        for (b in listOf("processes", "cases", "actions")) walk(result[b])
+        for (b in listOf("processes", "cases", "actions", "services")) walk(result[b])
         return n
     }
 
@@ -939,28 +1223,33 @@ object GraphBuilder {
     }
 
     /** `os.path.basename` for the '/'-separated rel paths Atlas uses. */
+    /** The file name of a path, or of an archive entry (`app.zip!liquibase-x.data.changelog.xml`). */
     private fun basename(path: String?): String? {
         if (path == null) return null
-        return if ("/" in path) path.substringAfterLast("/") else path
+        return path.substringAfterLast('!').substringAfterLast('/')
     }
 
-    /** The 'app container' of a file: its archive (before '!') or its parent dir. */
+    /** The 'app container' of a file: its innermost archive (before the last '!') or its parent dir. */
     private fun containerOf(path: String?): String? {
         if (path.isNullOrEmpty()) return null
-        if ("!" in path) return path.substringBefore("!")
+        if ("!" in path) return path.substringBeforeLast("!")
         return if ("/" in path) path.substringBeforeLast("/") else "."
     }
 
     /** Variable identifiers used in a `${…}`/`#{…}` expression (not beans/functions/context). */
-    private fun varsInExpr(expr: String): Set<String> {
+    /** The variable roots an expression reads. A root followed by `.method(` used to be a bean by that
+     *  fact alone; now only a root in [beans] — the resolver's known beans — is, so `${order.getTotal()}`
+     *  reads `order` while `${orderService.getTotal()}` still calls a bean. */
+    private fun varsInExpr(expr: String, beans: Set<String>): Set<String> {
         var body = EXPR_STRIP_RE.replace(expr, "")
         body = STR_IN_EXPR_RE.replace(body, " ")
-        val beans = Constants.METHOD_CALL_FULL_RE.findAll(body).map { it.groupValues[1] }.toSet()
         val out = LinkedHashSet<String>()
         for (m in ROOT_IDENT_RE.findAll(body)) {
             val n = m.groupValues[1]
             val after = body.substring(m.range.last + 1).trimStart()
             if (after.isNotEmpty() && after[0] == '(') continue
+            // `json:object(`, `bpmn:…(`: an EL function's namespace; `x -> …`: a lambda's parameter
+            if (NS_CALL_AFTER_RE.containsMatchIn(body.substring(m.range.last + 1)) || after.startsWith("->")) continue
             if (n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS || n in beans) continue
             out.add(n)
         }
@@ -1002,13 +1291,56 @@ object GraphBuilder {
         return "(${flow["dir"]} parameter" + (if (el != null) " on $el" else "") + ") $mapping"
     }
 
-    /** The bound variable name of a `{{…}}` binding, e.g. `{{order.x}}` -> `order`. */
+    /**
+     * The bound variable name of a `{{…}}` binding, e.g. `{{order.x}}` -> `order`.
+     *
+     * Not a variable: the runtime's own roots, a call (`{{round(total)}}`), and a word of JavaScript. The
+     * names past the head were held to the last two and the head was not, so `{{true}}`, `{{false}}` and
+     * `{{null}}` — what a script button assigns, what a hidden field is set to — gave a project three
+     * variables of those names, each "used" by every form that binds the literal.
+     */
     private fun varInMustache(ph: String): String? {
         val inner = ph.trim('{', '}', ' ').trim()
         val m = MUSTACHE_HEAD_RE.find(inner) ?: return null
         val root = m.groupValues[1]
-        if (root in MUSTACHE_IGNORE || root.trimStart('$') in MUSTACHE_IGNORE) return null
+        if (root in MUSTACHE_IGNORE || root in FRONTEND_JS_WORDS) return null
+        if (inner.substring(m.range.last + 1).trimStart().startsWith("(")) return null
         return root
+    }
+
+    /** An expression's body with its `${ }` and its string literals blanked — what a name scan reads. */
+    private fun exprBody(expr: String): String = STR_IN_EXPR_RE.replace(EXPR_STRIP_RE.replace(expr, ""), " ")
+
+    /** A binding's body the same way; a binding read out of XML still spells `&&` as `&amp;&amp;`. */
+    private fun bindingBody(ph: String): String =
+        STR_IN_EXPR_RE.replace(Constants.htmlUnescape(ph.trim('{', '}', ' ').trim()), " ")
+
+    /** JavaScript's own words, which a frontend binding may hold and which name no variable. */
+    private val FRONTEND_JS_WORDS = setOf(
+        "true", "false", "null", "undefined", "typeof", "instanceof", "new", "in", "NaN", "Infinity",
+        "Math", "JSON", "Date", "Object", "Number", "String", "Array", "Boolean", "BigNumber",
+    )
+    /** `{{$payload.x}}` is the form's own payload, so `x` is read exactly as `{{x}}` would read it. */
+    private val PAYLOAD_MEMBER_RE = Regex("\\\$payload\\s*\\.\\s*([A-Za-z_]\\w*)")
+
+    /**
+     * The names a binding reads past its head: an argument of a call (`{{flw.formatDate(due, 'DD')}}`),
+     * the second operand (`{{a && b}}`), a negation (`{{!done}}`), a member of `$payload`. Only the head was
+     * read before, so a variable a form shows only that way was reported as written but never read. The
+     * same exclusions as the head — a member, a `$` root, a call, the runtime's scratch — plus JavaScript's
+     * own words.
+     */
+    private fun laterBindingNames(body: String, head: String?): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (m in ROOT_IDENT_RE.findAll(body)) {
+            val n = m.groupValues[1]
+            val after = body.substring(m.range.last + 1).trimStart()
+            if (after.startsWith("(") || after.startsWith("=>")) continue
+            if (n == head || n in MUSTACHE_IGNORE || n in FRONTEND_JS_WORDS || n in Constants.JAVA_LITERALS) continue
+            out.add(n)
+        }
+        for (m in PAYLOAD_MEMBER_RE.findAll(body)) out.add(m.groupValues[1])
+        return out
     }
 
     /**
@@ -1055,7 +1387,7 @@ object GraphBuilder {
         ExprProblemKind.UNKNOWN_NAMESPACE -> "unknown-namespace"
         ExprProblemKind.UNKNOWN_FUNCTION -> "unknown-function"
         ExprProblemKind.UNKNOWN_ROOT -> "unknown-root"
-        ExprProblemKind.SYNTAX, ExprProblemKind.DIALECT_MISUSE -> null
+        ExprProblemKind.SYNTAX, ExprProblemKind.DIALECT_MISUSE, ExprProblemKind.ARITY -> null
     }
 
     private fun exprProblemAllowlisted(p: Map<String, Any?>, allow: Set<String>): Boolean {
@@ -1096,9 +1428,14 @@ object GraphBuilder {
     private fun customFnsCalledIn(text: String, cat: CustomFunctionCatalog): Set<String> {
         val body = decodeJsonStringEscapes(Constants.htmlUnescape(text))
         val found = LinkedHashSet<String>()
+        // Name boundaries spelled out rather than `\b`: `$` is no word character, so `\b$fmt` never matched
+        // after `{`, a space or `(`, and every `$`-prefixed function or namespace was reported unused
+        // however often a form called it. A `.` before the name is a member of something else (`item.fmt`).
+        val start = "(?<![\\w$.])"
+        val end = "(?![\\w$])"
         for ((ns, members) in cat.namespaces) {
             for (m in members) {
-                if (Regex("\\b" + Regex.escape(ns) + "\\s*\\.\\s*" + Regex.escape(m) + "\\b").containsMatchIn(body)) {
+                if (Regex(start + Regex.escape(ns) + "\\s*\\.\\s*" + Regex.escape(m) + end).containsMatchIn(body)) {
                     found.add("$ns.$m")
                 }
             }
@@ -1106,8 +1443,12 @@ object GraphBuilder {
         for (m in cat.flw) {
             if (Regex("\\bflw\\s*\\.\\s*" + Regex.escape(m) + "\\b").containsMatchIn(body)) found.add("flw.$m")
         }
+        // A top-level function counts wherever it is named, not only where it is called: handed on by
+        // reference (`{{names.map(fmt)}}`) it runs just the same. Named in code, that is — without the call's
+        // `(` to anchor it, `{{kind == 'format'}}` would credit a function called `format`.
+        val code = STR_IN_EXPR_RE.replace(body, " ")
         for (fn in cat.topLevel) {
-            if (Regex("\\b" + Regex.escape(fn) + "\\s*\\(").containsMatchIn(body)) found.add(fn)
+            if (Regex(start + Regex.escape(fn) + end).containsMatchIn(code)) found.add(fn)
         }
         return found
     }

@@ -4,7 +4,7 @@ package com.flowable.atlas.expr.eval
  * Resolves a [PayloadScopePath] against a parsed payload into the evaluation frame the real forms
  * engine would give a component living at that node: the node becomes the local scope (its keys are
  * spread into the context), every traversed level contributes one `$itemParent` link
- * (`{ …enclosingScope, $itemParent: outer }` — mirrors `FormUtils.ts`), and the innermost array
+ * (`{ …enclosingScope, $itemParent: outer }` — mirrors the forms runtime), and the innermost array
  * element binds `$item`/`$index`. `root` and `$payload` stay absolute regardless of depth.
  *
  * Approximation, by design: every path step is treated as a *bound container* boundary (a subform

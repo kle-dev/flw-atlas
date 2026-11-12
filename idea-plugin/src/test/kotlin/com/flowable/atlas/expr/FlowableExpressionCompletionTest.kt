@@ -2,6 +2,7 @@ package com.flowable.atlas.expr
 
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
+import com.intellij.icons.AllIcons
 import com.intellij.codeInsight.lookup.LookupElementPresentation
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
@@ -67,7 +68,7 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
     }
 
     fun testReferencedIdentifiersLabelledBeanOnlyWhenTheyResolveToAProjectClass() {
-        myFixture.addFileToProject("OrderService.java", "public class OrderService { public String process(String s){return s;} }")
+        myFixture.addFileToProject("OrderService.java", "@Service public class OrderService { public String process(String s){return s;} }")
         // A model whose expressions reference: orderService (a project class), process/order (not classes),
         // and the catalog function `now` / namespace `date` (must not appear as spurious beans).
         myFixture.addFileToProject(
@@ -86,8 +87,12 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
         fun typeOf(s: String): String? = elements.firstOrNull { it.lookupString == s }
             ?.let { val p = LookupElementPresentation(); it.renderElement(p); p.typeText }
 
-        assertEquals("resolvable project class → bean", "bean", typeOf("orderService"))
+        assertEquals("a declared project bean → bean", "bean", typeOf("orderService"))
         assertEquals("non-class identifier → referenced, not bean", "referenced", typeOf("order"))
+        // …and neither sits iconless beside the iconed variables any more.
+        fun iconOf(s: String) = elements.firstOrNull { it.lookupString == s }?.let { val p = LookupElementPresentation(); it.renderElement(p); p.icon }
+        assertSame(AllIcons.Nodes.Plugin, iconOf("orderService"))
+        assertSame(AllIcons.Nodes.Tag, iconOf("order"))
         // `now` is a catalog function local name and must be excluded from the referenced-identifier dump.
         assertTrue("catalog function must not show as bean", typeOf("now") != "bean")
     }
@@ -105,8 +110,23 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
                     "flw.formatIban" to "iban",
                     "greet" to "name",
                 ),
+                constants = setOf("\$isDesktopDemo"),
             ),
         )
+    }
+
+    fun testCustomValueCompletesWithoutParentheses() {
+        // `$isDesktopDemo: true` is a value: `{{$isDesktopDemo()}}` would fail at runtime
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "<caret>")
+        myFixture.completeBasic()
+        val el = myFixture.lookupElements?.firstOrNull { it.lookupString == "\$isDesktopDemo" }
+        assertNotNull("a custom value is offered at the root", el)
+        val p = LookupElementPresentation(); el!!.renderElement(p)
+        assertEquals("custom value", p.typeText)
+        myFixture.lookup.currentItem = el
+        myFixture.finishLookup(com.intellij.codeInsight.lookup.Lookup.NORMAL_SELECT_CHAR)
+        assertEquals("\$isDesktopDemo", myFixture.editor.document.text)
     }
 
     fun testCustomFunctionListsParametersAsTailText() {

@@ -1,0 +1,303 @@
+package com.flowable.atlas.graph
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.LocalDate
+
+/**
+ * The waiver file and what it does to a report.
+ *
+ * The cases worth pinning are the ones where being wrong is invisible: a waiver that matches more than
+ * it should, one that silently stops matching, and counts that disagree with the list they summarise.
+ */
+class WaiversTest {
+
+    private fun node(id: String, type: String, data: Map<String, Any?> = emptyMap()): Map<String, Any?> =
+        mapOf("id" to id, "type" to type, "label" to id.substringAfter(':'), "key" to id.substringAfter(':'),
+            "file" to null, "data" to data)
+
+    private fun run(nodes: List<Map<String, Any?>>, waivers: Waivers.Set): Map<String, Any?> {
+        val result = LinkedHashMap<String, Any?>()
+        result["graph"] = mapOf("nodes" to nodes, "edges" to emptyList<Map<String, Any?>>())
+        Findings.apply(result, waivers)
+        return result
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun checks(r: Map<String, Any?>) = r["checks"] as Map<String, Any?>
+
+    @Suppress("UNCHECKED_CAST")
+    private fun findings(r: Map<String, Any?>) = r["findings"] as List<Map<String, Any?>>
+
+    @Suppress("UNCHECKED_CAST")
+    private fun report(r: Map<String, Any?>) = r["waivers"] as? Map<String, Any?>
+
+    private fun forms(vararg ids: String) = ids.map { node(it, "form") }
+
+    private fun waive(vararg w: Waivers.Waiver) = Waivers.Set(w.toList())
+
+    @Test
+    fun aWaivedFindingStaysInTheListButLeavesTheCounts() {
+        val r = run(forms("form:a", "form:b"), waive(
+            Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept for the pilot")))
+
+        assertEquals("both findings are still reported", 2, findings(r).size)
+        assertEquals("only the open one is counted", 1, checks(r)["unusedForms"])
+        assertEquals(1, checks(r)["open"])
+        assertEquals(1, checks(r)["waived"])
+
+        val waived = findings(r).single { it["node"] == "form:a" }
+        assertEquals(mapOf("reason" to "kept for the pilot"), waived["waived"])
+        assertNull("the other one is untouched", findings(r).single { it["node"] == "form:b" }["waived"])
+    }
+
+    @Test
+    fun aWaiverOnlyCoversItsOwnNode() {
+        val r = run(forms("form:a", "form:b"), waive(
+            Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "why not")))
+        assertEquals(1, checks(r)["waived"])
+    }
+
+    @Test
+    fun aWaiverForAnotherCheckDoesNotMatch() {
+        val r = run(forms("form:a"), waive(
+            Waivers.Waiver(check = "unusedOps", node = "form:a", reason = "wrong check")))
+        assertEquals(1, checks(r)["open"])
+        assertNull(checks(r)["waived"])
+    }
+
+    /** Without `subject` a rule covers every finding of that check on the node; with it, exactly one. */
+    @Test
+    fun subjectNarrowsAWaiverToOneOfSeveralFindings() {
+        val variable = node("variable:v", "variable", mapOf("unreadIn" to listOf("process:one", "process:two")))
+        val broad = run(listOf(variable), waive(
+            Waivers.Waiver(check = "unreadInputs", node = "variable:v", reason = "all of them")))
+        assertEquals("no subject waives both", 2, broad.let { checks(it)["waived"] })
+
+        val narrow = run(listOf(variable), waive(
+            Waivers.Waiver(check = "unreadInputs", node = "variable:v", subject = "process:one",
+                reason = "just that one")))
+        assertEquals(1, checks(narrow)["waived"])
+        assertEquals(1, checks(narrow)["unreadInputs"])
+    }
+
+    @Test
+    fun anExpiredWaiverStopsSuppressingAndSaysSo() {
+        val expired = Waivers.Waiver(
+            check = "unusedForms", node = "form:a", reason = "until the migration lands",
+            until = "2020-01-01")
+        val r = run(forms("form:a"), waive(expired))
+
+        assertEquals("the finding is open again", 1, checks(r)["open"])
+        assertNull(checks(r)["waived"])
+        assertTrue(report(r)!!["stale"].toString().contains("expired on 2020-01-01"))
+    }
+
+    @Test
+    fun aWaiverThatMatchesNothingIsReportedAsStale() {
+        val r = run(forms("form:a"), waive(
+            Waivers.Waiver(check = "unusedForms", node = "form:gone", reason = "deleted last year")))
+        assertTrue(report(r)!!["stale"].toString().contains("matched nothing"))
+    }
+
+    /** A reason is the only part of a waiver a reviewer can actually review. */
+    @Test
+    fun aWaiverWithoutAReasonIsReported() {
+        val r = run(forms("form:a"), waive(Waivers.Waiver(check = "unusedForms", node = "form:a")))
+        assertEquals("it still suppresses", 1, checks(r)["waived"])
+        assertTrue(report(r)!!["unexplained"].toString().contains("no reason given"))
+    }
+
+    @Test
+    fun noWaiverFileMeansNoWaiverBlock() {
+        val r = run(forms("form:a"), Waivers.EMPTY)
+        assertNull(report(r))
+        assertNull(checks(r)["waived"])
+    }
+
+    /** Two rules that both cover a finding are both true; the second one is not "matched nothing". */
+    @Test
+    fun aDuplicateRuleIsNotReportedAsStale() {
+        val r = run(forms("form:a"), waive(
+            Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept"),
+            Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept, said twice")))
+        assertEquals(1, checks(r)["waived"])
+        assertNull("both rules matched, nothing is stale", report(r)!!["stale"])
+        assertEquals(listOf(1, 1), rules(r).map { it["matched"] })
+    }
+
+    /** The plugin keeps one Set and analyses again; the counts belong to the run, not to the set. */
+    @Test
+    fun matchCountsDoNotLeakBetweenRuns() {
+        val set = waive(Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept"))
+        run(forms("form:a"), set)
+        val r = run(forms("form:a"), set)
+        assertEquals(1, rules(r).single()["matched"])
+    }
+
+    /** The explorer writes this block back as the file, so a field left out here is a field it would drop. */
+    @Test
+    fun theReportCarriesEveryFieldOfARuleAndTheNotes() {
+        val r = run(forms("form:a"), Waivers.Set(
+            waivers = listOf(Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "pilot",
+                by = "team-orders", at = "2026-09-01", until = "2999-01-01")),
+            notes = listOf(Waivers.Note(node = "form:a", text = "replace in Q3", importance = "high")),
+            createdWith = "0.24.0"))
+        assertEquals(
+            mapOf("check" to "unusedForms", "node" to "form:a", "reason" to "pilot", "by" to "team-orders",
+                "at" to "2026-09-01", "until" to "2999-01-01", "matched" to 1),
+            rules(r).single())
+        assertEquals("0.24.0", report(r)!!["createdWith"])
+        @Suppress("UNCHECKED_CAST")
+        val notes = report(r)!!["notes"] as List<Map<String, Any?>>
+        assertEquals(mapOf("node" to "form:a", "text" to "replace in Q3", "importance" to "high"), notes.single())
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun rules(r: Map<String, Any?>) = report(r)!!["rules"] as List<Map<String, Any?>>
+
+    // ---- the file itself -------------------------------------------------------------------------
+
+    @Test
+    fun parsingKeepsWhatItUnderstandsAndReportsTheRest() {
+        val set = Waivers.parse("""
+            {"version": 1,
+             "waivers": [
+               {"check": "unusedForms", "node": "form:a", "reason": "pilot"},
+               {"check": "unusedForms"},
+               "not an object"
+             ],
+             "notes": [{"node": "form:b", "text": "revisit in Q3", "importance": "high"}]}
+        """.trimIndent())
+
+        assertEquals(1, set.waivers.size)
+        assertEquals(1, set.notes.size)
+        assertEquals("revisit in Q3", set.notes[0].text)
+        assertEquals(2, set.problems.size)
+    }
+
+    /** A hand-written file may carry a `file` key; it was never matched, and is now simply not a field. */
+    @Test
+    fun aFileKeyIsIgnoredWhenParsing() {
+        val set = Waivers.parse("""{"version": 1, "waivers": [
+            {"check": "unusedForms", "node": "form:a", "file": "forms/a.form", "reason": "pilot"}]}""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.isEmpty())
+        assertTrue(!Waivers.serialize(set, "0.0.0").contains("\"file\""))
+    }
+
+    @Test
+    fun anUnreadableFileIsAProblemNotACrash() {
+        val set = Waivers.parse("this is not json")
+        assertTrue(set.problems.isNotEmpty())
+        assertTrue(set.waivers.isEmpty())
+    }
+
+    /** A syntax error names its file and its place; it used to read "waivers.json is not a JSON object" whatever the file. */
+    @Test
+    fun aSyntaxErrorSaysWhereItIs() {
+        val p = Waivers.parse("{\"waivers\": [}", "bad.json").problems.single()
+        assertTrue(p, p.contains("bad.json") && p.contains("line 1 column"))
+        val dir = java.nio.file.Files.createTempDirectory("atlas-waivers").toFile()
+        val custom = java.io.File(dir, "custom.json").apply { writeText("{\"waivers\": [\n  {\"check\": \"unusedForms\" \"node\": \"form:a\"}\n]}") }
+        val q = Waivers.load(custom).problems.single()
+        assertTrue(q, q.startsWith("custom.json") && q.contains("line 2 column"))
+    }
+
+    /** A complete object followed by junk is read, and the junk is said: reading nothing would lose the rules on the next Save. */
+    @Test
+    fun trailingContentIsReportedAndTheRulesAreKept() {
+        val set = Waivers.parse("""{"waivers":[{"check":"unusedForms","node":"form:a","reason":"x"}]} xx""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.single(), set.problems.single().contains("Extra data"))
+    }
+
+    /** A misspelt check id can never match; it is said as such, and the rule is kept so a Save does not drop it. */
+    @Test
+    fun anUnknownCheckIsReportedAndKept() {
+        val set = Waivers.parse("""{"waivers":[{"check":"missingRef","node":"process:a","reason":"x"}]}""")
+        assertEquals(1, set.waivers.size)
+        val p = set.problems.single()
+        assertTrue(p, p.contains("\"missingRef\"") && p.contains("did you mean \"missingRefs\""))
+    }
+
+    /** `rules` is graph.json's name for them; a file written in that shape waived nothing and said nothing. */
+    @Test
+    fun aFileInTheWrongShapeSaysSo() {
+        val rules = Waivers.parse("""{"version":1,"rules":[{"check":"unusedForms","node":"form:DEMO-a","reason":"x"}]}""")
+        assertTrue(rules.waivers.isEmpty())
+        assertTrue(rules.problems.single(), rules.problems.single().contains("\"rules\"") && rules.problems.single().contains("\"waivers\""))
+
+        val notAList = Waivers.parse("""{"version":1,"waivers":{"check":"unusedForms","node":"form:DEMO-a"}}""")
+        assertTrue(notAList.problems.single(), notAList.problems.single().contains("not a list"))
+
+        // No key passes as a comment: the explorer's Save writes only the keys it reads, and would drop it.
+        val other = Waivers.parse("""{"version":1,"owner":"DEMO-team","_comment":"x","waivers":[]}""")
+        assertEquals(other.problems.toString(), listOf("\"owner\"", "\"_comment\""),
+            other.problems.map { Regex("\"[^\"]+\"").find(it)!!.value })
+        assertTrue(other.problems.first(), other.problems.first().contains("Save"))
+        // …which is exactly the five keys a file has.
+        val written = Waivers.serialize(Waivers.Set(listOf(Waivers.Waiver("unusedForms", "form:DEMO-a", reason = "x"))), "0.0.0")
+        assertTrue(Waivers.parse(written).problems.isEmpty())
+
+        // A newer file may carry keys of its own; the version line already says what is not understood.
+        val newer = Waivers.parse("""{"version":99,"extra":1,"waivers":[{"check":"unusedForms","node":"form:a","reason":"x"}]}""")
+        assertTrue(newer.problems.single(), newer.problems.single().contains("version 99"))
+    }
+
+    @Test
+    fun serializingIsStableAndRoundTrips() {
+        val set = Waivers.Set(
+            waivers = listOf(
+                Waivers.Waiver(check = "unusedOps", node = "op:z", reason = "external caller"),
+                Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "pilot"),
+            ),
+            notes = listOf(Waivers.Note(node = "form:b", text = "revisit")),
+        )
+        val once = Waivers.serialize(set, "0.0.0")
+        val twice = Waivers.serialize(Waivers.parse(once), "0.0.0")
+        assertEquals("a round trip must not churn the file", once, twice)
+        assertTrue("sorted by check, so the diff is reviewable",
+            once.indexOf("unusedForms") < once.indexOf("unusedOps"))
+        assertTrue(once.endsWith("\n"))
+    }
+
+    @Test
+    fun aFileFromANewerAtlasIsReadAsFarAsPossible() {
+        val set = Waivers.parse("""{"version": 99, "waivers": [
+            {"check": "unusedForms", "node": "form:a", "reason": "still readable"}]}""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.single().contains("version 99"))
+    }
+
+    @Test
+    fun expiryIsADateComparison() {
+        val w = Waivers.Waiver(check = "c", node = "n", until = "2026-06-01")
+        assertTrue(w.expiredOn(LocalDate.parse("2026-06-02")))
+        assertTrue("the day itself is still covered", !w.expiredOn(LocalDate.parse("2026-06-01")))
+        assertTrue(!Waivers.Waiver(check = "c", node = "n").expiredOn(LocalDate.parse("2999-01-01")))
+    }
+
+    @Test
+    fun anUnreadableExpiryDateIsReported() {
+        val set = Waivers.parse("""{"version": 1, "waivers": [
+            {"check": "unusedForms", "node": "form:a", "until": "31.12.2026"}]}""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.single().contains("31.12.2026"))
+    }
+
+    @Test
+    fun aSaveKeepsWhatTheFileGainedWhileThePageWasOpen() {
+        fun w(node: String, reason: String) = Waivers.Waiver(check = "unusedForms", node = node, reason = reason)
+        val atGeneration = listOf(w("form:a", "old a"), w("form:b", "old b"))
+        // the page: dropped b, edited a's reason, added c
+        val page = Waivers.Set(listOf(w("form:a", "new a"), w("form:c", "c")))
+        // the file meanwhile: a colleague added d, and still has b
+        val disk = Waivers.Set(atGeneration + w("form:d", "d"))
+        val merged = Waivers.merge(page, disk, atGeneration.map { it.sortKey })
+        assertEquals(listOf("form:a", "form:c", "form:d"), merged.waivers.map { it.node })
+        assertEquals("the page's edit wins", "new a", merged.waivers.single { it.node == "form:a" }.reason)
+    }
+}

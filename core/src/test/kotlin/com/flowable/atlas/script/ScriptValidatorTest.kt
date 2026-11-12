@@ -282,6 +282,58 @@ class ScriptValidatorTest {
     }
 
     @Test
+    fun closureLoopCatchAndFunctionParametersBindTheirName() {
+        // `task` is no engine binding in a BPMN script task — but here the script binds it itself
+        fun silent(script: String, format: String = "groovy", context: ScriptContext = ScriptContext.BPMN_SCRIPT_TASK) =
+            assertEquals(script, emptyList<ScriptProblem>(), ScriptValidator.validate(script, format, context = context))
+        silent("tasks.any { task ->\n  task.getName() }")
+        silent("tasks.each { Task task -> task.getName() }")
+        silent("m.each { k, task -> task.getName() }")
+        silent("for (task in tasks) { task.getName() }")
+        silent("for (Task task : tasks) { task.getName() }")
+        silent("try { x() } catch (Exception task) { task.getMessage() }")
+        silent("tasks.forEach(function (task) { task.getName(); })", "javascript")
+        silent("tasks.forEach(task => task.getName())", "javascript")
+        silent("tasks.forEach((task, i) => task.getName())", "javascript")
+        silent("for (const task of tasks) { task.getName(); }", "javascript")
+        // a parameter shadowing a bound root takes the member check with it
+        silent("list.each { execution -> execution.setVariabel('a', 1) }", context = ScriptContext.BPMN_TASK_LISTENER)
+        // …and nothing else binds: these are the engine's names, used where it binds none
+        for (s in listOf("task.setAssignee('kermit')", "def c = { -> task.getName() }",
+            "if (x) { task.setVariable('a', 1) }", "switch (x) { case 1 -> task.getName() }")) {
+            assertEquals(s, listOf(ScriptProblemKind.WRONG_CONTEXT_ROOT),
+                ScriptValidator.validate(s, "groovy", context = ScriptContext.BPMN_SCRIPT_TASK).map { it.kind })
+        }
+    }
+
+    @Test
+    fun theBoundEntitysOwnMethodsAreNoTypos() {
+        // the resolvers bind the entities, and a script dispatches dynamically: their methods all work
+        val cases = mapOf(
+            ScriptContext.BPMN_SCRIPT_TASK to "execution" to ScriptEntityMembers.EXECUTION_ENTITY,
+            ScriptContext.BPMN_TASK_LISTENER to "task" to ScriptEntityMembers.TASK_ENTITY,
+            ScriptContext.CMMN_SCRIPT_TASK to "planItemInstance" to ScriptEntityMembers.PLAN_ITEM_INSTANCE_ENTITY,
+            ScriptContext.CMMN_SCRIPT_TASK to "caseInstance" to ScriptEntityMembers.CASE_INSTANCE_ENTITY,
+        )
+        for ((where, methods) in cases) {
+            val (context, root) = where
+            val script = methods.joinToString("\n") { "$root.$it()" }
+            assertEquals("$root in $context", emptyList<ScriptProblem>(),
+                ScriptValidator.validate(script, "groovy", context = context))
+        }
+        // the ones that used to read as typos, by name
+        assertEquals(emptyList<ScriptProblem>(), ScriptValidator.validate(
+            "execution.getRootProcessInstance().getId()\nexecution.getSuperExecution()", "groovy",
+            context = ScriptContext.BPMN_SCRIPT_TASK))
+        assertEquals(emptyList<ScriptProblem>(), ScriptValidator.validate(
+            "caseInstance.setName('x')\nplanItemInstance.getLocalizedName()", "groovy",
+            context = ScriptContext.CMMN_SCRIPT_TASK))
+        // a real typo is still one, and the entity's own surface is not advertised as a fix
+        val p = onlySemantic("execution.getProcesInstanceId()", "groovy", ScriptContext.BPMN_SCRIPT_TASK)
+        assertEquals("getProcessInstanceId", p.quickFix)
+    }
+
+    @Test
     fun elOnlyFlwNamespacesAreFlagged() {
         val p = onlySemantic("flw.setOutput('x', flw.base64.encode(data))", "groovy",
             ScriptContext.ACTION_BOT)

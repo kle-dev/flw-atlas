@@ -12,7 +12,8 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  */
 class FlowableDiagramLineMarkerTest : BasePlatformTestCase() {
 
-    private val diagramTooltip = "Open the Flowable model diagram"
+    /** The tooltip names the type and the key: `Process diagram: DEMO-P039`. */
+    private val diagramTooltip = "Process diagram: DEMO-P039"
 
     private fun addBuilderStubAndProcess() {
         myFixture.addFileToProject(
@@ -79,6 +80,21 @@ class FlowableDiagramLineMarkerTest : BasePlatformTestCase() {
         myFixture.doHighlighting()
         // Exactly one: the qualifier (`ModelConstants`) is not itself an argument, so it adds no marker.
         assertEquals("a qualified constant at a key site should carry one diagram marker", 1, diagramGutters().size)
+    }
+
+    fun testAFormKeyInAProcessOpensTheFormsWireframe() {
+        myFixture.addFileToProject(
+            "models/DEMO-F001.form",
+            """{"metadata":{"key":"DEMO-F001","name":"Claim"},"rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":12}]}]}""",
+        )
+        project.service<FlowableModelIndexService>().index()
+        myFixture.configureByText(
+            "DEMO-P040.bpmn20.xml",
+            """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">""" +
+                """<process id="DEMO-P040"><userTask id="t" flowable:formKey="DEMO-F001"/></process></definitions>""",
+        )
+        myFixture.doHighlighting()
+        assertEquals(1, myFixture.findAllGutters().count { it.tooltipText == "Form diagram: DEMO-F001" })
     }
 
     fun testDecisionTableWithoutLayoutStillOpensItsTable() {

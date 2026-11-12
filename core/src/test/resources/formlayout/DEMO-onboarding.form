@@ -1,0 +1,34 @@
+{
+  "metadata": {"key": "DEMO-F001", "name": "Onboarding & review", "modelType": "form"},
+  "rows": [
+    {"cols": [
+      {"id": "firstName", "type": "text", "label": "First name", "isRequired": true, "size": 6, "value": "{{firstName}}"},
+      {"id": "country", "type": "select", "label": "Country", "size": 6, "visible": true, "enabled": true}
+    ]},
+    {"cols": [
+      {"id": "details", "type": "panel", "label": "Details", "size": 12, "extraSettings": {"layoutDefinition": {"rows": [
+        {"cols": [
+          {"id": "startDate", "type": "date", "label": "Start date", "size": 4},
+          {"id": "remote", "type": "boolean", "label": "Remote", "size": 4, "visible": "{{country == 'CH'}}"},
+          {"id": "notes", "type": "textarea", "i18n": {"de_de": {"label": "Notizen"}}, "size": 4, "enabled": false}
+        ]}
+      ]}}}
+    ]},
+    {"cols": [
+      {"id": "addressForm", "type": "subform", "label": "Address", "size": 12, "extraSettings": {"formRef": {"id": "x1", "key": "DEMO-F002"}}}
+    ]},
+    {"cols": [
+      {"id": "tabs1", "type": "tabs", "size": 12, "extraSettings": {"sections": [
+        {"label": "Customer", "extraSettings": {"layoutDefinition": {"rows": [{"cols": [{"id": "customerName", "type": "text", "label": "Customer name", "size": 12}]}]}}},
+        {"label": "Contract", "extraSettings": {"layoutDefinition": {"rows": []}}}
+      ]}}
+    ]},
+    {"cols": [
+      {"id": "orders", "type": "dataTable", "label": "Orders", "size": 12, "extraSettings": {"columns": [{"id": "seq", "label": "ID"}, {"id": "amount", "label": "Amount"}]}}
+    ]},
+    {"cols": [
+      {"id": "secret", "type": "text", "label": "Internal", "size": 6, "visible": false},
+      {"id": "checkButton", "type": "restButton", "size": 6, "extraSettings": {"text": "Check <address>"}}
+    ]}
+  ]
+}

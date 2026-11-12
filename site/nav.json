@@ -25,6 +25,7 @@
       "title": "The explorer & artifacts",
       "pages": [
         { "slug": "explorer", "file": "explorer", "title": "The Atlas explorer" },
+        { "slug": "erd", "file": "erd", "title": "The ER diagram designer" },
         { "slug": "artifacts", "file": "artifacts", "title": "Generated artifacts" },
         { "slug": "cli", "file": "cli", "title": "CLI reference" }
       ]

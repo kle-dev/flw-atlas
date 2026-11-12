@@ -1,11 +1,17 @@
 package com.flowable.atlas.explorer
 
 import com.flowable.atlas.diagram.DiagramArtifacts
+import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
+import com.flowable.atlas.findings.FindingTargets
 import com.flowable.atlas.graph.Atlas
+import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
+import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
+import com.flowable.atlas.render.PlaywrightRenderer
+import com.flowable.atlas.render.Siblings
 import com.flowable.atlas.render.SummaryRenderer
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.components.Service
@@ -32,22 +38,49 @@ class AtlasGeneratorService(private val project: Project) {
     private val LOG = logger<AtlasGeneratorService>()
 
     sealed interface Outcome {
-        /** [explorerHtml] is the `.explorer.html` produced (if any); [written] lists all files written. */
-        data class Success(val explorerHtml: Path?, val written: List<Path>, val log: String) : Outcome
+        /**
+         * [explorerHtml] is the `.explorer.html` produced (if any); [written] lists all files written.
+         * [findings] are the analysis's, beside the `waivers.json` in [outputDir] — handed to the Findings
+         * window, which would otherwise run the very same analysis again — with [targets], where the ones
+         * without a file of their own open ([FindingTargets]). [removed] are the drawings of models that are
+         * gone, deleted from the diagrams folder — the VFS has to hear of those too.
+         */
+        data class Success(
+            val explorerHtml: Path?,
+            val written: List<Path>,
+            val log: String,
+            val outputDir: Path? = null,
+            val findings: List<Map<String, Any?>> = emptyList(),
+            val removed: List<Path> = emptyList(),
+            val targets: Map<String, List<String>> = emptyMap(),
+        ) : Outcome
         data class Failure(val message: String, val log: String) : Outcome
     }
 
     /** Generate only the self-contained explorer HTML at [outputHtml]. */
     fun generateExplorer(projectDir: Path, outputHtml: Path, indicator: ProgressIndicator): Outcome =
+        generateExplorers(projectDir, listOf(outputHtml), indicator)
+
+    /**
+     * The explorer page at every path in [outputs], from **one** analysis of [projectDir]. All of them
+     * must sit in one folder: that folder's waivers.json is what the page's Save writes, so it is the
+     * file read — pages in different folders are different reports.
+     */
+    fun generateExplorers(projectDir: Path, outputs: List<Path>, indicator: ProgressIndicator): Outcome =
         try {
+            require(outputs.isNotEmpty() && outputs.map { it.parent }.distinct().size == 1) { "one folder of pages at a time" }
             val root = projectDir.toFile()
-            val result = extract(root, indicator)
+            val result = extract(root, indicator, waiverFile(outputs.first().parent))
 
             indicator.text = "Rendering Atlas explorer…"
-            val html = ExplorerHtmlRenderer.render(result, root)
-            outputHtml.toFile().writeText(html, Charsets.UTF_8)
+            // A page is rewritten as what it is: an ER diagram page stays one (its tab's Regenerate lands here too).
+            val explorer by lazy { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) }
+            val pages = outputs.associateWith { out -> if (AtlasArtifact.isErdPage(out.fileName.toString())) erdPage(result, root, out) else explorer }
+            // The last moment a Cancel can still leave the old pages as they were.
+            indicator.checkCanceled()
+            for ((out, html) in pages) out.toFile().writeText(html, Charsets.UTF_8)
 
-            Outcome.Success(outputHtml, listOf(outputHtml), summaryLog(result))
+            Outcome.Success(outputs.first(), outputs, summaryLog(result), outputs.first().parent, findingsOf(result), targets = FindingTargets.index(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
@@ -55,7 +88,17 @@ class AtlasGeneratorService(private val project: Project) {
             Outcome.Failure("Failed to generate the Atlas explorer: ${e.message}", e.stackTraceToString())
         }
 
-    /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md) into [outputDir]. */
+    /**
+     * The ER diagram page at [out], linked to the explorer beside it when there is one — the page's tables
+     * open their changelogs, services and data objects there.
+     */
+    private fun erdPage(result: Map<String, Any?>, root: File, out: Path): String {
+        val sibling = out.fileName.toString().dropLast(AtlasArtifact.ERD_HTML.suffix.length) + AtlasArtifact.EXPLORER_HTML.suffix
+        val explorer = sibling.takeIf { out.resolveSibling(it).toFile().isFile }
+        return ErdHtmlRenderer.render(result, root, explorerFile = explorer)
+    }
+
+    /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md, Playwright guide) into [outputDir]. */
     fun generateAll(
         projectDir: Path,
         outputDir: Path,
@@ -64,45 +107,89 @@ class AtlasGeneratorService(private val project: Project) {
     ): Outcome =
         try {
             val root = projectDir.toFile()
-            val result = extract(root, indicator)
+            val result = extract(root, indicator, waiverFile(outputDir))
 
             indicator.text = "Rendering Atlas artifacts…"
-            val name = atlasProjectName(projectDir)
+            // The CLI's rule, from :core (through AtlasArtifactFiles): the CLAUDE.md and the guide name their
+            // siblings with it, so a copy of the rule here once wrote `project.*` beside files that pointed at
+            // `.DEMO-solution.*`.
+            val name = AtlasArtifactFiles.projectName(projectDir)
             outputDir.toFile().mkdirs()
+            // The folder is regenerated and may carry client data; waivers.json is the one file in it
+            // meant to be kept. The same .gitignore the CLI writes says so.
+            Waivers.ensureOutputGitignore(outputDir.toFile())
+            val diagrams = if (AtlasArtifact.DIAGRAMS_SVG in artifacts) DiagramArtifacts.render(result, root) else emptyMap()
+            // The summary and the report point only at the files written beside them: the user picks the
+            // set, and a pointer to a graph that was unticked costs an agent a failed read.
+            val siblings = Siblings(
+                overview = AtlasArtifact.OVERVIEW_MD in artifacts,
+                graph = AtlasArtifact.GRAPH_JSON in artifacts,
+                explorer = AtlasArtifact.EXPLORER_HTML in artifacts,
+                diagrams = diagrams.isNotEmpty(),
+            )
             val renderers = mapOf<AtlasArtifact, () -> String>(
-                AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root) },
-                AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root) },
+                AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root, siblings) },
+                AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root, siblings) },
                 // Projected + minified (GraphJsonRenderer): the raw result duplicated every model body
                 // and pretty-printed it, which on a large project meant a multi-megabyte file in the
                 // user's repo.
                 AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
-                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root) },
-                AtlasArtifact.CLAUDE_MD to { ClaudeRenderer.render(result, root) },
+                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) },
+                // Linked to the explorer when there is one beside it — written now, or by an earlier run: a link
+                // to a page that is not there would be the one broken thing on it.
+                AtlasArtifact.ERD_HTML to {
+                    val explorer = "$name${AtlasArtifact.EXPLORER_HTML.suffix}"
+                        .takeIf { AtlasArtifact.EXPLORER_HTML in artifacts || outputDir.resolve(it).toFile().isFile }
+                    ErdHtmlRenderer.render(result, root, explorerFile = explorer)
+                },
+                // The file spells its sibling paths from the project root and only names the ones that
+                // are actually being written — the user picks the artifact set in Settings → Generation.
+                AtlasArtifact.CLAUDE_MD to {
+                    // The overview too: without a slice to offer, it is where the file sends the agent for
+                    // one model.
+                    val beside = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.OVERVIEW_MD in artifacts &&
+                        AtlasArtifact.GRAPH_JSON in artifacts
+                    val guide = AtlasArtifact.PLAYWRIGHT_MD in artifacts
+                    // Not the CLI: the file must not send the agent to a jar or a slice the plugin does not offer.
+                    ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), beside,
+                        playwright = guide, playwrightMap = guide, cli = false))
+                },
+                // Its lookups point at the graph only when the graph is written beside it.
+                AtlasArtifact.PLAYWRIGHT_MD to { PlaywrightRenderer.render(result, root, guideLayout(outputDir, artifacts)) },
             )
+            val texts = AtlasArtifact.entries
+                .filter { it in artifacts && it != AtlasArtifact.DIAGRAMS_SVG }
+                .associate { "$name${it.suffix}" to renderers.getValue(it)() }
+                .toMutableMap()
+            // The guide is one artifact in two files: what a skill loads whole, and the project map it
+            // reads on demand (on a real project most of the text).
+            if (AtlasArtifact.PLAYWRIGHT_MD in artifacts) {
+                texts["$name.${PlaywrightRenderer.MAP_SUFFIX}"] =
+                    PlaywrightRenderer.renderMap(result, root, guideLayout(outputDir, artifacts))
+            }
+            // Everything is rendered before anything is written, and this is the last moment a Cancel can
+            // still leave the previous artifacts as they were.
+            indicator.checkCanceled()
             val written = ArrayList<Path>()
-            for (artifact in AtlasArtifact.entries) {
-                if (artifact !in artifacts) continue
-                if (artifact == AtlasArtifact.DIAGRAMS_SVG) continue   // a folder, handled below
-                val p = outputDir.resolve("$name${artifact.suffix}")
-                p.toFile().writeText(renderers.getValue(artifact)(), Charsets.UTF_8)
+            for ((fileName, text) in texts) {
+                val p = outputDir.resolve(fileName)
+                p.toFile().writeText(text, Charsets.UTF_8)
                 written.add(p)
             }
+            // Each process/case/decision's DI layout → one SVG in `<name>.diagrams/`. Additive post-pass
+            // over the finished result; a project with no BPMN/CMMN/DMN layout emits none. The folder is made
+            // to hold exactly this run's drawings, as the CLI's is — but only when diagrams were asked for:
+            // unticking them is a settings choice, not a model that went away.
+            val removed = ArrayList<Path>()
             if (AtlasArtifact.DIAGRAMS_SVG in artifacts) {
-                // Each process/case/decision's DI layout → one SVG in `<name>.diagrams/`. Additive
-                // post-pass over the finished result; a project with no BPMN/CMMN/DMN layout emits none.
-                val diagrams = DiagramArtifacts.render(result, root)
-                if (diagrams.isNotEmpty()) {
-                    val dir = outputDir.resolve("$name.diagrams")
-                    dir.toFile().mkdirs()
-                    for ((fn, svg) in diagrams) {
-                        val p = dir.resolve(fn)
-                        p.toFile().writeText(svg, Charsets.UTF_8)
-                        written.add(p)
-                    }
-                }
+                val drawn = DiagramArtifacts.write(outputDir.resolve("$name.diagrams").toFile(), diagrams)
+                drawn.written.mapTo(written) { it.toPath() }
+                drawn.removed.mapTo(removed) { it.toPath() }
             }
-            val explorer = written.firstOrNull { it.fileName.toString().endsWith(".explorer.html") }
-            Outcome.Success(explorer, written, summaryLog(result))
+            // the page to open afterwards: the explorer, else the ER diagram page when that is all that was chosen
+            val explorer = written.firstOrNull { it.fileName.toString().endsWith(AtlasArtifact.EXPLORER_HTML.suffix) }
+                ?: written.firstOrNull { AtlasArtifact.isErdPage(it.fileName.toString()) }
+            Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result), removed, FindingTargets.index(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
@@ -110,20 +197,37 @@ class AtlasGeneratorService(private val project: Project) {
             Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", e.stackTraceToString())
         }
 
-    /** [Atlas.extract] with the project's allowlist and custom-function settings applied. */
-    private fun extract(root: File, indicator: ProgressIndicator): LinkedHashMap<String, Any?> {
+    /** The Playwright guide's layout: its project map beside it, its lookups on the graph when that is written too. */
+    private fun guideLayout(outputDir: Path, artifacts: Set<AtlasArtifact>) =
+        PlaywrightRenderer.Layout(outputDir.toFile(), graph = AtlasArtifact.GRAPH_JSON in artifacts, map = true)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun findingsOf(result: Map<String, Any?>): List<Map<String, Any?>> =
+        (result["findings"] as? List<Map<String, Any?>>).orEmpty()
+
+    /** `waivers.json` beside the artifacts in [outputDir] — the file the explorer's Save writes. */
+    internal fun waiverFile(outputDir: Path?): File? = outputDir?.resolve(Waivers.FILE_NAME)?.toFile()
+
+    /**
+     * [Atlas.extract] with the project's allowlist and custom-function settings applied, and the
+     * accepted findings in [waiverFile] honoured — the CLI reads that file, and a page generated
+     * here that ignored it would show a team the findings it had already decided about.
+     */
+    internal fun extract(root: File, indicator: ProgressIndicator, waiverFile: File?): LinkedHashMap<String, Any?> {
         indicator.isIndeterminate = true
         indicator.text = "Analyzing Flowable project…"
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         val allowlist = (settings.allowedNamespaces + settings.allowedFunctions)
             .toSet().takeIf { it.isNotEmpty() }
-        val customPath = settings.customFunctionsPath.takeIf { it.isNotBlank() }
-            ?.let { root.resolve(it) }?.takeIf { it.exists() }
+        // Resolved exactly as the editor's catalog resolves it, so the two cannot read different sources.
+        val customPath = FlowableCustomFunctions.customFunctionsSource(root, settings.customFunctionsPath)
         return Atlas.extract(
             root,
             exprAllowlist = allowlist,
             discoverCustom = settings.customFunctionsEnabled,
             customPath = customPath,
+            waivers = waiverFile?.let { Waivers.load(it) } ?: Waivers.EMPTY,
+            checkCanceled = indicator::checkCanceled,
         )
     }
 
@@ -139,12 +243,6 @@ class AtlasGeneratorService(private val project: Project) {
             append("${stat("edges")} links · $resolved resolved / $unresolved unresolved refs")
             if (diagnostics > 0) append(" · ⚠ $diagnostics parse issue(s)")
         }
-    }
-
-    /** The project name Atlas derives for output filenames: basename of the dir, last extension stripped. */
-    private fun atlasProjectName(projectDir: Path): String {
-        val base = projectDir.toAbsolutePath().normalize().fileName?.toString().orEmpty()
-        return base.substringBeforeLast('.', base).ifBlank { "project" }
     }
 
     companion object {

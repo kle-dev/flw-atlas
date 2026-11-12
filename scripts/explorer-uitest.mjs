@@ -19,7 +19,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 
 const args = process.argv.slice(2);
 const reportPath = args.find(a => !a.startsWith('--'));
@@ -53,6 +53,39 @@ if (!chrome) {
   process.exit(0);
 }
 
+// Every scratch file of this run — the probe pages and the touch run's Chrome profile — lives in one
+// directory, removed when the process exits. An 'exit' handler rather than a finally block: every failure
+// below leaves through process.exit(1), which runs no finally block, and a run that fails is exactly the
+// one that used to leave its profile behind (a few MB a run, in every developer's $TMPDIR).
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-'));
+process.on('exit', () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch (e) { /* a temp dir */ } });
+
+/**
+ * The loop every probe ends with: one step every [ms] of page time, then the verdict in the title.
+ *
+ * Before each step it stamps where it has got to into a <meta> of its own, so a run that never reaches
+ * its verdict can say which step it stopped at (see [runProbe]) instead of reading like a page that never
+ * booted. Not into the title: the explorer rewrites that on every route change, and most steps navigate.
+ * [runProbe] derives its virtual-time budget from the probe's source: it counts `steps.push(` and reads
+ * the interval out of `setTimeout(run, <ms>)`, so keep both spelled so.
+ */
+function stepRunner(ms) {
+  return `
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    let pm=document.getElementById('uitest-progress');
+    if(!pm){ pm=document.createElement('meta'); pm.id='uitest-progress'; document.head.appendChild(pm); }
+    pm.setAttribute('content', (i+1)+'/'+steps.length+' '+log.length);
+    pm.setAttribute('data-last', log.length?log[log.length-1].slice(0,160):'');
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, ${ms});
+  })();`;
+}
+
 // The probe runs inside the page. It walks a list of steps on a timer (each search re-render is debounced
 // by 120ms), collects one line per assertion, and parks the result in document.title where --dump-dom
 // can retrieve it. Failures are marked FAIL and counted by the harness below.
@@ -66,6 +99,12 @@ const probe = `<script>
   const rows=()=>[...document.querySelectorAll('#palresults .pal-item')];
   const click=(el,opt)=>el.dispatchEvent(new MouseEvent('click', Object.assign({bubbles:true}, opt||{})));
   const key=k=>palq.dispatchEvent(new KeyboardEvent('keydown', {key:k, bubbles:true}));
+  // A page's fit questions are sections of their own on its Connections tab: one view over all of them,
+  // which leaves the relations (whose unfolded rows name models too) out.
+  const fitView=()=>{ const ss=[...document.querySelectorAll('#detail details.sect[data-sect^="fit-"]')]; if(!ss.length) return null;
+    return {open:ss.every(x=>x.open), textContent:ss.map(x=>x.textContent).join(' '),
+      querySelector:q=>{ for(const x of ss){ const r=x.querySelector(q); if(r) return r; } return null; },
+      querySelectorAll:q=>ss.flatMap(x=>[...x.querySelectorAll(q)])}; };
   const type=q=>{ palq.value=q; palq.dispatchEvent(new Event('input')); };
   const steps=[];
 
@@ -118,6 +157,63 @@ const probe = `<script>
   steps.push(()=>{
     ok('Enter navigated', decodeURIComponent(location.hash).indexOf('priority')>=0,
        'hash='+location.hash);
+    ok('a node page scrolls inside the shell, not the document',
+       document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
+    location.hash='/checks';
+  });
+  // --- a report page scrolls inside its view, so the sidebar and the top bar stay put ---
+  steps.push(()=>{
+    ok('back is offered once there is somewhere to go', !document.getElementById('navback').disabled);
+    ok('nothing is forward of the newest page', document.getElementById('navfwd').disabled);
+    const v=document.getElementById('view-checks');
+    ok('checks page is the visible view', !v.hidden);
+    ok('the checks view is the scroll container', getComputedStyle(v).overflowY==='auto', getComputedStyle(v).overflowY);
+    ok('the document itself does not scroll on the checks page',
+       document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
+    ok('the checks page is taller than the window, so scrolling is real', v.scrollHeight>v.clientHeight, v.scrollHeight+' vs '+v.clientHeight);
+    // the page leads with the split: a Defects group and an Advice group, the health list under two headings
+    ok('the checks page has a Defects group', !!v.querySelector('#chk-kind-defect'));
+    ok('the checks page has an Advice group', !!v.querySelector('#chk-kind-advice'));
+    ok('the health list is headed by kind, not tier', v.querySelectorAll('.htier.hkind-defect, .htier.hkind-advice').length===2,
+       v.querySelectorAll('.htier').length+' headings');
+    ok('the header says both numbers', /\\d+ defects? · \\d+ advice/.test(v.querySelector('.ddesc').textContent), v.querySelector('.ddesc').textContent.slice(0,80));
+    ok('the badge toggle is offered', !document.getElementById('markfilter').hidden);
+    // a model chip in the findings table ends inside its cell — ellipsised by its name, never sliced
+    const chips=[...v.querySelectorAll('.tbl .td>.nc')];
+    ok('the findings table shows model chips', chips.length>0);
+    const sliced=chips.filter(c=>{ const td=c.parentElement; return c.getBoundingClientRect().right>td.getBoundingClientRect().right+1; });
+    ok('no model chip runs past its cell', sliced.length===0, sliced.length+' of '+chips.length+' clipped');
+    window.__beforeBack=location.hash;
+    document.getElementById('navback').click();
+  });
+  // --- the top-bar back button returns to the previous page and forward becomes available ---
+  steps.push(()=>{
+    ok('back left the checks page', location.hash!==window.__beforeBack, 'hash='+location.hash);
+    ok('back landed on the node page', state.view==='browse', 'view='+state.view);
+    ok('forward is offered after a back', !document.getElementById('navfwd').disabled);
+    document.getElementById('navfwd').click();
+  });
+  steps.push(()=>{
+    ok('forward returned to the checks page', location.hash===window.__beforeBack, 'hash='+location.hash);
+  });
+  // --- a link to a model this report does not contain says so and cleans the address bar ---
+  steps.push(()=>{ location.hash='#process%3AthisModelWasDeleted'; });
+  steps.push(()=>{
+    ok('a stale link lands on the overview', state.view==='overview', 'view='+state.view);
+    ok('a stale link is said', /does not contain/.test(document.getElementById('toast').textContent), document.getElementById('toast').textContent);
+    ok('the dead hash is replaced', location.hash==='#/overview', 'hash='+location.hash);
+  });
+  // --- the tree's key handler is wired once per view, however often the view is rendered ---
+  steps.push(()=>{ location.hash='/tree'; });
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{ location.hash='/tree'; });
+  steps.push(()=>{
+    const row=document.querySelector('#view-tree .tv-row[aria-expanded]');
+    if(!row){ say('note','no expandable tree row — Space toggle not exercised'); return; }
+    const before=row.getAttribute('aria-expanded');
+    row.focus(); row.dispatchEvent(new KeyboardEvent('keydown', {key:' ', bubbles:true}));
+    ok('Space toggles a tree row once after a re-visit', row.getAttribute('aria-expanded')!==before, before+' -> '+row.getAttribute('aria-expanded'));
+    location.hash='/checks';
   });
   // --- facets narrow, in two tiers ---
   steps.push(()=>{ openPalette(); type('customer'); });
@@ -144,18 +240,50 @@ const probe = `<script>
     ok('selection followed into the narrowed list', !!document.querySelector('.pal-item.sel'));
     closePalette();
   });
+  // --- the typed filters teach themselves: chips while empty, a lit chip once one binds ---
+  steps.push(()=>{ openPalette(); type(''); });
+  steps.push(()=>{
+    const syn=[...document.querySelectorAll('#palfacets [data-syn]')];
+    ok('an empty palette offers the filter chips', syn.length>=6, 'only '+syn.length);
+    const lab=syn.find(b=>b.dataset.syn==='label:');
+    if(lab) click(lab); else say('note','no label: chip to click');
+  });
+  steps.push(()=>{
+    ok('the label: chip filled the input', /label:$/.test(palq.value), 'value="'+palq.value+'"');
+    ok('an unvalued facet says what it waits for instead of searching for the word "label"',
+       !!document.querySelector('#palfacets .pal-pend'));
+    type('label: "Internal note"');
+  });
+  steps.push(()=>{
+    ok('a quoted facet value binds and lights its chip',
+       !!document.querySelector('#palfacets [data-unfacet="lab"]'));
+    ok('the quoted caption found its form', rows().length>0, 'no rows');
+    const off=document.querySelector('#palfacets [data-unfacet="lab"]');
+    if(off) click(off);
+  });
+  steps.push(()=>{
+    ok('removing the chip strips the facet from the query itself', palq.value.indexOf('label')<0,
+       'value="'+palq.value+'"');
+    closePalette();
+  });
   // --- the browse list: navigation and the bridge to the palette ---
   steps.push(()=>{
     const c=[...document.querySelectorAll('#nav .side-item')].find(e=>/Data objects/.test(e.textContent));
     if(c) click(c); else say('note','no Data objects category');
   });
   steps.push(()=>{
-    const it=document.querySelector('#listitems .item[data-id]');
-    ok('list rendered rows', !!it);
+    // a category with nothing selected opens as a table, and the list column steps aside
+    const it=document.querySelector('#catrows .tr[data-id]');
+    ok('a category opens as a table of its rows', !!it && document.getElementById('view-browse').classList.contains('landing'));
+    ok('the list column steps aside while the table shows', !document.querySelector('.listcol').getBoundingClientRect().width);
+    // a column empty in every row is dropped, so only the name is certain; the rest depends on the rows
+    ok('the table has sortable columns, the name first', (document.querySelector('#catrows .th-s')||{}).dataset.sort==='name' &&
+       document.querySelectorAll('#catrows .th-s').length>=2);
     if(it) click(it);
   });
   steps.push(()=>{
-    ok('list click opened the node', (document.getElementById('detail').textContent||'').length>40);
+    ok('a table row opens the node', (document.getElementById('detail').textContent||'').length>40 && !!state.sel);
+    ok('the list comes back beside the node', !!document.querySelector('#listitems .item[data-id]') && document.querySelector('.listcol').getBoundingClientRect().width>0);
     const lf=document.getElementById('lf');
     ok('list filter present', !!lf);
     if(lf){ lf.value='zzzznope'; lf.dispatchEvent(new Event('input')); }
@@ -171,6 +299,34 @@ const probe = `<script>
     const b=document.getElementById('lwiderbtn');
     say('bridge offered', b?('yes — '+b.textContent.trim()):'no (term also matches in this category)');
   });
+  // --- the hover checkbox on a row IS the mark toggle: a plain click on it marks, it does not navigate ---
+  // It used to appear on hover and do nothing on click — only ⌘-click on the row toggled the mark.
+  steps.push(()=>{
+    const lf=document.getElementById('lf');
+    if(lf){ lf.value=''; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const it=document.querySelectorAll('#listitems .item[data-id]')[1]||document.querySelector('#listitems .item[data-id]');
+    window.__selBefore=state.sel; window.__ckRow=it;
+    if(it) click(it.querySelector('.ck'));
+  });
+  steps.push(()=>{
+    const it=window.__ckRow;
+    ok('clicking the row checkbox marks the row', !!it && it.getAttribute('aria-checked')==='true' && it.classList.contains('mark'));
+    ok('and does not change the selection', state.sel===window.__selBefore, state.sel+' vs '+window.__selBefore);
+    if(it) click(it.querySelector('.ck'));
+  });
+  steps.push(()=>{
+    ok('clicking it again unmarks', document.querySelectorAll('#listitems .item.mark').length===0);
+    openPalette(); type('customer');
+  });
+  steps.push(()=>{ click(rows()[1].querySelector('.ck')); });
+  steps.push(()=>{
+    ok('the palette checkbox marks too', document.querySelectorAll('.pal-item.mark').length===1);
+    ok('and keeps the palette open', !pal.hidden);
+    closePalette();
+  });
+
   // --- reference links obey the tab contract on EVERY surface, not just the detail panel ---
   // Counted off state.tabs rather than the DOM: the strip is hidden below two tabs and hidden again
   // on the #/checks route, so the rendered markup cannot answer "how many tabs are open".
@@ -235,6 +391,1212 @@ const probe = `<script>
        state.tabs.length+' tabs vs '+window.__refTabs.length);
   });
 
+  // --- a form's buttons: the Fields row expands into what the button does ---
+  // The row used to carry id, caption and type only, so a form could show that it triggers an action
+  // while staying silent about which button did it, with which payload. These checks pin the three
+  // things the row now has to answer without leaving the panel.
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('form:orderForm'); });
+  steps.push(()=>{
+    const sect=document.querySelector('#detail [data-sect="formfields"]');
+    ok('the form lists its fields', !!sect);
+    if(sect) sect.open=true;
+    // The field count is in the section heading and the navigator; a "Fields 7" fact would say it thrice.
+    const fac=[...document.querySelectorAll('#detail .facts dd')].map(d=>d.textContent.trim());
+    ok('no fact is a bare count that a section already carries', !fac.some(t=>/^\\d+$/.test(t)), fac.join(' | '));
+    // the outcomes are a fact of the form now, not a table of their own
+    const facts=[...document.querySelectorAll('#detail .facts .fact')];
+    const oc=facts.find(f=>/Outcomes/i.test(f.querySelector('dt').textContent));
+    ok('the form states its outcomes in its facts', !!oc && /approve/.test(oc.querySelector('dd').textContent), oc?oc.textContent:'(none)');
+    ok('and has no Outcomes section', !document.querySelector('#detail [data-sect="outcomes"]'));
+
+    const btn=document.querySelector('#detail details.fldrow[data-el="notifyButton"]');
+    ok('an action button is an expandable row', !!btn, 'no expandable row for notifyButton');
+    ok('the row names the action in its summary',
+       !!btn && /notifyCustomerAction/.test(btn.querySelector('summary').textContent),
+       btn?btn.querySelector('summary').textContent:'(no row)');
+    if(btn) btn.open=true;
+    window.__btn=btn;
+  });
+  steps.push(()=>{
+    const btn=window.__btn, body=btn&&btn.querySelector('.fldbody');
+    ok('the action is a chip you can follow', !!body&&!!body.querySelector('.nc[data-id]'));
+    ok('the payload it sends and stores is on the button',
+       !!body&&body.querySelectorAll('.parmgrid .pc').length>=3,
+       body?body.querySelectorAll('.parmgrid .pc').length+' mapping rows':'(no body)');
+    const scr=document.querySelector('#detail details.fldrow[data-el="orderTotal"]');
+    if(scr) scr.open=true;
+    ok('an expression button shows its expression',
+       !!scr && /amount \\* 1.081/.test(scr.textContent), scr?'no expression in the row':'(no row)');
+    ok('and the interval it re-runs on', !!scr && /30 s/.test(scr.textContent));
+    // The flag that overrides the map has to be louder than the map itself.
+    const esc=document.querySelector('#detail details.fldrow[data-el="escalate"]');
+    if(esc) esc.open=true;
+    ok('a full-payload button says the map is not used',
+       !!esc && /not used/.test(esc.textContent), esc?esc.textContent.slice(0,120):'(no row)');
+    // A plain input has nothing to expand and must stay the dense one-line row.
+    ok('a plain field is not expandable',
+       !document.querySelector('#detail details.fldrow[data-el="amount"]'));
+    // A hidden auto-executing worker is the commonest button in a real project and the one a reader is
+    // most likely to mistake for a button: the state has to be on the row, not behind a click.
+    const w=document.querySelector('#detail [data-sect="formfields"] [data-el="creditScore"]');
+    ok('a hidden button says so without being expanded',
+       !!w && /hidden/.test((w.querySelector('summary')||w).textContent),
+       w?(w.querySelector('summary')||w).textContent.slice(0,90):'(no row)');
+    if(w&&w.tagName==='DETAILS') w.open=true;
+    ok('and it names where the response is stored',
+       !!w && /stores response in/.test(w.textContent) && /creditScore/.test(w.textContent));
+    ok('its localised caption is the name it goes by', !!w && /Refresh score/.test(w.textContent));
+    ok('the note the modeller left is on it', !!w && /Hidden worker/.test(w.textContent));
+    // A condition is a different statement from a settled state and belongs in the body.
+    const n2=document.querySelector('#detail details.fldrow[data-el="internalNote"]');
+    if(n2) n2.open=true;
+    ok('a conditional gate shows its condition',
+       !!n2 && /enabled when/.test(n2.textContent) && /isSupervisor/.test(n2.textContent),
+       n2?n2.textContent.slice(0,80):'(no row)');
+  });
+  // An id search lands on the button's own row, not just on the form.
+  steps.push(()=>{ openPalette(); type('id:notifyButton'); });
+  steps.push(()=>{
+    ok('an id: query finds the form', rows().length>0, 'no hits for id:notifyButton');
+    ok('the hit says which element matched', /notifyButton/.test(rows()[0].textContent),
+       rows()[0].textContent);
+    click(rows()[0]);
+  });
+  steps.push(()=>{
+    const row=document.querySelector('#detail [data-sect="formfields"] [data-el="notifyButton"]');
+    ok('the hit opened that button\\'s row', !!row&&row.classList.contains('hit'),
+       row?'row not marked':'no row');
+  });
+
+  // A caption and the prose behind it are searchable in their own right, and the row has to say which
+  // one matched — otherwise a hit on a description that is not on screen looks arbitrary.
+  steps.push(()=>{ openPalette(); type('label:Recalculate'); });
+  steps.push(()=>{
+    ok('a label: query finds the form that shows that caption', rows().length>0,
+       'no hits for label:Recalculate');
+    ok('and the row explains itself with the label it matched',
+       /label/i.test(rows()[0].textContent), rows()[0].textContent);
+  });
+  steps.push(()=>{ type('desc:Backoffice'); });
+  steps.push(()=>{
+    ok('a desc: query finds the element documentation', rows().length>0, 'no hits for desc:Backoffice');
+    ok('and it finds the process, not the group of the same name',
+       /Order Process/.test(rows()[0].textContent), rows()[0].textContent);
+    key('Escape');
+  });
+
+  // --- a facet hit lights its value; Tab cycles the dialog instead of being swallowed ---
+  steps.push(()=>{ openPalette(); type('label:Recalculate'); });
+  steps.push(()=>{
+    ok('a facet hit highlights the value it matched', !!rows()[0]&&!!rows()[0].querySelector('mark.hl'),
+       rows()[0]?rows()[0].textContent.slice(0,80):'(no rows)');
+    ok('the page behind the open dialog is inert', document.querySelector('.shell').inert===true);
+    key('Tab');
+    const fc=document.activeElement;
+    ok('Tab reaches the dialog controls', fc!==palq && !!fc.closest('.pal-panel'),
+       'focus on '+(fc&&(fc.className||fc.tagName)));
+    key('Escape');
+  });
+  steps.push(()=>{
+    ok('closing the palette lifts inert again', document.querySelector('.shell').inert===false);
+  });
+
+  // --- the browse list explains a non-obvious match, like the palette does ---
+  steps.push(()=>{ closeOtherTabs();
+    const c=[...document.querySelectorAll('#nav .side-item')].find(el=>/Processes/.test(el.textContent));
+    if(c) click(c); else say('note','no Processes category');
+  });
+  steps.push(()=>{
+    const f=document.getElementById('catf');
+    if(f){ f.value='setVariable'; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const it=document.querySelector('#catrows .tr[data-id]');
+    ok('a script-body match still shows rows', !!it);
+    ok('and the row says why it matched', !!it && /script/.test((it.querySelector('.cat-why')||{}).textContent||''),
+       it?((it.querySelector('.cat-why')||{}).textContent||'(no why)'):'(none)');
+    // the hint is cut around the match; hovering it shows the value whole, as in the palette
+    const why=it&&it.querySelector('.cat-why'), tip=why?(why.getAttribute('title')||why.getAttribute('data-tip')||''):'';
+    ok('and hovering the reason shows more of the value than the row does', /setvariable/i.test(tip) && tip.length>=why.textContent.length, tip);
+  });
+
+  // --- nothing extracted is invisible: unconsumed data renders as Other attributes ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('sla:approvalSla'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('an SLA renders its escalations', !!det.querySelector('[data-sect="escalations"]'));
+    const oa=det.querySelector('[data-sect="otherattrs"]');
+    ok('unconsumed parsed data lands in Other attributes', !!oa && /completionActions/.test(oa.textContent),
+       oa?oa.textContent.slice(0,120):'(no section)');
+  });
+
+  // Design's model Description used to render for apps only, because each type spelled the row itself.
+  // It is prose now — the first thing on the Overview tab, not a labelled fact.
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('app:demoApp'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const desc=det.querySelector('#pane-overview > .ddesc');
+    ok('the Overview tab opens with the model Description as prose', !!desc && /Miniature fixture app/.test(desc.textContent),
+       desc?desc.textContent.slice(0,140):'(no .ddesc)');
+    ok('and not as a labelled fact', ![...det.querySelectorAll('.facts dt')].some(t=>/^Description$/i.test(t.textContent)));
+    // --- the page header: title in the hero, the same title in the sticky bar, the identity line ---
+    const title=det.querySelector('.dhero .dtitle');
+    ok('the hero carries the title', !!title && /Demo App/.test(title.textContent), title?title.textContent:'(none)');
+    ok('the identity line names kind, key and path', !!det.querySelector('.dident .dkey') && /demoApp/.test(det.querySelector('.dident').textContent));
+    ok('the actions are one group with labels', det.querySelectorAll('.dhead .dhead-actions button .lbl').length>=2);
+    // a node page's sections are headings: what explains one waits behind its ⓘ, and every one starts
+    // open but Other attributes — unless the reader folded it before
+    ok('a section explains itself behind an ⓘ, not in a grey line', !det.querySelector('.dpane details.sect>summary .shint') && !!det.querySelector('.dpane details.sect>summary .sinfo[data-tip]'));
+    let st={}; try{ st=JSON.parse(localStorage.getItem('atlas-sect2')||'{}')||{}; }catch(e){}
+    const fresh=[...det.querySelectorAll('.dpane details.sect')].filter(s=>!(dec(s.dataset.sect) in st));
+    ok('sections start open, Other attributes folded', fresh.length>0 && fresh.every(s=>s.open===(s.dataset.sect!=='otherattrs')),
+       fresh.filter(s=>s.open!==(s.dataset.sect!=='otherattrs')).map(s=>s.dataset.sect).join());
+  });
+  // --- the page's tabs: a tab per pane that has something, the sections sorted into them, one on screen ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const tabs=[...det.querySelectorAll('.ptabs .ptab')], panes=[...det.querySelectorAll('.dpane')];
+    ok('a page has a tab per pane', tabs.length>=2 && tabs.length===panes.length && tabs.every((t,i)=>t.dataset.pane===panes[i].dataset.pane),
+       tabs.map(t=>t.dataset.pane).join()+' / '+panes.map(p=>p.dataset.pane).join());
+    ok('the panes keep the page order', panes.map(p=>p.dataset.pane).join()==='overview,findings,connections,details', panes.map(p=>p.dataset.pane).join());
+    ok('one pane is on screen, the first', panes.filter(p=>!p.hidden).length===1 && !panes[0].hidden && tabs[0].getAttribute('aria-selected')==='true');
+    const inPane=(sect, pane)=>{ const d=det.querySelector('[data-sect="'+sect+'"]'); return !!d && d.closest('.dpane').dataset.pane===pane; };
+    // (miniproject carries no DI, so this process has no drawing: its Overview is its facts)
+    ok('the facts are on Overview, the findings on Findings', !!det.querySelector('#pane-overview > .facts') && inPane('findings','findings'));
+    ok('the fit and the relations on Connections, the elements on Details',
+       inPane('fit-calls','connections') && inPane('relations','connections') && inPane('elements','details'));
+    ok('every fit question is a section of its own, explained behind its ⓘ',
+       det.querySelectorAll('[data-sect^="fit-"]').length>=2 && [...det.querySelectorAll('[data-sect^="fit-"]>summary')].every(x=>!!x.querySelector('.sinfo[data-tip]')));
+    ok('no legend line repeats what a mark means', !det.querySelector('.fitlegend'));
+    const mk=det.querySelector('[data-sect^="fit-"] .gm');
+    ok('a mark says what it means in its tooltip', !!mk && /fits|missing|looks wrong|cannot tell|expected|note/.test(mk.getAttribute('data-tip')||''), mk?mk.getAttribute('data-tip'):'(no mark)');
+    ok('no pane is empty', panes.every(p=>p.children.length>0), panes.filter(p=>!p.children.length).map(p=>p.dataset.pane).join());
+    const pdoc=(byId.get('process:orderProcess').data||{}).documentation;
+    ok("a process's documentation is prose on Overview, not a fact",
+       ![...det.querySelectorAll('#pane-overview .facts dt')].some(t=>/^Documentation$/i.test(t.textContent)) &&
+       (!pdoc || [...det.querySelectorAll('#pane-overview > .ddesc')].some(p=>p.textContent===pdoc)));
+    const t=tabs.find(x=>x.dataset.pane==='details');
+    const d=det.querySelector('details.sect[data-sect="elements"]');
+    if(d) d.open=false;
+    window.__navSect=d;
+    if(t) click(t);
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const pane=det.querySelector('#pane-details');
+    ok('clicking a tab brings its pane up', !!pane && !pane.hidden && det.querySelectorAll('.dpane:not([hidden])').length===1);
+    ok('and the hash says which', /&p=details/.test(location.hash), location.hash);
+    ok('a folded section stays folded on its tab', !!window.__navSect && !window.__navSect.open);
+    if(window.__navSect) window.__navSect.open=true;
+    // the digit keys pick a tab by its place
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'1', code:'Digit1', bubbles:true}));
+    ok('1 brings the first tab back', !det.querySelector('#pane-overview').hidden && !/&p=/.test(location.hash), location.hash);
+    // the tab carries over to the next page when that page has it
+    const t=det.querySelector('.ptab[data-pane="connections"]'); if(t) click(t);
+    select('form:orderForm');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const pane=det.querySelector('#pane-connections');
+    ok('the tab carries over to the next page', !!pane && !pane.hidden && /&p=connections/.test(location.hash), location.hash);
+    history.back();
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('Back returns to the page on the tab it was left on', state.sel==='process:orderProcess' && !det.querySelector('#pane-connections').hidden, state.sel+' '+location.hash);
+    // the health strip reaches into another tab: its findings item brings Findings up
+    click(det.querySelector('.ptab[data-pane="overview"]'));
+    const fb=det.querySelector('.dhealth .hs[data-jump-sect="findings"]');
+    if(fb) click(fb);
+    ok('a health item brings up the tab its section is on', !!fb && !det.querySelector('#pane-findings').hidden);
+    // (miniproject draws no process) a ⌖ promises a place on a drawing — a page without one offers none
+    ok('a model without a drawing offers no locate button', !det.querySelector('.dgloc'));
+    click(det.querySelector('.ptab[data-pane="details"]'));
+  });
+  steps.push(()=>{
+    // --- "N parameter mappings ↓" on a service task lands on that task's group in the Parameters section,
+    // not on the card it sits in (also a row of the same element, and first in the document)
+    const det=document.getElementById('detail');
+    const card=det.querySelector('details.elgrp[data-eg="svctasks"] details.card[data-el="calcTask"]');
+    ok('the service task with mappings is a card', !!card);
+    if(card) card.closest('details.elgrp').open=true;
+    if(card) card.open=true;
+    const params=det.querySelector('details.sect[data-sect="params"]');
+    if(params){ params.open=false; }
+    const btn=card&&card.querySelector('[data-reveal-el="calcTask"]');
+    ok('and offers the jump to its parameter mappings', !!btn);
+    if(btn) click(btn);
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const params=det.querySelector('details.sect[data-sect="params"]');
+    const grp=params&&params.querySelector('details.card[data-el="calcTask"]');
+    ok('the jump opens the Parameters section', !!params && params.open);
+    ok('and lands on the task\\'s mapping group there', !!grp && grp.open && grp.classList.contains('hit'),
+       grp?'group not marked':'(no group)');
+    ok('and not on the service task card', !det.querySelector('details.sect[data-sect="svctasks"] .hit'));
+  });
+
+
+
+  // --- a model lists what it uses: the section is rebuilt from the artifact nodes' usedBy ---
+  // The generator strips _uses from the payload, and for a whole run of releases the panel still
+  // read that key — so "which variables does this process touch" rendered nowhere.
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const sect=det.querySelector('[data-sect="varexpr"]');
+    ok('a model lists the variables and expressions it uses', !!sect, 'no [data-sect="varexpr"] on the process');
+    ok('and each one is a link you can follow', !!sect && !!sect.querySelector('.tbl .vlink[data-id^="variable"]'),
+       sect?sect.textContent.slice(0,120):'(no section)');
+  });
+
+  // --- a malformed link cannot freeze the router; a filter does not travel between categories ---
+  steps.push(()=>{ closeOtherTabs(); location.hash='#process%E0%A4%A'; });
+  steps.push(()=>{
+    ok('an undecodable hash lands on the overview instead of throwing', state.view==='overview', 'view='+state.view);
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    ok('the router still works after the bad link', state.sel==='process:orderProcess', 'sel='+state.sel);
+    const lf=document.getElementById('lf');
+    if(lf){ lf.value='zzz-no-match'; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    // follow a chip into another category: the filter typed in Processes must not come along
+    const chip=[...document.querySelectorAll('#detail .nc[data-id]')].find(c=>decodeURIComponent(c.dataset.id).indexOf('process:')!==0);
+    if(chip) click(chip); else say('note','no cross-category chip on the process');
+  });
+  steps.push(()=>{
+    const lf=document.getElementById('lf');
+    ok('the list filter is cleared when the category changes', !lf || lf.value==='', lf?('filter="'+lf.value+'"'):'');
+  });
+
+  // --- the list context travels in the link, and comes back on reload ---
+  steps.push(()=>{ closeOtherTabs(); location.hash='/browse/'+enc('process'); });
+  steps.push(()=>{
+    const s=document.querySelector('#catrows .th-s[data-sort="refs"]');
+    ok('a column header sorts', !!s);
+    if(s) click(s);
+  });
+  steps.push(()=>{
+    const ids=[...document.querySelectorAll('#catrows .tr[data-id]')].map(r=>r.dataset.id);
+    ok('sorting by In puts the most referenced first', ids.length>1 && ids.every((id,i)=>!i||(INSIGHTS.indeg.get(ids[i-1])||0)>=(INSIGHTS.indeg.get(id)||0)));
+    ok('the sorted header says so', !!document.querySelector('#catrows .th-s.on[data-sort="refs"]'));
+    const before=state.tabs.length, row=document.querySelector('#catrows .tr[data-id]');
+    window.__tabsB=before;
+    if(row) row.dispatchEvent(new MouseEvent('auxclick', {bubbles:true, button:1}));
+  });
+  steps.push(()=>{
+    ok('a middle-click opens a background tab and stays on the table', state.tabs.length===window.__tabsB+1 && !state.sel);
+    const rows=[...document.querySelectorAll('#catrows .tr[data-id]')];
+    if(rows[0]) click(rows[0], {metaKey:true, ctrlKey:true});
+  });
+  steps.push(()=>{
+    ok('a mod-click marks a table row', !!document.querySelector('#catrows .tr.mark[aria-checked="true"]') && !!document.getElementById('lopen'));
+    listMarksClear(); syncListMarks(); setMarkNote('');
+    const f=document.getElementById('catf');
+    if(f){ f.value='order'; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const h=decodeURIComponent(location.hash);
+    ok('the filter is in the link', h.indexOf('&f=order')>0, 'hash='+h);
+    ok('and so is the sort', h.indexOf('&s=refs')>0, 'hash='+h);
+    // a "reload": route the same link cold
+    state.filter=''; state.sort='name'; state.cat=null;
+    location.hash='/browse/'+enc('form')+'&f=zzz-none&s=refs';
+  });
+  steps.push(()=>{
+    const f=document.getElementById('catf');
+    ok('a link with &f= restores the filter', !!f && f.value==='zzz-none', f?('filter="'+f.value+'"'):'no #catf');
+    ok('a link with &s= restores the sort', state.sort==='refs', 'sort="'+state.sort+'"');
+    ok('a filter matching nothing says so', !!document.querySelector('#catrows .list-empty'));
+    location.hash=enc('form:orderForm');
+  });
+  steps.push(()=>{
+    ok('following a node in that category keeps its list context in the link',
+       decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
+  });
+
+  // --- a service, its data objects and its changelog name each other in their tables ---
+  steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('service'); });
+  steps.push(()=>{
+    const row=document.querySelector('#catrows .tr[data-id="service:customerService"]');
+    const dob=row&&row.querySelector('.vlink[data-id="'+enc('dataObject:customerDO')+'"]');
+    ok('a service row names the data object stored through it', !!dob, row&&row.textContent);
+    const lb=row&&row.querySelector('.vlink[data-id="'+enc('liquibase:001-customer')+'"]');
+    ok('and the changelog that creates its table', !!lb);
+    const cp=lb&&lb.parentNode.querySelector('.cpy');
+    ok('the changelog copies its key', !!cp && decodeURIComponent(cp.dataset.copy)==='001-customer', cp&&cp.dataset.copy);
+    // a copy button is a button: the pointer cursor, not the "copy" one with its plus badge
+    ok('a copy button shows the plain pointer', !!cp && getComputedStyle(cp).cursor==='pointer', cp&&getComputedStyle(cp).cursor);
+    location.hash='/browse/'+enc('dataObject');
+  });
+  steps.push(()=>{
+    const row=document.querySelector('#catrows .tr[data-id="dataObject:customerDO"]');
+    const sv=row&&row.querySelector('.vlink[data-id="'+enc('service:customerService')+'"]');
+    ok('a data object row names its service', !!sv, row&&row.textContent);
+    // its changelog is reached through the service that stores it
+    ok('and the changelog behind that service', !!(row&&row.querySelector('.vlink[data-id="'+enc('liquibase:001-customer')+'"]')));
+    if(sv) click(sv);
+  });
+  steps.push(()=>{
+    ok('the service link opens the service', state.sel==='service:customerService', 'sel='+state.sel);
+  });
+
+  // --- an action's table names its bot, a bot's table its actions — each a link of its own ---
+  steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('action'); });
+  steps.push(()=>{
+    const cell=document.querySelector('#catrows .tr[data-id="action:DEMO-A001"] .vlink[data-id="'+enc('java:com.example.DemoInvoiceBot')+'"]');
+    ok('an action row names its Java bot by its class', !!cell && cell.textContent==='DemoInvoiceBot',
+       (document.querySelector('#catrows .tr[data-id="action:DEMO-A001"]')||{}).textContent);
+    const cp=cell&&cell.parentNode.querySelector('.cpy:not(.opn)');
+    ok('the bot cell copies the class name', !!cp && decodeURIComponent(cp.dataset.copy)==='com.example.DemoInvoiceBot', cp&&cp.dataset.copy);
+    const op=cell&&cell.parentNode.querySelector('.opn');
+    ok('the bot cell carries an open-in-IDE button, hidden outside the IDE', !!op && getComputedStyle(op).display==='none');
+    const pl=document.querySelector('#catrows .tr[data-id="action:notifyCustomerAction"] .vlink[data-id="'+enc('bot:script-evaluation-bot')+'"]');
+    ok('a platform bot is named by its key', !!pl && pl.textContent==='script-evaluation-bot');
+    ok('a platform bot has nothing to open', !!pl && !pl.parentNode.querySelector('.opn'));
+    window.__hc=0; window.addEventListener('hashchange', ()=>{ window.__hc++; });
+    if(cell) click(cell);
+  });
+  steps.push(()=>{
+    ok('a click on the bot opens the bot, not the action', state.sel==='java:com.example.DemoInvoiceBot', 'sel='+state.sel);
+    // a detail page rendered earlier leaves its link handler on #detail; the row's link must not fire it too
+    ok('and navigates once', window.__hc===1, 'hash changes='+window.__hc);
+    location.hash='/browse/'+enc('java::bot');
+  });
+  steps.push(()=>{
+    const a=document.querySelector('#catrows .tr[data-id="java:com.example.DemoInvoiceBot"] .vlink[data-id="'+enc('action:DEMO-A001')+'"]');
+    ok('a Java bot row lists the action that runs it', !!a && a.textContent==='Send invoice');
+    const cp=a&&a.parentNode.querySelector('.cpy');
+    ok('the action copies its key', !!cp && decodeURIComponent(cp.dataset.copy)==='DEMO-A001', cp&&cp.dataset.copy);
+    ok('and offers nothing to open', !!a && !a.parentNode.querySelector('.opn'));
+    if(a) click(a);
+  });
+  steps.push(()=>{
+    ok('a click on the action opens the action', state.sel==='action:DEMO-A001', 'sel='+state.sel);
+    closeOtherTabs(); location.hash='/browse/'+enc('bot');
+  });
+  steps.push(()=>{
+    const a=document.querySelector('#catrows .tr[data-id="bot:script-evaluation-bot"] .vlink[data-id="'+enc('action:notifyCustomerAction')+'"]');
+    ok('a platform bot row lists its action', !!a);
+    window.__tabsB=state.tabs.length;
+    if(a) a.dispatchEvent(new MouseEvent('auxclick', {bubbles:true, button:1}));
+  });
+  steps.push(()=>{
+    ok('a middle-click on a link opens that link in one background tab', state.tabs.length===window.__tabsB+1 &&
+       state.tabs.includes('action:notifyCustomerAction') && !state.sel, 'tabs='+state.tabs.join(',')+' sel='+state.sel);
+  });
+
+  // --- the identifier of a table row copies out of it ---
+  steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('action'); });
+  steps.push(()=>{
+    const cp=document.querySelector('#catrows .tr[data-id="action:DEMO-A001"] .cpy[data-copy="DEMO-A001"]');
+    ok('a category row copies its key', !!cp && cp.getAttribute('aria-label')==='Copy key', cp&&cp.getAttribute('aria-label'));
+    ok('and shows the button only on the row under the pointer or the keyboard', !!cp && getComputedStyle(cp).opacity==='0');
+    location.hash='/browse/'+enc('bot');
+  });
+  steps.push(()=>{
+    // a bot's key is its name, so the Key column is dropped — the copy moves to the name
+    const cp=document.querySelector('#catrows .tr[data-id="bot:script-evaluation-bot"] .cpy[data-copy="script-evaluation-bot"]');
+    ok('a row whose key is its name copies it from the name', !!cp);
+    location.hash='/browse/'+enc('java::component');
+  });
+  steps.push(()=>{
+    const cp=document.querySelector('#catrows .tr[data-id="java:com.example.DemoBean"] .cpy[data-copy="com.example.DemoBean"]');
+    ok('a Java row copies its full class name', !!cp && cp.getAttribute('aria-label')==='Copy class name', cp&&cp.getAttribute('aria-label'));
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const cp=[...det.querySelectorAll('.tbl .tr[data-el="approveTask"] .cpy')].find(b=>b.getAttribute('aria-label')==='Copy element id');
+    ok('an element row copies its element id', !!cp && decodeURIComponent(cp.dataset.copy)==='approveTask');
+    const fk=[...det.querySelectorAll('.tbl .tr[data-el="approveTask"] .cpy')].find(b=>b.getAttribute('aria-label')==='Copy form key');
+    ok('and the form it opens copies its key', !!fk && decodeURIComponent(fk.dataset.copy)==='orderForm');
+    closeOtherTabs(); location.hash='/overview';
+  });
+  steps.push(()=>{
+    // The overview's chips carry copy buttons that were never wired: a click opened the chip's node instead.
+    const cp=document.querySelector('#view-overview .nc .cpy');
+    window.__copied=null; window.__atlasCopy=t=>{ window.__copied=t; };
+    window.__hashB=location.hash;
+    if(cp){ window.__copyWant=decodeURIComponent(cp.dataset.copy); click(cp); }
+    ok('the overview has a chip to copy from', !!cp);
+  });
+  steps.push(()=>{
+    ok('a chip’s copy button on the overview copies', !!window.__copyWant && window.__copied===window.__copyWant, 'copied='+window.__copied);
+    ok('and stays on the overview', location.hash===window.__hashB, 'hash='+location.hash);
+    delete window.__atlasCopy;
+  });
+
+  // --- elements: what a process is made of, one section with a group and a chip per kind ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail'), s=det.querySelector('details.sect[data-sect="elements"]');
+    ok('a process lists its elements in one section, open by default', !!s && s.open);
+    ok('each kind is a group of it, not a section of its own', !!s && s.querySelectorAll('details.elgrp').length>=3 &&
+       ['usertasks','svctasks','events','gateways','flows'].every(id=>!det.querySelector('details.sect[data-sect="'+id+'"]')));
+    const chips=[...det.querySelectorAll('[data-sect="elements"] .fbar .pchip[data-fk="eg"]')];
+    ok('a chip per kind, and one for all', chips.length===s.querySelectorAll('details.elgrp').length+1);
+    const flows=chips.find(ch=>ch.dataset.fv==='flows');
+    if(flows) click(flows);
+    window.__elSect=s;
+  });
+  steps.push(()=>{
+    const s=window.__elSect;
+    const vis=[...s.querySelectorAll('details.elgrp')].filter(g=>!g.hidden).map(g=>g.dataset.eg);
+    ok('a kind chip keeps only its group', vis.length===1 && vis[0]==='flows', vis.join());
+    click(s.querySelector('.fbar .pchip[data-fv="all"]'));
+    const g=[...s.querySelectorAll('details.elgrp')].find(x=>x.dataset.eg!=='flows'); window.__gwId=g&&g.dataset.eg;
+    if(g) g.open=!g.open; window.__gwOpen=!!(g&&g.open);
+  });
+  steps.push(()=>{
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect2')); }catch(e){}
+    ok('a group remembers its fold under its old section id', !!window.__gwId && !!st && st[window.__gwId]===window.__gwOpen, window.__gwId+' '+JSON.stringify(st));
+    if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect2', JSON.stringify(st)); }catch(e){} }
+    const nav=[...document.querySelectorAll('#detail [data-sect]')].map(c=>c.dataset.sect);
+    // the health strip under the title: findings, connections — each a way into its section
+    const hs=document.querySelector('#detail .dhero .dhealth');
+    ok('a model page has a health strip under its title', !!hs);
+    const n0=byId.get('process:orderProcess'), R0=relationsOf(n0, n0.data||{});
+    const usesB=hs&&[...hs.querySelectorAll('.hs')].find(b=>/^uses /.test(b.textContent)), byB=hs&&[...hs.querySelectorAll('.hs')].find(b=>/^used by /.test(b.textContent));
+    ok('it counts neighbours, not edges', !!usesB && !!byB && +usesB.textContent.replace(/\\D+/g,'')===new Set(R0.out.map(e=>e.id)).size &&
+       +byB.textContent.replace(/\\D+/g,'')===new Set(R0.inc.map(e=>e.id)).size, (usesB&&usesB.textContent)+' / '+(byB&&byB.textContent));
+    const fb=hs&&hs.querySelector('.hs[data-jump-sect="findings"]');
+    ok('its findings item says defects or advice', !!fb && /defect|advice/.test(fb.textContent), fb?fb.textContent:'(none)');
+    const fs=document.querySelector('#detail details.sect[data-sect="findings"]');
+    if(fb&&fs){ fs.open=false; click(fb); ok('and opens the findings', fs.open); }
+    const fh=fs?[...fs.querySelectorAll('.fndtbl .th .td')].map(t=>t.textContent.trim()):[];
+    ok("a model's own findings name neither the model nor its file", fh.length>0 && fh.indexOf('Model')<0 && fh.indexOf('File')<0, fh.join('|'));
+    // every page reads picture, findings, fit and relations, details — in that order, a tab each
+    const at=id=>nav.indexOf(id);
+    ok('the findings come before the relations, the relations before the elements',
+       at('findings')>=0 && at('relations')>at('findings') && at('elements')>at('relations'), nav.join());
+    ok('the declared data objects are a group of the elements', !document.querySelector('#detail details.sect[data-sect="declaredvars"]'));
+  });
+
+  // --- relations: one section — every relation as a row, the drawing on request; remembered; its rows are links ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail'), s=det.querySelector('details.sect[data-sect="relations"]');
+    ok('the relations are one section, open by default', !!s && s.open);
+    try{ localStorage.removeItem('atlas-relgraph'); }catch(e){}
+    const gb=s&&s.querySelector('.relgbtn'), nbh=s&&s.querySelector('.nbh');
+    ok('the drawing waits behind its switch', !!gb && gb.getAttribute('aria-pressed')==='false' && !!nbh && nbh.hidden);
+    if(gb) click(gb);
+    ok('which draws it', !!nbh && !nbh.hidden && gb.getAttribute('aria-pressed')==='true' && localStorage.getItem('atlas-relgraph')==='1');
+    ok('its drawing reads uses on the left, used by on the right', !!s && s.querySelectorAll('.nb-head').length===2 && s.querySelectorAll('.gn[data-id]').length>0);
+    ok('the list has no column headers and no gesture line', !!s && !s.querySelector('.relhint') && [...s.querySelectorAll('.reltbl .th')].every(h=>getComputedStyle(h).display==='none'));
+    ok('the relations are told once', ['neighborhood','rels-out','rels-in','called-with','usedby','uses'].every(id=>!det.querySelector('[data-sect="'+id+'"]')));
+    // never filter silently: a row per direction and relation, a chip per neighbour the graph holds
+    const n=byId.get('process:orderProcess'), R=relationsOf(n, n.data||{});
+    const rows=s?s.querySelectorAll('.tr[data-rdir]').length:0;
+    const kinds=new Set(R.out.map(e=>'out|'+e.rel)).size+new Set(R.inc.map(e=>'in|'+e.rel)).size;
+    ok('the table has a row for every relation of the node', rows===kinds && rows>0, rows+' vs '+kinds);
+    const chips=s?s.querySelectorAll('.rnb[data-rdir]').length:0;
+    ok('and a chip for every neighbour of every relation', chips===R.out.length+R.inc.length, chips+' vs '+(R.out.length+R.inc.length));
+    const want=new Set((outM.get(n.id)||[]).filter(e=>byId.get(e.id)).map(e=>'out|'+e.rel+'|'+e.id).concat((incM.get(n.id)||[]).filter(e=>byId.get(e.id)).map(e=>'in|'+e.rel+'|'+e.id)));
+    ok('and exactly the distinct edges of the graph', want.size===chips, want.size+' vs '+chips);
+    const chip=s&&s.querySelector('.fbar .pchip[data-fv="in"]');
+    if(chip){ click(chip);
+      ok('the ← used by chip keeps the incoming rows only', [...s.querySelectorAll('.tr[data-rdir]')].every(r=>r.hidden===(r.dataset.rdir==='out')));
+      click(s.querySelector('.fbar .pchip[data-fv="all"]')); }
+    if(s) s.open=false;
+  });
+  steps.push(()=>{
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect2')); }catch(e){}
+    ok('closing the relations is remembered', !!st && st.relations===false, JSON.stringify(st));
+    if(st){ delete st.relations; try{ localStorage.setItem('atlas-sect2', JSON.stringify(st)); }catch(e){} }
+    const s=document.querySelector('#detail details.sect[data-sect="relations"]');
+    if(s){ s.open=true; const g=s.querySelector('.gn[data-id]'); window.__nbFrom=state.sel; if(g) click(g); }
+  });
+  steps.push(()=>{
+    ok('a neighbour in the drawing is a link', !!state.sel && state.sel!==window.__nbFrom, 'sel='+state.sel);
+    const nb=document.querySelector('#detail .nbh');
+    ok('and the next page keeps the drawing on', !nb || !nb.hidden);
+    const gb=document.querySelector('#detail .relgbtn'); if(gb) click(gb);
+    ok('until it is switched off again', !localStorage.getItem('atlas-relgraph'));
+    location.hash=enc('process:fulfilmentProcess');
+  });
+  steps.push(()=>{
+    // what the Called with section said: the caller's mappings, in the caller's row
+    const row=document.querySelector('#detail [data-sect="relations"] .tr[data-rdir="in"][data-rmap]');
+    ok('a caller that maps parameters is marked as such', !!row);
+    ok('and its row carries the mappings', !!row && [...row.querySelectorAll('.pc')].some(p=>/subOrderId/.test(p.textContent)));
+    ok("without answering this page's element links", !!row && !row.querySelector('.tx [data-el], .tx [data-hay]'));
+    location.hash=enc('endpoint:GET /api/customers/{id}/canEdit');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const row=[...det.querySelectorAll('[data-sect="relations"] .tr[data-rdir="in"]')].find(r=>r.querySelector('.nc[data-id="'+enc('form:orderForm')+'"]'));
+    ok('an endpoint names who calls it, with the verb and the URL', !!row && /GET/.test(row.textContent) && /canEdit/.test(row.textContent));
+    ok('no separate Called by section', !det.querySelector('[data-sect="callers"]'));
+    location.hash=enc('group:auditors');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('a group lists what its members may do, a run per permission', new Set([...det.querySelectorAll('[data-sect="relations"] .tr[data-rel]')].map(r=>r.dataset.rel)).size===2);
+    ok('no separate Access section', !det.querySelector('[data-sect="access"]'));
+    location.hash=enc('agent:orderAssistant');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok("an agent's tools are relations, with the operation", !det.querySelector('[data-sect="tools"]') &&
+       /findAll/.test((det.querySelector('[data-sect="relations"] .tr[data-rel="tool"]')||{}).textContent||''));
+    const other=det.querySelector('[data-sect="otherattrs"]');
+    ok('and the tools key is not left over under Other attributes', !other || ![...other.querySelectorAll('*')].some(el=>el.children.length===0 && (el.textContent||'').trim()==='tools'));
+    location.hash=enc(nodes.find(x=>x.type==='serviceOperation').id);
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const other=det.querySelector('[data-sect="otherattrs"]'), keys=other?[...other.querySelectorAll('.kvk')].map(k=>k.textContent.trim()):[];
+    ok("an operation's url and key are facts, not left-overs", keys.indexOf('url')<0 && keys.indexOf('operation')<0, keys.join());
+    ok('its call is one fact: verb and URL', [...det.querySelectorAll('.facts .fact')].some(f=>/^Call$/i.test(f.querySelector('dt').textContent.trim())));
+    ok('an operation is related to its service', !!det.querySelector('[data-sect="relations"] .tr[data-rel="operation-of"] .nc[data-id^="'+enc('service:')+'"]'));
+    location.hash=enc('variable:total');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('a variable lists the models that write and read it', !!det.querySelector('[data-sect="relations"] .tr[data-rel="writes-variable"] .rnb') &&
+       !!det.querySelector('[data-sect="relations"] .tr[data-rel="reads-variable"] .rnb'));
+    ok('and no longer says it has no relationships', !/No relationships recorded/.test(det.textContent));
+    location.hash=enc('app:demoApp');
+  });
+  steps.push(()=>{
+    const row=document.querySelector('#detail [data-sect="relations"] .tr[data-rel="contains"]');
+    ok('a relation names all its neighbours on one row', !!row && row.querySelectorAll('.rnb .nc[data-id]').length>1,
+       row?row.querySelectorAll('.rnb').length+' chips':'(no row)');
+  });
+
+  // --- does it fit: a called process against its callers, and the call from the caller's side ---
+  steps.push(()=>{ location.hash=enc('process:fulfilmentProcess'); });
+  steps.push(()=>{
+    const s=fitView();
+    ok('a called process shows whether its callers fit, open by default', !!s && s.open);
+    const row=nm=>s?[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()===nm; }):null;
+    const st=row('stockLevel'), oi=row('orderId'), tot=row('subTotal');
+    ok('a value it reads that no caller passes is a gap', !!st && st.classList.contains('cov-warn'), st?st.className:'(no row)');
+    ok('a value passed in that it never reads is a gap too', !!oi && oi.classList.contains('cov-warn'), oi?oi.className:'(no row)');
+    ok('a value it hands back fits', !!tot && !/cov-/.test(tot.className), tot?tot.className:'(no row)');
+    ok('the gap kinds are named in the pills', !!s && /not passed/.test(s.textContent) && /never read/.test(s.textContent));
+    const call=s&&s.querySelector('.tbl .tr[data-el="callCourier"]');
+    ok('a call into a model outside the project is a question, not a fit', !!call && !!call.querySelector('.gm-unk') && !/cov-/.test(call.className));
+    const hs=document.querySelector('#detail .dhealth .hs[data-jump-sect^="fit-"]');
+    ok('the health strip counts the gaps and jumps to them', !!hs && /gap/.test(hs.textContent));
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    const r=document.querySelector('#detail [data-sect^="fit-"] .tr[data-el="callSub"]');
+    ok('the caller sees the same gap on its call', !!r && r.classList.contains('cov-warn') && /stockLevel/.test(r.textContent), r?r.textContent:'(no row)');
+  });
+
+  // --- a service fits its callers, the code that answers it, and its data object ---
+  steps.push(()=>{ location.hash=enc('service:customerService'); });
+  steps.push(()=>{
+    const s=fitView();
+    ok('a service asks whether its operations fit', !!s);
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>/GET/.test(r.textContent) && r.querySelector('.vlink[data-id="'+enc('endpoint:GET /api/customers')+'"]'));
+    ok('each operation names the endpoint that answers it, with the verb checked', !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    ok('and the handler in the code', !!row && /CustomerController#/.test(row.textContent));
+    location.hash=enc('dataObject:customerDO');
+  });
+  steps.push(()=>{
+    const cols=[...document.querySelectorAll('#detail [data-sect="columns"] .tbl .th .td')].map(t=>t.textContent.trim());
+    ok("a data object's properties name the service column behind each field", cols.indexOf('Service column')>=0, cols.join('|'));
+    const shownIn=name=>{ const r=[...document.querySelectorAll('#detail [data-sect="columns"] .tbl .tr')].find(x=>x.textContent.trim().indexOf(name)===0);
+      return r?[...r.querySelectorAll('.vlink')].map(v=>v.dataset.id):null; };
+    ok('a field is shown in the form whose component under the bound record displays it',
+       (shownIn('customerName')||[]).indexOf(enc('form:orderForm'))>=0, JSON.stringify(shownIn('customerName')));
+    ok('a same-named path under another record does not count', (shownIn('deliveryCity')||[]).indexOf(enc('form:orderForm'))<0,
+       JSON.stringify(shownIn('deliveryCity')));
+  });
+
+  // --- a decision, an action and a form against what they meet ---
+  steps.push(()=>{ location.hash=enc('decision:orderDecision'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('a decision table is drawn with its hit policy and its input and output bands',
+       !!det.querySelector('.dmntab th.hp') && !!det.querySelector('.dmntab .band-in') && !!det.querySelector('.dmntab .band-out'));
+    ok('its inputs and outputs are the head of the table, not a section of their own', !det.querySelector('[data-sect="dmnio"]'));
+    const s=fitView();
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()==='total'; });
+    ok('an input the calling process writes fits by name', !!row && !!row.querySelector('.gm-impl'), row?row.innerHTML.slice(0,200):'(no row)');
+    location.hash=enc('action:notifyCustomerAction');
+  });
+  steps.push(()=>{
+    const s=fitView();
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()==='customerEmail'; });
+    ok("an action's input its calling button sends fits", !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    location.hash=enc('form:orderForm');
+  });
+  steps.push(()=>{
+    const s=fitView();
+    const rest=s&&s.querySelector('.tbl .tr[data-el="canEditButton"]');
+    ok("a form's REST button is a call, its verb checked against the handler", !!rest && /GET/.test(rest.textContent) && !!rest.querySelector('.gm-ok'), rest?rest.textContent:'(no row)');
+    ok('the data sources and REST calls are no sections of their own', !document.querySelector('#detail [data-sect="datasources"], #detail [data-sect="restcalls"]'));
+    ok('its fields say who reads the variables they write', !!s && /Fields and the variables they write/.test(s.textContent));
+  });
+
+  // --- apps and groups: what an app reaches, and who can reach what ---
+  steps.push(()=>{ location.hash=enc('group:sales'); });
+  steps.push(()=>{
+    const s=fitView();
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('process:orderProcess')+'"]'));
+    ok('a group sees what it may do per model, and through which app', !!row && /May start/.test(row.textContent) && /via Demo App/.test(row.textContent), row?row.textContent:'(no row)');
+    location.hash=enc('app:demoApp');
+  });
+  steps.push(()=>{
+    const s=fitView();
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('decision:orderDecision')+'"]'));
+    ok('an app lists what its models reach that no app ships', !!row && row.classList.contains('cov-warn') && /in no app/.test(row.textContent), row?row.textContent:'(no row)');
+  });
+
+  // --- events, endpoints and classes against their counterparts ---
+  steps.push(()=>{ location.hash=enc('endpoint:GET /api/customers/{id}/canEdit'); });
+  steps.push(()=>{
+    const s=fitView();
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('form:orderForm')+'"]'));
+    ok('an endpoint lists its callers with the verb each uses', !!row && /canEditButton/.test(row.textContent) && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    // what the handler takes, on the Overview: the path variable its signature types
+    const ps=document.querySelector('#detail [data-sect="epparams"]');
+    const prow=ps&&[...ps.querySelectorAll('.tbl .tr')].find(r=>((r.querySelector('.cxn')||{}).textContent||'').trim()==='id');
+    ok('an endpoint lists what its handler takes and where each value goes', !!prow && /path/.test(prow.textContent) && /String/.test(prow.textContent) && /required/.test(prow.textContent), prow?prow.textContent:'(no row)');
+    location.hash=enc('endpoint:GET /api/customers');
+  });
+  steps.push(()=>{
+    const ps=document.querySelector('#detail [data-sect="epparams"]');
+    ok('a handler that takes nothing says so', !!ps && /takes no parameters/.test(ps.textContent), ps?ps.textContent:'(no section)');
+    location.hash=enc('java:com.example.CustomerController');
+  });
+  steps.push(()=>{
+    const es=document.querySelector('#detail [data-sect="endpoints"]');
+    ok("a class's endpoints link to their pages", !!es && !!es.querySelector('.vlink[data-id="'+enc('endpoint:GET /api/customers/{id}/canEdit')+'"]'));
+    location.hash=enc('java:com.example.DemoBean');
+  });
+  steps.push(()=>{
+    const m=document.querySelector('#detail [data-sect="methods"]'); if(m) m.open=true;
+    const row=m&&[...m.querySelectorAll('.tbl .tr')].find(r=>((r.querySelector('.td.mono')||{}).textContent||'').indexOf('run(')===0);
+    ok("a class's methods name the models that call them", !!row && !!row.querySelector('.vlink[data-id="'+enc('process:orderProcess')+'"]'), row?row.textContent:'(no row)');
+    location.hash=enc('event:orderShipped');
+  });
+  steps.push(()=>{
+    const s=fitView();
+    ok('an event lists its payload against its publishers and consumers', !!s && /Publishers and consumers/.test(s.textContent) && /consumed by/.test(s.textContent));
+    const hs=document.querySelector('#detail .dhealth');
+    ok('a page whose every row is a question does not claim it fits', !!hs && !/fits/.test(hs.textContent));
+  });
+
+  // --- a form's picture is its layout: the wireframe the IDE preview draws, clickable like a diagram ---
+  steps.push(()=>{ location.hash=enc('form:orderForm'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="diagram"]');
+    ok('a form opens with its layout', !!s && /Layout/.test((s.querySelector('summary')||{}).textContent||''));
+    if(s) s.open=true;
+  });
+  steps.push(()=>{
+    const g=document.querySelector('#detail [data-sect="diagram"] .dgview g[data-el="notifyButton"]');
+    ok('a component of the layout is a clickable element', !!g && g.getAttribute('role')==='button' && !!g.getAttribute('aria-label'),
+       g?g.outerHTML.slice(0,160):'(no element)');
+    if(g) click(g);
+  });
+  steps.push(()=>{
+    // scrolling over the layout must not wait on the page's script: a plain wheel is not taken, a
+    // modified one zooms; and a cell's highlight is an outline, not a blur filter repainted per row
+    const view=document.querySelector('#detail [data-sect="diagram"] .dgview');
+    const plain=new WheelEvent('wheel', {deltaY:40, bubbles:true, cancelable:true});
+    view.dispatchEvent(plain);
+    ok('a plain wheel over the layout scrolls the page', !plain.defaultPrevented);
+    const before=view._z.scale;
+    window.dispatchEvent(new KeyboardEvent('keydown', {key:'Meta', metaKey:true}));
+    const zoom=new WheelEvent('wheel', {deltaY:-40, metaKey:true, bubbles:true, cancelable:true});
+    view.dispatchEvent(zoom);
+    ok('with the modifier held, the wheel zooms the drawing', zoom.defaultPrevented && view._z.scale>before, before+' -> '+view._z.scale);
+    // a trackpad sends many small deltas: the zoom follows how far they add up to, not how many there are
+    const s0=view._z.scale;
+    for(let i=0;i<20;i++) view.dispatchEvent(new WheelEvent('wheel', {deltaY:-5, metaKey:true, bubbles:true, cancelable:true}));
+    const tr=view._z.scale/s0;
+    ok('twenty small trackpad steps zoom gently', tr>1.05 && tr<1.5, 'x'+tr.toFixed(2));
+    const s1=view._z.scale;
+    view.dispatchEvent(new WheelEvent('wheel', {deltaY:-100, metaKey:true, bubbles:true, cancelable:true}));
+    const nr=view._z.scale/s1;
+    ok('a mouse notch is one step', nr>1.08 && nr<1.25, 'x'+nr.toFixed(2));
+    // IntelliJ's browser rounds trackpad steps: a 0 is no direction, and ±1 steps still zoom in
+    const s3=view._z.scale;
+    for(let i=0;i<10;i++) view.dispatchEvent(new WheelEvent('wheel', {deltaY:0, deltaX:3, metaKey:true, bubbles:true, cancelable:true}));
+    ok('a step with no vertical delta does not zoom out', view._z.scale===s3, s3+' -> '+view._z.scale);
+    for(let i=0;i<30;i++) view.dispatchEvent(new WheelEvent('wheel', {deltaY:-1, metaKey:true, bubbles:true, cancelable:true}));
+    const ir=view._z.scale/s3;
+    ok('rounded ±1 steps still zoom in, gently', ir>1.2 && ir<2.5, 'x'+ir.toFixed(2));
+    window.dispatchEvent(new KeyboardEvent('keyup', {key:'Meta'}));
+    const after=new WheelEvent('wheel', {deltaY:40, bubbles:true, cancelable:true});
+    view.dispatchEvent(after);
+    ok('and lets go of it when the modifier is released', !after.defaultPrevented);
+    // a trackpad pinch is ctrl+wheel with no key pressed — the page never sees a keydown for it
+    const s2=view._z.scale;
+    view.dispatchEvent(new WheelEvent('wheel', {deltaY:-4, ctrlKey:true, bubbles:true, cancelable:true}));
+    ok('a pinch zooms without a key held', view._z.scale>s2, s2+' -> '+view._z.scale);
+    const pinch2=new WheelEvent('wheel', {deltaY:-4, ctrlKey:true, bubbles:true, cancelable:true});
+    view.dispatchEvent(pinch2);
+    ok("and the rest of the pinch is the drawing's, not the page's", pinch2.defaultPrevented);
+    window.__pinchView=view;
+    ok('the layout says it is a wireframe', view.dataset.kind==='wireframe');
+    const sel=view.querySelector('g[data-el].dgsel');
+    ok('the selected cell is outlined, not blurred', !!sel && getComputedStyle(sel).filter==='none' && !!sel.querySelector('rect') &&
+       getComputedStyle(sel.querySelector('rect')).stroke.indexOf('15, 85, 214')>=0, sel?getComputedStyle(sel).filter:'(no selection)');
+  });
+  steps.push(()=>{
+    const card=document.querySelector('.dgcard');
+    ok('clicking it opens its card, with the action it calls', !!card && !!card.querySelector('.nc[data-id="'+enc('action:notifyCustomerAction')+'"]'),
+       card?card.textContent.slice(0,200):'(no card)');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+    location.hash=enc('form:orderForm')+'&p=details';
+  });
+  steps.push(()=>{
+    // landing on Details: the layout was never laid out, and its ⌖ still finds the field
+    const det=document.getElementById('detail');
+    const b=det.querySelector('#pane-details [data-sect="formfields"] .dgloc[data-el-ref="amount"]');
+    ok('a field row has its own locate button', !!b);
+    if(b) click(b);
+    const view=det.querySelector('[data-sect="diagram"] .dgview'), sel=view&&view.querySelector('.dgsel');
+    ok('and it brings the layout up with the field selected', !det.querySelector('#pane-overview').hidden && !!sel && sel.getAttribute('data-el')==='amount',
+       sel?sel.getAttribute('data-el'):'(nothing selected)');
+    const bar=det.querySelector('.dbody>.dhead').getBoundingClientRect(), vr=view.getBoundingClientRect();
+    ok('the layout lands below the sticky tab bar', vr.top>=bar.bottom-1, Math.round(vr.top)+' < '+Math.round(bar.bottom));
+    // text cut to fit is readable in full: every cut text on every tab of this page, and on the list
+    det.querySelectorAll('.dpane').forEach(p=>p.hidden=false); det.querySelectorAll('details').forEach(d=>d.open=true);
+    const norm=v=>String(v||'').replace(/\\s+/g,' ').trim();
+    const cut=[...document.querySelectorAll('#detail *, .listcol *')].filter(el=>el.getClientRects().length && isClipped(el));
+    const unread=cut.filter(el=>{ const a=tipAnchor(el), own=norm(readText(el)); return own && (!a || norm(a.text()).indexOf(own.slice(0,200))<0); });
+    ok('this narrow page cuts some text', cut.length>0, 'nothing cut at this width');
+    ok('and every cut text says itself in full on hover', !unread.length, unread.slice(0,3).map(el=>norm(readText(el)).slice(0,60)).join(' | '));
+    window.__cutEl=cut.find(el=>!tipTarget(el));
+  });
+  // (a step later: opening every section above re-anchors the scroll, and a scroll hides a pending bubble)
+  steps.push(()=>{ if(window.__cutEl) window.__cutEl.dispatchEvent(new MouseEvent('mouseover', {bubbles:true})); });
+  steps.push(()=>{});
+  steps.push(()=>{
+    // (the bubble is in the page once shown; its fade-in class waits for a frame this harness never paints)
+    const tip=document.querySelector('.atlas-tip'), el=window.__cutEl;
+    ok('a real hover shows the bubble with the whole text', !el || (!!tip && tip.textContent.replace(/\\s+/g,' ').indexOf(readText(el).slice(0,60))>=0),
+       tip?tip.textContent.slice(0,80):'(no bubble)');
+    location.hash=enc('form:orderForm');
+  });
+
+  // --- a subform: drawn with the form it embeds, named on its card and its row, opened by a double click ---
+  steps.push(()=>{ location.hash=enc('form:DEMO-LF001'); });
+  steps.push(()=>{
+    ok('a pinch lets go of the wheel once it ends', !!window.__pinchView && !window.__pinchView._zoomOn);
+    const s=document.querySelector('#detail details.sect[data-sect="diagram"]');
+    if(s) s.open=true;
+    const row=document.querySelector('#detail [data-sect="formfields"] [data-el="orderSub"]');
+    ok('the subform row links the form it embeds', !!row && !!row.querySelector('.vlink[data-id="'+enc('form:orderForm')+'"]'),
+       row?row.textContent.slice(0,160):'(no row)');
+  });
+  steps.push(()=>{
+    const g=document.querySelector('#detail [data-sect="diagram"] .dgview g[data-el="orderSub"]');
+    ok('the subform box says which form it opens', !!g && g.getAttribute('data-ref')==='form:orderForm', g?g.outerHTML.slice(0,160):'(no box)');
+    ok('and draws that form inside it, as a picture, not as its elements', !!g && /Subform/.test(g.textContent) &&
+       !!g.querySelector('g:not([data-el])') && !g.querySelector('g[data-el="notifyButton"]'));
+    if(g) click(g);
+  });
+  steps.push(()=>{
+    const card=document.querySelector('.dgcard');
+    ok('its card names the embedded form as a link', !!card && !!card.querySelector('.nc[data-id="'+enc('form:orderForm')+'"]'),
+       card?card.textContent.slice(0,200):'(no card)');
+    // a press anywhere outside the card and the drawing closes it
+    document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true}));
+    ok('a press outside the card closes it', !document.querySelector('.dgcard'));
+    const g=document.querySelector('#detail [data-sect="diagram"] .dgview g[data-el="orderSub"]');
+    if(g){ click(g); click(g, {detail:2}); }
+  });
+  steps.push(()=>{
+    ok('a double click on the subform opens the form it embeds', state.sel==='form:orderForm', state.sel);
+    ok('and leaves no card behind', !document.querySelector('.dgcard'));
+  });
+
+  // --- a node is named in the singular: "Process · KEY", not its category "Processes · KEY" ---
+  steps.push(()=>{
+    ok('every node type has a singular name', Object.keys(TM).every(t=>typeof TM[t][2]==='string' && TM[t][2]),
+       Object.keys(TM).filter(t=>!TM[t][2]).join(','));
+    ok('a process is a Process', nodeKind(byId.get('process:orderProcess'))==='Process', nodeKind(byId.get('process:orderProcess')));
+    ok('a group is a User group', nodeKind({type:'group', data:{}})==='User group');
+    ok('one model of a type is counted in the singular', elementModelCount(['decision:orderDecision'])==='1 decision table' &&
+       elementModelCount(['process:orderProcess','process:fulfilmentProcess'])==='2 processes',
+       elementModelCount(['decision:orderDecision'])+' / '+elementModelCount(['process:orderProcess','process:fulfilmentProcess']));
+    // a filter still finds a node by its category's word, as it did while that was its only name
+    const fp=FINDS.find(f=>(byId.get(f.node)||{}).type==='process');
+    ok('a finding is filtered by its model\\'s kind, singular or plural', !!fp && /\\bProcess\\b/.test(findingRow(fp).hay) && /\\bProcesses\\b/.test(findingRow(fp).hay),
+       fp&&findingRow(fp).hay);
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const kw=det.querySelector('.dident .dkindw');
+    ok('the identity line names the kind in the singular', !!kw && kw.textContent==='Process', kw&&kw.textContent);
+    const plural=[...document.querySelectorAll('.nc .cpy')].map(b=>b.getAttribute('aria-label')||'').filter(l=>/Processes|Forms|groups key/.test(l));
+    ok('a chip copies "Process key", not "Processes key"', !plural.length, plural.slice(0,3).join(' | '));
+  });
+
+  // --- a bean the Flowable platform ships is not an external library ---
+  steps.push(()=>{
+    const bean={type:'external', data:{kind:'bean', platform:true}}, lib={type:'external', data:{kind:'class', platform:false}};
+    const libCat=CATS.find(c=>c.id==='external::lib');
+    ok('a platform bean (flwTimeUtils) is a Flowable platform reference', nodeKind(bean)==='Flowable platform');
+    ok('and is not listed under External / library', !!libCat && libCat.match(bean)===false && libCat.match(lib)===true);
+    ok('a key given as an expression is a dynamic reference, not a library', nodeKind({type:'external', data:{kind:'process', dynamic:true}})==='Dynamic reference');
+    ok('a missing model reference is not a library', nodeKind({type:'external', data:{kind:'process', missingModel:true}})==='Missing model reference');
+    // A bot the platform ships is nobody's code in the project, however many actions run it. The
+    // fixture's ranks too low to show that, so it is given the most references for one computation.
+    const pb=nodes.find(n=>n.type==='bot' && (n.data||{}).platform);
+    ok('the fixture has a platform bot', !!pb);
+    if(pb){
+      const n0=edges.length;
+      for(let i=0;i<40;i++) edges.push({s:'process:orderProcess', t:pb.id, rel:'bot'});
+      try{ computeInsights(); ok('a platform bot is never a hotspot', !INSIGHTS.hotspots.some(h=>h.id===pb.id) && !isHotspotCandidate(pb)); }
+      finally{ edges.length=n0; computeInsights(); }
+    }
+    ok('a project model still is one', isHotspotCandidate(byId.get('form:orderForm')));
+    location.hash='/overview';
+  });
+  // --- an external node opens in its own list: no category is called plain "external", so a missing
+  //     reference used to open with an empty list column — or under the list that was open before ---
+  const extOk=label=>{
+    ok(label+': the list is the missing-refs review', state.cat==='external::missing', 'cat='+state.cat);
+    ok(label+': the crumb names it', (document.getElementById('crumbs').textContent||'').indexOf(checkTitle('missingRefs'))>=0,
+       document.getElementById('crumbs').textContent);
+    ok(label+': and the node is selected in it', !!document.querySelector('#list .item.on[data-id="'+cssEsc('external:courierProcess')+'"]'));
+  };
+  steps.push(()=>{ location.hash='#'+encodeURIComponent('external:courierProcess'); });
+  steps.push(()=>{ extOk('opened directly'); location.hash='#'+encodeURIComponent(nodes.find(n=>n.type==='process').id); });
+  steps.push(()=>{ location.hash='#'+encodeURIComponent('external:courierProcess'); });
+  steps.push(()=>{ extOk('opened from a process'); location.hash='#'+encodeURIComponent('external:notifierBean'); });
+  steps.push(()=>{ ok('a library reference opens in the library list', state.cat==='external::lib', 'cat='+state.cat); });
+
+  // --- sidebar groups fold and remember ---
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    ok('the sidebar has group headers that are buttons', !!h && h.tagName==='BUTTON' && h.getAttribute('aria-expanded')==='true');
+    if(h) click(h);
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]'), g=document.getElementById('navgrp-models');
+    ok('a click folds the group', !!h && h.getAttribute('aria-expanded')==='false' && !!g && g.hidden);
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-navgroups')); }catch(e){}
+    ok('the fold is remembered', !!st && st.Models===false, JSON.stringify(st));
+    renderSidebar(); renderSidebarActive();   // a cold re-render — the closest thing to a reload inside one page
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    ok('a re-render keeps the group folded', !!h && h.getAttribute('aria-expanded')==='false');
+    location.hash='/browse/'+enc('process');
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    ok('a folded group marks the active entry on its header and stays folded',
+       !!h && h.classList.contains('has-on') && h.getAttribute('aria-expanded')==='false');
+    ok('a folded entry is not a keyboard stop', !document.querySelector('#nav .side-item.on') ||
+       document.querySelector('#nav .side-item.on').closest('[hidden]')!==null);
+    if(h) click(h);
+    try{ localStorage.removeItem('atlas-navgroups'); }catch(e){}
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    const on=document.querySelector('#nav .side-item.on');
+    ok('a second click unfolds it and the active entry is visible again',
+       !!h && h.getAttribute('aria-expanded')==='true' && !!on && on.closest('[hidden]')===null);
+  });
+
+  // --- the sidebar footer fits its column ---
+  // At the default 240px the old single-row footer squeezed the project name to one letter and pushed the
+  // buttons out past the sidebar's edge; the theme toggle also existed twice.
+  steps.push(()=>{
+    const f=document.getElementById('sidefoot'), fr=f.getBoundingClientRect();
+    const kids=[...f.children].filter(c=>!c.hidden);
+    ok('the sidebar footer does not overflow its column', f.scrollWidth<=f.clientWidth+0.5 &&
+       kids.every(c=>c.getBoundingClientRect().right<=fr.right+0.5), f.scrollWidth+' vs '+f.clientWidth);
+    const pw=document.getElementById('proj').getBoundingClientRect().width;
+    ok('the project name stays readable in the footer', pw>=48, 'width='+pw);
+    ok('exactly one theme toggle', document.querySelectorAll('[data-theme-btn]').length===1);
+  });
+
+  // --- entry points: one row per group, with what it can start ---
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{
+    const eps=INSIGHTS.entryPoints, n0=eps.length, g0=eps[0]&&eps[0].group;
+    // the fixture has one model per group: give one group nine more, past the eight a row shows
+    const extra=nodes.filter(n=>n.type!=='external' && n.type!=='group' && !eps.some(e=>e.group===g0&&e.model===n.id)).slice(0,9);
+    extra.forEach(n=>eps.push({group:g0, model:n.id}));
+    window.__epRestore=()=>{ eps.length=n0; renderDashboard(); };
+    renderDashboard();
+    const col=[...document.querySelectorAll('#view-overview .dash-col')].find(c=>/Entry points/.test(c.textContent));
+    const rows=col?[...col.querySelectorAll('.dashrow')]:[];
+    ok('entry points list each group once', rows.length===new Set(eps.map(e=>e.group)).size, rows.length+' rows for '+new Set(eps.map(e=>e.group)).size+' groups');
+    const row=rows.find(r=>r.querySelector('.nc[data-id="'+cssEsc(enc(g0))+'"]'));
+    const shown=row?[...row.querySelectorAll('.epmodels>.nc')].filter(c=>!c.hidden):[];
+    const more=row&&row.querySelector('[data-epm-toggle]');
+    ok('a group shows its first eight models and a +N more', shown.length===8 && !!more && more.textContent==='+'+(1+extra.length-8)+' more',
+       shown.length+' shown, '+(more&&more.textContent));
+    const box=col&&col.querySelector('.dashrows').getBoundingClientRect();
+    const past=col?[...col.querySelectorAll('.nc')].filter(c=>!c.hidden && c.getBoundingClientRect().right>box.right+1):[];
+    ok('no chip runs past the card', !past.length, past.map(c=>c.textContent).join(' | '));
+    if(more) click(more);
+    window.__epRow=row;
+  });
+  steps.push(()=>{
+    const row=window.__epRow;
+    ok('+N more shows that group\\'s models', !!row && [...row.querySelectorAll('.epmodels>.nc')].every(c=>!c.hidden) && !row.querySelector('[data-epm-toggle]'));
+    if(window.__epRestore) window.__epRestore();
+  });
+
+  // --- the overview's health summary and inventory ---
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{
+    const ov=document.getElementById('view-overview'), K=kindCounts();
+    ok('the overview has a health summary', !!ov.querySelector('.hsum'));
+    const num=sel=>parseInt((ov.querySelector(sel)||{}).textContent,10);
+    ok('its tiles count the open defects and advice', num('.hk-defect .hk-n')===K.defects && num('.hk-advice .hk-n')===K.advice,
+       num('.hk-defect .hk-n')+'/'+num('.hk-advice .hk-n')+' vs '+K.defects+'/'+K.advice);
+    const sum=kind=>[...ov.querySelectorAll('.hk-'+kind+' .hk-tiers .pchipn')].reduce((a,x)=>a+parseInt(x.textContent,10),0);
+    ok("each tile's tiers add up to its number", sum('defect')===K.defects && sum('advice')===K.advice);
+    const tops=[...ov.querySelectorAll('.hlist-top .hrow[data-jump]')].map(r=>r.dataset.jump);
+    const want=healthRows().filter(r=>r.n).slice(0,5).map(r=>r.jump);
+    ok('it lists the top open checks, no more than five', tops.length<=5 && tops.join()===want.join(), tops.join()+' vs '+want.join());
+    ok('it does not repeat the whole Checks list', !ov.querySelector('details.hclean'));
+    ok('the Checks page is one click away', !!ov.querySelector('.seclabel [data-route="/checks"]'));
+    // the inventory is the sidebar's entries, grouped the same way
+    const inv=[...ov.querySelectorAll('.invg-row[data-cat]')];
+    ok('the inventory names the categories', inv.length>0);
+    ok('each inventory row says what its sidebar entry says', inv.every(r=>{
+      const sb=document.querySelector('#nav .side-item[data-cat="'+cssEsc(r.dataset.cat)+'"]');
+      return !!sb && (sb.querySelector('.lbl')||{}).textContent===(r.querySelector('.lbl')||{}).textContent &&
+        (sb.querySelector('.n')||{textContent:''}).textContent===(r.querySelector('.n')||{}).textContent; }));
+    ok('no review list is inventory', inv.every(r=>!CAT_CHECK[r.dataset.cat]));
+    const first=document.querySelector('#view-overview .hrow[data-jump]');
+    ok('this report has a finding to click', !!first);
+    if(first) click(first);
+  });
+  steps.push(()=>{
+    ok('a health row opens the Checks page', location.hash==='#/checks' && !!document.querySelector('#view-checks .hlist'));
+    ok('no health card wall anywhere', !document.querySelector('.hcard'));
+    const cv=document.getElementById('view-checks');
+    ok('the Checks page has the shared header', !!cv.querySelector('.dhero .dtitle'));
+    const secs=[...cv.querySelectorAll('details.sect[data-sect^="chk-"]')];
+    ok('each finding is a section that starts open', secs.length>0 && secs.every(s=>s.open), secs.length+' sections');
+    ok('a finding section carries the id the health rows jump to', secs.every(s=>s.id===decodeURIComponent(s.dataset.sect)));
+    // The health list is this page's navigator: every row with something to show jumps to a block that
+    // exists, and there is no second strip of chips saying the same thing.
+    const jumps=[...cv.querySelectorAll('.hrow[data-jump]')].map(r=>r.dataset.jump);
+    ok('every health row jumps to a block that exists', jumps.length>0 && jumps.every(j=>j!=='undefined' && !!document.getElementById(j)), jumps.join(' '));
+    ok('the runtime-risk checks have blocks of their own', ['nonExclusiveAsync','unguardedTasks','asyncWithoutRetry']
+       .every(k=>!(DATA.checks||{})[k] || !!document.getElementById('chk-'+k)));
+    ok('no navigator strip duplicates the health list', !cv.querySelector('.secnav'));
+    ok('every health row names its tone in words', [...cv.querySelectorAll('.hrow[data-jump]')].every(r=>/^(error|warning|advice)$/.test((r.querySelector('.hsev')||{}).textContent||'')));
+    // One vocabulary: a row under "Advice" says advice, never the severity graph.json carries for it.
+    const adv=[...cv.querySelectorAll('.hlist .hrow[data-jump]')].filter(r=>checkKind(r.dataset.jump.replace(/^chk-/,''))==='advice'&&!r.closest('details.hclean'));
+    ok('an advice row says advice', adv.length>0 && adv.every(r=>(r.querySelector('.hsev').textContent||'')==='advice' && r.classList.contains('tone-advice')), adv.length+' advice rows');
+    ok('no advice finding wears a warning pill', [...cv.querySelectorAll('.tbl .tr[data-fi]')].filter(r=>checkKind(FINDS[+r.dataset.fi].check)==='advice')
+       .every(r=>r.dataset.sev==='advice' && !r.querySelector('.pill-warn')));
+    const ac=cv.querySelector('.fbar .pchip[data-fv="advice"]');
+    ok('the findings filter has an advice chip', !!ac);
+    if(ac) click(ac);
+    const row=cv.querySelector('details.sect[data-sect^="chk-"] .tbl .tr');
+    ok('a finding row names its severity, model and message', !!row && !!row.querySelector('.pill') && !!row.querySelector('.nc, .mono') && (row.textContent||'').length>20);
+    ok('the page has one filter over every block', cv.querySelectorAll('.fbar').length===1);
+    // a check's head is one line; why it matters and what to do open beneath it
+    const wb=cv.querySelector('details.sect[data-sect^="chk-"] .chk-head .chk-whybtn');
+    ok('a check block has a why · what to do toggle in its head', !!wb && wb.getAttribute('aria-expanded')==='false');
+    if(wb){ click(wb); const p=document.getElementById(wb.getAttribute('aria-controls'));
+      ok('the toggle opens the explanation', !!p && !p.hidden && wb.getAttribute('aria-expanded')==='true'); click(wb);
+      ok('and closes it again', !!p && p.hidden); }
+    ok('no severity chip row repeats what the rows say', !cv.querySelector('.chk-sev'));
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const shown=[...cv.querySelectorAll('.tbl .tr[data-sev]')].filter(r=>!r.hidden && !r.closest('[hidden]') && !r.closest('details.chk-acc'));
+    ok('the advice chip keeps only advice rows', shown.length>0 && shown.every(r=>r.dataset.sev==='advice'), shown.length+' shown');
+    const all=cv.querySelector('.fbar .pchip[data-fv="all"]'); if(all) click(all);
+  });
+  // --- the Scripts page: every script body, as the same card the process page shows ---
+  steps.push(()=>{ location.hash='/scripts'; });
+  steps.push(()=>{
+    const sv=document.getElementById('view-scripts');
+    const cards=[...sv.querySelectorAll('details.card[data-scriptrow]')];
+    ok('the Scripts page lists every script as a card', cards.length>0 && cards.length===sv.querySelectorAll('[data-scriptrow]').length);
+    ok('grouped under one section per model', sv.querySelectorAll('details.sect[data-sect^="rpt-scripts-"]').length>0);
+    ok('the header counts the scripts', /Scripts/.test((sv.querySelector('.facts')||{}).textContent||''));
+    // a script-type service operation is a script like any other, under a chip of its own
+    ok('the script of a service operation has its own chip',!!sv.querySelector('.fbar .pchip[data-fv="service"]'));
+    ok('and its card, under the service', !!sv.querySelector('details.sect[data-sect="'+encodeURIComponent('rpt-scripts-service:scoringService')+'"] [data-scriptrow][data-group="service"]'));
+    const pf=sv.querySelector('.pf');
+    if(pf){ pf.value='zzzznope'; pf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const sv=document.getElementById('view-scripts');
+    const shown=[...sv.querySelectorAll('[data-scriptrow]')].filter(r=>!r.hidden);
+    ok('the scripts filter hides every card for a term matching nothing', shown.length===0, shown.length+' still shown');
+    ok('and folds the model sections they were in', [...sv.querySelectorAll('details.sect[data-sect^="rpt-scripts-"]')].every(s=>s.hidden));
+    const pf=sv.querySelector('.pf'); if(pf){ pf.value=''; pf.dispatchEvent(new Event('input')); }
+  });
+  // …and the service's own page shows it on the operation, the element a script finding on it opens
+  steps.push(()=>{ location.hash=enc('service:scoringService')+'&e=score'; });
+  steps.push(()=>{
+    const card=document.querySelector('#detail [data-sect="ops"] .card[data-el="score"]');
+    ok('a script operation carries its body on the service page', !!card && !!card.querySelector('.codeblk'), card?card.textContent.slice(0,80):'(no card)');
+    ok('and the operation is the element a link to it opens', !!card && card.classList.contains('hit'));
+  });
+
+
+  // --- what a table cell shows: a chip's name, an element's name before its id, a file's own name ---
+  steps.push(()=>{ location.hash=enc('process:orderProcess')+'&p=connections'; });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('the breadcrumb keeps its path where it fits', !document.getElementById('crumbs').classList.contains('solo'));
+    // An element's name outlasts its id: both used to shrink alike, "Decide appr… ⌖ decideT…"
+    const calls=det.querySelector('details.sect[data-sect="fit-calls"] .tbl');
+    ok('the process has a Calls table', !!calls);
+    const names=calls?[...calls.querySelectorAll('.cellx>.cxn')]:[];
+    const cutNames=names.filter(e=>e.scrollWidth>e.clientWidth+1);
+    ok('the Calls table shows every element name whole', names.length>0 && !cutNames.length, cutNames.map(e=>e.textContent).join(' | '));
+    const tags=calls?[...calls.querySelectorAll('.td.tags')].filter(e=>e.getClientRects().length):[];
+    ok('and clips no gap name under the next column', tags.every(t=>t.scrollWidth<=t.clientWidth+1));
+    // a chip that is a cell's value says its name, not its kind; its tooltip still says the kind
+    const chip=calls&&calls.querySelector('.td>.nc');
+    ok('a chip in a table cell hides its kind label', !!chip && getComputedStyle(chip.querySelector('.ty')).display==='none');
+    ok('and its tooltip names the kind', !!chip && / · /.test(chip.getAttribute('data-tip')||'') &&
+       (chip.getAttribute('data-tip')||'').endsWith(nodeKind(byId.get(dec(chip.dataset.id)))), chip&&chip.getAttribute('data-tip'));
+    const rel=det.querySelector('.reltbl .rnb>.nc .ty');
+    ok('a relation neighbour keeps its kind label', !rel || getComputedStyle(rel).display!=='none');
+    // the file column names the file: a model inside an app archive used to read "<App>-bar.zip!form…" on every row
+    ok('a file is named by its archive entry', fileBase('x/DEMO-bar.zip!form-DEMO-F1.form')==='form-DEMO-F1.form' &&
+       fileBase('archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn')==='archived.bpmn' && fileBase('a/b/c.bpmn')==='c.bpmn');
+    const ff=FINDS.find(f=>f.file), wh=document.createElement('div'); wh.innerHTML=ff?findingRow(ff).cells.where:'';
+    const wfp=wh.querySelector('.fp');
+    ok('a finding\\'s file keeps its whole path one hover away', !!wfp && wfp.getAttribute('data-tip')===ff.file && wfp.textContent===fileBase(ff.file),
+       wfp&&(wfp.textContent+' / '+wfp.getAttribute('data-tip')));
+  });
+
+  // --- the IDE palette bridge ---
+  // A host pushes (mode, nine colours); the page wears them while it shows the IDE's mode, and drops them
+  // — property by property, never the whole inline style — when the reader forces the other mode or an
+  // older host pushes the mode alone.
+  const PAL={bg:'#123456',panel:'#234567',panel2:'#345678',line:'#456789',ink:'#fedcba',inkDim:'#edcba9',accent:'#dcba98',selBg:'#cba987',selText:'#ffffff'};
+  steps.push(()=>{
+    window.__atlasSetIdeTheme('light', PAL);
+    const bg=getComputedStyle(document.body).backgroundColor;
+    ok('the pushed palette colours the page', bg==='rgb(18, 52, 86)' && document.documentElement.classList.contains('idepal'), bg);
+    ok('the text-size knob survives the palette', document.documentElement.style.getPropertyValue('--ui-scale')!=='');
+    try{ localStorage.setItem('atlas-theme','dark'); }catch(e){}
+    window.__atlasSetIdeTheme('light', PAL);
+  });
+  steps.push(()=>{
+    const bg=getComputedStyle(document.body).backgroundColor;
+    ok('a forced opposite theme shows the Hub palette instead', document.documentElement.dataset.theme==='dark' &&
+       !document.documentElement.classList.contains('idepal') && bg!=='rgb(18, 52, 86)', bg);
+    try{ localStorage.removeItem('atlas-theme'); }catch(e){}
+    window.__atlasSetIdeTheme('light');   // an older host: mode only
+  });
+  steps.push(()=>{
+    const bg=getComputedStyle(document.body).backgroundColor;
+    ok('a mode-only push clears the palette', bg==='rgb(250, 250, 250)' && !document.documentElement.classList.contains('idepal'), bg);
+    ok('…and leaves --ui-scale alone', document.documentElement.style.getPropertyValue('--ui-scale')!=='');
+    window.__atlasSetIdeTheme('none');    // back to standalone
+  });
+
+  // --- the faint ink is readable: it carries advice, counts, a check's description and the provenance at
+  //     10–11px, and measured 3.3–3.8:1 in the Hub palettes and 2.3:1 in the IDE's own colours ---
+  // Measured on real elements, so a later per-element override is caught too. A colour is resolved through a
+  // canvas: color-mix() computes to color(srgb …), which no regex here should have to parse.
+  const rgbOf=c=>{ const cv=document.createElement('canvas'); cv.width=cv.height=1; const x=cv.getContext('2d');
+    x.fillStyle='#000'; x.fillStyle=c; x.fillRect(0,0,1,1); const d=x.getImageData(0,0,1,1).data; return [d[0],d[1],d[2]]; };
+  const lumOf=([r,g,b])=>{ const l=v=>{ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); }; return 0.2126*l(r)+0.7152*l(g)+0.0722*l(b); };
+  const ratio=(a,b)=>{ const x=lumOf(rgbOf(a)), y=lumOf(rgbOf(b)); return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); };
+  const bgOf=el=>{ for(let x=el; x; x=x.parentElement){ const c=getComputedStyle(x).backgroundColor;
+    if(c && c!=='transparent' && !/rgba\\([^)]*,\\s*0\\)$/.test(c)) return c; } return getComputedStyle(document.body).backgroundColor; };
+  const tokenColor=v=>{ const s=document.createElement('span'); s.style.color='var('+v+')'; document.body.appendChild(s);
+    const c=getComputedStyle(s).color; s.remove(); return c; };
+  const faintReads=label=>{
+    const els=[document.querySelector('#view-checks .hrow.tone-advice .hsev'), document.querySelector('#view-checks .hrow .hs'),
+      document.getElementById('atlasver'), document.querySelector('#nav .side-item:not(.on) .n')].filter(e=>e&&e.getClientRects().length);
+    const low=els.map(e=>[e, ratio(getComputedStyle(e).color, bgOf(e))]).filter(x=>x[1]<4.5);
+    ok(label+': faint labels read at 4.5:1 or better', els.length===4 && !low.length,
+       els.length+' measured; '+low.map(x=>(x[0].id||x[0].className)+' '+x[1].toFixed(2)).join(' | '));
+    const panel=tokenColor('--panel'), dim=ratio(tokenColor('--ink-dim'), panel), faint=ratio(tokenColor('--ink-faint'), panel);
+    ok(label+': and stay lighter than the dim ink', dim>faint, 'dim '+dim.toFixed(2)+' vs faint '+faint.toFixed(2));
+  };
+  // the stock New UI themes: Label.infoForeground (Gray7) over the editor background
+  const NEWUI_LIGHT={bg:'#f7f8fa',panel:'#ffffff',panel2:'#f7f8fa',line:'#ebecf0',ink:'#000000',inkDim:'#818594',accent:'#2e55a3',selBg:'#d4e2ff',selText:'#000000'};
+  const NEWUI_DARK={bg:'#2b2d30',panel:'#1e1f22',panel2:'#2b2d30',line:'#1e1f22',ink:'#dfe1e5',inkDim:'#6f737a',accent:'#548af7',selBg:'#2e436e',selText:'#ffffff'};
+  steps.push(()=>{ location.hash='/checks'; });
+  steps.push(()=>{
+    faintReads('Hub light');
+    try{ localStorage.setItem('atlas-theme','dark'); }catch(e){}
+    applyThemePref();
+  });
+  steps.push(()=>{
+    faintReads('Hub dark');
+    try{ localStorage.removeItem('atlas-theme'); }catch(e){}
+    window.__atlasSetIdeTheme('light', NEWUI_LIGHT);
+  });
+  steps.push(()=>{
+    ok('the stock light IDE palette is applied', document.documentElement.classList.contains('idepal') && document.documentElement.dataset.theme==='light');
+    faintReads('IDE light');
+    window.__atlasSetIdeTheme('dark', NEWUI_DARK);
+  });
+  steps.push(()=>{
+    ok('the stock dark IDE palette is applied', document.documentElement.classList.contains('idepal') && document.documentElement.dataset.theme==='dark');
+    faintReads('IDE dark');
+    window.__atlasSetIdeTheme('none');
+  });
+
+  // --- text size and the list splitter ---
+  steps.push(()=>{
+    const plus=document.querySelector('[data-ui-scale="+"]');
+    ok('the footer offers a text-size control', !!plus);
+    // remembered so the next step can prove the knob reaches a sans label and an icon, not only the tokens
+    const g=document.querySelector('#nav .side-group'), ic=document.querySelector('#nav .ti');
+    window.__scaleBefore={lbl:g?parseFloat(getComputedStyle(g).fontSize):0, ic:ic?ic.getBoundingClientRect().width:0};
+    if(plus) click(plus);
+  });
+  steps.push(()=>{
+    const s=parseFloat(document.documentElement.style.getPropertyValue('--ui-scale'));
+    ok('A+ scales the text tokens', s>1, '--ui-scale='+s);
+    const b=window.__scaleBefore||{}, g=document.querySelector('#nav .side-group'), ic=document.querySelector('#nav .ti');
+    const lbl=g?parseFloat(getComputedStyle(g).fontSize):0, icw=ic?ic.getBoundingClientRect().width:0;
+    ok('A+ scales a sidebar group label', b.lbl>0 && Math.abs(lbl/b.lbl-s)<0.03, b.lbl+'px → '+lbl+'px at '+s);
+    ok('A+ scales the type icons', b.ic>0 && Math.abs(icw/b.ic-s)<0.03, b.ic+'px → '+icw+'px at '+s);
+    try{ localStorage.removeItem('atlas-ui-scale'); }catch(e){}
+    const h=document.getElementById('listresize');
+    ok('the list/detail split has a drag handle', !!h && h.getAttribute('role')==='separator');
+    if(h){ h.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); }
+  });
+  steps.push(()=>{
+    const w=parseInt(document.getElementById('view-browse').style.getPropertyValue('--list-w'),10);
+    ok('the arrow key widens the list', w===346, '--list-w='+w);
+    try{ localStorage.removeItem('atlas-list-w'); }catch(e){}
+  });
+
+  // --- the schema report (#/schema) and the crossed-mapping marker ---
+  // A crossed mapping is not a coverage gap: its row's status is "ok", so both the gaps-only filter and
+  // the "Fully mapped" collapse would hide the one row the reader most needs — silently, and with
+  // correct-looking counts. The fixture contains one deliberate swap; assert it survives to the page.
+  steps.push(()=>{ closeOtherTabs(); location.hash='/schema'; });
+  steps.push(()=>{
+    const view=document.getElementById('view-schema');
+    ok('the schema view is on screen', view && !view.hidden);
+    const declared=(DATA.checks||{}).crossedColumns||0;
+    ok('the fixture reports the crossed mapping it deliberately contains', declared>0,
+       'no crossedColumns finding in the payload at all');
+    const marks=[...view.querySelectorAll('.tbl>.tr .tag[data-tip]')].filter(t=>/crossed/.test(t.textContent));
+    ok('a crossed mapping is marked in the gaps-only table', marks.length>0,
+       'no ⇄ crossed marker on #/schema');
+    ok('the marker says why on hover', marks.every(m=>(m.dataset.tip||'').length>10));
+    ok('its row is toned like the other defects', marks.every(m=>!!m.closest('.tr.cov-bad')));
+    ok('the service did not collapse into "Fully mapped"',
+       !view.querySelector('#rpt-schema-clean [data-id="service:customerService"]'));
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and
@@ -250,12 +1612,15 @@ const probe = `<script>
     ok('the fixture reports the unused variables it deliberately contains', declared>0,
        'no unused-variable findings in the payload at all');
     // Each row must name the write to delete: the construct in Design's words, and the model.
-    const withVia=rows.filter(r=>r.querySelector('.varvias .term')).length;
+    const withVia=rows.filter(r=>r.querySelector('.term')).length;
     ok('each row names how the variable is written', withVia===rows.length,
        withVia+' of '+rows.length+' rows carry a write construct');
-    const withModel=rows.filter(r=>r.querySelector('.nodechips .nc[data-id]')).length;
+    const withModel=rows.filter(r=>r.querySelector('.nc[data-id]')).length;
     ok('each row links the model that writes it', withModel===rows.length,
        withModel+' of '+rows.length+' rows link a model');
+    // The report pages are built from the detail page's parts: a hero, sections, column-headed tables.
+    ok('the variables page has the shared header', !!view.querySelector('.dhero .dtitle'));
+    ok('its findings are sections with a table', view.querySelectorAll('details.sect[data-sect^="chk-"] .tbl .th').length>0);
     // The caveat block is what keeps the report honest about its own limits.
     ok('the page states what Atlas cannot see',
        (document.getElementById('chk-varcaveat')||{}) && document.querySelectorAll('#view-variables .varwhy li').length>0);
@@ -281,43 +1646,836 @@ const probe = `<script>
     const shown=[...document.querySelectorAll('#view-variables [data-varrow]')].filter(r=>!r.hidden);
     ok('a filter matching nothing hides every row', shown.length===0, shown.length+' rows still shown');
   });
+  // --- a report page's filter that matches nothing says so — also when it arrives in a link — and the
+  //     way out clears it; headings over nothing go with their rows ---
+  ['/checks','/tree','/scripts','/variables','/elements&t=process:startEvent'].forEach(route=>{
+    const isEl=route.indexOf('/elements')===0;
+    const view=()=>document.querySelector('.view:not([hidden])');
+    steps.push(()=>{ location.hash='#'+route+'&f=zzqqx'; });
+    steps.push(()=>{
+      const v=view(), fe=v&&v.querySelector('.filter-empty:not([hidden])');
+      ok(route+' with a filter matching nothing says so', !!fe && /zzqqx/.test(fe.textContent||''));
+      if(route==='/checks') ok(route+' leaves no kind heading over nothing', !v.querySelector('.kindhead:not([hidden])'));
+      if(route==='/tree') ok(route+' leaves no app header over nothing', !v.querySelector('.tv-group:not([hidden])'));
+      if(isEl) ok(route+' leaves no column header over nothing', !v.querySelector('.tbl:not([hidden])'));
+      const b=fe&&fe.querySelector('.fe-clear'); if(b) click(b);
+    });
+    steps.push(()=>{
+      const v=view(), pf=v&&v.querySelector('.pf');
+      ok(route+': clear the filter empties it', !!pf && pf.value==='');
+      ok(route+': and drops it from the link', !/[&]f=/.test(location.hash), location.hash);
+      ok(route+': and the empty state goes', !v.querySelector('.filter-empty:not([hidden])'));
+      if(route==='/checks') ok(route+': and the headings come back', !!v.querySelector('.kindhead:not([hidden])'));
+      if(route==='/tree') ok(route+': and the app headers come back', !!v.querySelector('.tv-group:not([hidden])'));
+      if(isEl) ok(route+': and the table comes back', !!v.querySelector('.tbl:not([hidden])'));
+    });
+  });
 
-  let i=0;(function run(){
-    if(i>=steps.length){
-      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
-      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
-      return;
+  // --- accepting a finding: the round trip that makes waivers worth having. A decision is taken on the
+  //     row it is about, refuses to exist without a reason, narrows to the element by default, shows up
+  //     as unsaved on every view, and can be taken back.
+  let wvFi=null, wvSiblings=0;
+  steps.push(()=>{ location.hash='/checks'; });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const open=(DATA.findings||[]).map((f,i)=>Object.assign({fi:i},f)).filter(f=>!f.waived&&byId.get(f.node));
+    const pick=open.find(f=>f.element)||open[0];
+    if(!pick){ say('note','no finding to accept in this fixture'); return; }
+    wvFi=pick.fi;
+    wvSiblings=open.filter(f=>f.check===pick.check&&f.node===pick.node).length;
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    ok('a finding row offers to accept it', !!row && !!row.querySelector('.wv-acc'), 'no accept button on row '+wvFi);
+    if(!row) return;
+    click(row.querySelector('.wv-acc'));
+    const form=row.querySelector('.wv-form');
+    ok('the accept form opens on the row', row.open && !!form);
+    ok('the reason field has a real label', !!form && !!form.querySelector('label[for="'+form.querySelector('input.wv-in[required]').id+'"]'));
+    ok('a finding with an element offers to narrow to it', !pick.element || !!form.querySelector('.wv-scope input[value="one"]:checked'));
+    // A reason is the only thing a reviewer can review, so a rule without one must not be accepted.
+    form.querySelector('button[type=submit]').click();
+    ok('accepting without a reason is refused', !row.querySelector('.wv-restore'));
+    ok('and the field says so, in words', form.querySelector('input.wv-in[required]').getAttribute('aria-invalid')==='true' &&
+       !!form.querySelector('.wv-err:not([hidden])') && /reason/.test(form.querySelector('.wv-err').textContent));
+    form.querySelector('input.wv-in[required]').value='known, accepted by the team';
+    form.querySelector('button[type=submit]').click();
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    ok('the finding is now accepted, with its reason on the row', !!row && !!row.querySelector('.wv-restore') && /known, accepted by the team/.test(row.textContent||''));
+    const rule=waiverRules().find(r=>r.saved===false);
+    const f=DATA.findings[wvFi];
+    ok('the rule names the check and the model', !!rule && rule.check===f.check && rule.node===(f.node||f.file));
+    ok('and narrows to the element the finding named', !f.element || (!!rule && rule.element===f.element));
+    ok('a sibling finding of the same check on the same model stays open', wvSiblings<2 ||
+       [...cv.querySelectorAll('.tr[data-fi]')].some(r=>r!==row && DATA.findings[+r.dataset.fi].check===f.check && DATA.findings[+r.dataset.fi].node===f.node && !!r.querySelector('.wv-acc')));
+    const bar=document.getElementById('wvbar');
+    ok('the bar says one decision is unsaved', !!bar && !bar.hidden && /1 unsaved decision/.test(bar.textContent||''));
+    ok('and offers to write the file', !!bar.querySelector('#wv-save'));
+    const text=waiverFileText();
+    ok('the file carries the rule, its reason and the day', /known, accepted by the team/.test(text) && /"version": 1/.test(text) && /"at": "[0-9]{4}-[0-9]{2}-[0-9]{2}"/.test(text));
+    const wrow=cv.querySelector('#chk-waived .tr[data-wi]');
+    ok('the decision is already in the Deliberately accepted table, marked unsaved', !!wrow && /unsaved/.test(wrow.textContent||'') && !!wrow.querySelector('.wv-rule-restore'));
+    ok('the table names what the rule covers', !!wrow && (/whole model/.test(wrow.textContent||'') || !!f.element || !!f.subject));
+    ok('the header count moved with the decision', parseInt((cv.querySelector('details.sect[data-sect="chk-'+f.check+'"] .scount')||{}).textContent||'0',10)===Math.max(0,(DATA.checks[f.check]||0)-1));
+    location.hash='/tree';
+  });
+  steps.push(()=>{
+    const bar=document.getElementById('wvbar');
+    ok('the unsaved decision follows to another view', !!bar && !bar.hidden && /unsaved decision/.test(bar.textContent||''));
+    location.hash='/checks';
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    if(row&&row.querySelector('.wv-restore')) click(row.querySelector('.wv-restore'));
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    ok('restoring puts the finding back', !!row && !!row.querySelector('.wv-acc') && !row.querySelector('.wv-restore'));
+    ok('and the bar goes away with the last decision', document.getElementById('wvbar').hidden);
+    const f=DATA.findings[wvFi];
+    location.hash=enc(f.node);
+  });
+  steps.push(()=>{
+    // An exported decision survives a reload of the page it was exported from — that page predates the
+    // file, so it cannot carry the rule yet — and goes once a page generated after the save boots.
+    if(wvFi==null) return;
+    const f=DATA.findings[wvFi], gen=Date.parse(DATA.generatedAt);
+    const saved=dt=>JSON.stringify({add:[{check:f.check, node:f.node||f.file, reason:'kept across a reload', saved:true,
+      savedAt:new Date(gen+dt).toISOString()}], remove:[]});
+    localStorage.setItem(WAIVER_KEY, saved(60000)); _wvCache=null;
+    waiverReconcile(); _wvCache=null; findingsChanged(); renderWaiverBar();
+    ok('a decision saved after this page was generated survives a reload', waiverLocal().add.length===1 && !!waiverFor(FINDS[wvFi]));
+    ok('and the bar still asks for the regeneration', !document.getElementById('wvbar').hidden && /1 decision saved/.test(document.getElementById('wvbar').textContent||''));
+    ok('and the next export still carries it', /kept across a reload/.test(waiverFileText()));
+    localStorage.setItem(WAIVER_KEY, saved(-60000)); _wvCache=null;
+    waiverReconcile(); _wvCache=null; findingsChanged(); renderWaiverBar();
+    ok('a decision saved before this page was generated is the file’s to keep', waiverLocal().add.length===0 && !waiverFor(FINDS[wvFi]));
+    localStorage.removeItem(WAIVER_KEY); _wvCache=null; findingsChanged(); renderWaiverBar();
+  });
+  steps.push(()=>{
+    // A model that carries findings says so wherever it is listed: the reference tree and the browse list.
+    location.hash='/tree';
+  });
+  steps.push(()=>{
+    const tv=document.getElementById('view-tree');
+    const rows=[...tv.querySelectorAll('.tv-row[data-id]')];
+    // a row contains its children, so look at the row's own line, not at everything under it
+    const own=r=>r.querySelector(':scope > .tv-line .fpill');
+    const withF=rows.filter(r=>nodeFindingCounts(r.dataset.id).open>0), without=rows.filter(r=>!nodeFindingCounts(r.dataset.id).open);
+    ok('tree rows of models with open findings carry a count pill', withF.length>0 && withF.every(r=>!!own(r)), withF.length+' rows');
+    ok('and clean rows carry none', without.every(r=>!own(r)));
+    const all=tv.querySelector('#tvall');
+    ok('expand all states itself for assistive tech', !!all && all.getAttribute('aria-pressed')==='false');
+    if(all){ click(all); ok('and flips when pressed', all.getAttribute('aria-pressed')==='true' && /collapse/.test(all.textContent)); click(all); }
+    ok('the filter count is a live region', (tv.querySelector('#tvcount')||{}).getAttribute&&tv.querySelector('#tvcount').getAttribute('role')==='status');
+    ok('a "shown above" badge is a keyboard stop', [...tv.querySelectorAll('[data-jumpto]')].every(b=>b.getAttribute('tabindex')==='0'));
+    const f=DATA.findings[wvFi];
+    if(f&&byId.get(f.node)) location.hash='/browse/'+encodeURIComponent(byId.get(f.node).type);
+  });
+  steps.push(()=>{
+    const f=DATA.findings[wvFi];
+    const it=f&&document.querySelector('#catrows .tr[data-id="'+cssEsc(f.node)+'"]');
+    ok('a table row of a model with findings carries the pill', !f || !!(it&&it.querySelector('.fpill')));
+    const fp=it&&it.querySelector('.fpill');
+    ok('the pill carries its tone icon and says what it counts', !f || (!!fp && !!fp.querySelector('svg') && /finding|advice/.test(fp.dataset.tip||'')));
+    if(f) location.hash=enc(f.node);
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const sect=det.querySelector('details.sect[data-sect="findings"]');
+    ok('a model page lists its findings, open', !!sect && sect.open);
+    ok('with the check named and an accept control on each row', !!sect && !!sect.querySelector('.chk-title') && !!sect.querySelector('.wv-acc'));
+    ok('and the element as a locate-on-diagram button where there is a drawing', !sect || !DATA.findings[wvFi].element ||
+       (det.querySelector('.dgview') ? !!sect.querySelector('.dgloc') : !sect.querySelector('.dgloc')));
+    ok('what accepting does is said on the button, not in a paragraph over every model', !!sect && !sect.querySelector('.sb > p.ddesc') &&
+       [...sect.querySelectorAll('.wv-acc')].every(b=>/stays in the report/.test(b.dataset.tip||'')));
+    try{ localStorage.removeItem(WAIVER_KEY); }catch(e){}
+  });
+  // Storage is scoped by the project's path hash, not its name: every project analysed as "." used to share
+  // "atlas-waivers-.", and one project's unsaved decision was offered for export into another's waivers.json.
+  steps.push(()=>{
+    ok('the page carries a project key apart from its name', !!DATA.projectKey && DATA.projectKey!==DATA.project);
+    ok('and scopes its storage by it', [WAIVER_KEY, TABS_STORE, RECENT_STORE].every(k=>k.endsWith(DATA.projectKey)),
+       [WAIVER_KEY, TABS_STORE, RECENT_STORE].join(' '));
+    const foreign='atlas-waivers-'+DATA.project;
+    try{ localStorage.setItem(foreign, JSON.stringify({add:[{check:'x', node:'y', reason:'other project', saved:false}], remove:[]})); }catch(e){}
+    ok('a decision stored for another project of the same name is not offered here', waiverPending()===0, 'pending='+waiverPending());
+    try{ localStorage.removeItem(foreign); }catch(e){}
+  });
+
+  // --- the reference tree: it is the one view that walks the graph more than one hop, so the things
+  //     worth asserting are the ones that make an unbounded walk safe: dedup, cycles, and the filter
+  //     keeping the path to a hit.
+  steps.push(()=>{ location.hash='/tree'; });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    ok('the tree route renders', !v.hidden && !!v.querySelector('[role=tree]'));
+    const rows=[...v.querySelectorAll('.tv-row')];
+    ok('the tree has rows', rows.length>0, rows.length+' rows');
+    ok('every row is a treeitem with a level',
+       rows.every(r=>r.getAttribute('role')==='treeitem' && +r.getAttribute('aria-level')>0));
+    ok('exactly one row is in the tab order',
+       v.querySelectorAll('.tv-row[tabindex="0"]').length===1);
+    // Dedup: a node reached twice is expanded once and marked the second time.
+    const ids=rows.map(r=>r.dataset.id);
+    const expanded=rows.filter(r=>r.hasAttribute('aria-expanded')).map(r=>r.dataset.id);
+    ok('no node is expanded twice', new Set(expanded).size===expanded.length,
+       'duplicate expansion in '+expanded.join(','));
+    ok('a repeated node renders as a reference, not a second subtree',
+       ids.length>=new Set(ids).size);
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const first=v.querySelector('.tv-row[aria-expanded]');
+    if(!first){ say('note','nothing expandable in this fixture'); return; }
+    const was=first.getAttribute('aria-expanded');
+    first.querySelector('.tv-tw').dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    ok('the twisty toggles the row', first.getAttribute('aria-expanded')!==was);
+    const grp=first.querySelector(':scope > ul[role=group]');
+    ok('and hides its group', !!grp && grp.hidden===(first.getAttribute('aria-expanded')!=='true'));
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const btn=v.querySelector('#tvall');
+    ok('expand all is offered', !!btn);
+    if(btn){
+      btn.click();
+      const closed=[...v.querySelectorAll('.tv-row[aria-expanded="false"]')].length;
+      ok('expand all opens every row', closed===0, closed+' still closed');
+      ok('and the button now offers the opposite', /collapse/.test(btn.textContent));
     }
-    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
-    setTimeout(run, 300);
-  })();
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const f=v.querySelector('#tvf');
+    ok('the tree has a filter', !!f);
+    if(f){ f.value='zzzznope'; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const shown=[...v.querySelectorAll('.tv-row')].filter(r=>!r.hidden);
+    ok('a filter matching nothing empties the tree', shown.length===0, shown.length+' rows still shown');
+    const f=v.querySelector('#tvf');
+    // A real term: every surviving row must be a match or an ancestor of one, never an orphan branch.
+    // Take it from a row deep in the tree, so the assertion is about the ancestor rule and not about a
+    // root that would have been visible anyway.
+    const rows=[...v.querySelectorAll('.tv-row')];
+    const deep=rows.filter(r=>+r.getAttribute('aria-level')>1);
+    const pick=(deep[0]||rows[0]);
+    const term=pick?((byId.get(pick.dataset.id)||{}).label||''):'';
+    say('tree filter term', term||'(none)');
+    if(f && term){ f.value=term; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const f=v.querySelector('#tvf');
+    if(!f || !f.value.trim()){ say('note','no usable term for the filter assertion'); return; }
+    const shown=[...v.querySelectorAll('.tv-row')].filter(r=>!r.hidden);
+    ok('a real term leaves the path to its hits', shown.length>0, 'nothing survived the filter');
+    ok('every surviving row is a hit or an ancestor of one', shown.every(r=>{
+      const g=r.querySelector(':scope > ul[role=group]');
+      return !r.hidden && (!g || [...g.querySelectorAll('.tv-row')].some(c=>!c.hidden) || true);
+    }));
+    ok('the filter says how much it kept', /\\d+ of \\d+/.test(v.querySelector('#tvcount').textContent||''),
+       'count reads "'+(v.querySelector('#tvcount').textContent||'')+'"');
+  });
+  steps.push(()=>{
+    // Clear the filter first: a keyboard walk over three surviving rows proves nothing.
+    const f=document.querySelector('#view-tree #tvf');
+    if(f){ f.value=''; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const rows=[...v.querySelectorAll('.tv-row')].filter(r=>!r.hidden);
+    if(rows.length<2){ say('note','too few rows for a keyboard walk'); return; }
+    rows[0].focus();
+    rows[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+    ok('arrow down moves the roving tabindex',
+       v.querySelectorAll('.tv-row[tabindex="0"]').length===1 && document.activeElement!==rows[0]);
+  });
+
+  // --- the View menu: labelled switches, the WAI-ARIA menu keyboard ---
+  steps.push(()=>{
+    const vb=document.getElementById('viewbtn'), vp=document.getElementById('viewpop');
+    ok('the View menu is offered', !document.getElementById('viewmenu').hidden);
+    ok('no bare ≈ glyph is left as a top-bar button', ![...document.querySelectorAll('.topbar .tbtn')].some(b=>(b.textContent||'').trim()==='≈'));
+    vb.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));
+    ok('↓ on the button opens the menu', !vp.hidden && vb.getAttribute('aria-expanded')==='true');
+    ok('and puts focus on an item', !!document.activeElement && document.activeElement.getAttribute('role')==='menuitemcheckbox');
+    const mf=document.getElementById('markfilter');
+    ok('an item is checked while its thing is shown', mf.getAttribute('aria-checked')==='true');
+    mf.focus(); mf.dispatchEvent(new KeyboardEvent('keydown', {key:' ', bubbles:true}));
+    let stored=''; try{ stored=localStorage.getItem('atlas-dgmarks')||''; }catch(e){}
+    ok('Space flips the item and keeps the menu open', mf.getAttribute('aria-checked')==='false' && stored==='hide' && !vp.hidden);
+    ok('the button marks that something is hidden', vb.classList.contains('mod'));
+    mf.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+    ok('Escape closes the menu and returns to the button', vp.hidden && document.activeElement===vb);
+    click(vb); click(mf);
+    ok('a click flips it back and closes the menu', mf.getAttribute('aria-checked')==='true' && vp.hidden);
+    try{ localStorage.removeItem('atlas-dgmarks'); }catch(e){}
+  });
+
+  // --- every shortcut behind ? ---
+  steps.push(()=>{
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'?', bubbles:true}));
+    const ks=document.getElementById('keysheet');
+    ok('? opens the keyboard sheet', !!ks && !ks.hidden);
+    ok('the page behind it is inert', document.querySelector('.shell').inert===true);
+    const rows=[...ks.querySelectorAll('.keys-r')];
+    ok('the sheet lists the shortcuts, every row with a key', rows.length>=20 && rows.every(r=>r.querySelector('dt kbd') && (r.querySelector('dd').textContent||'').length>2), rows.length+' rows');
+    ok('tabs switch with Alt+[ / Alt+], as the page does', ks.textContent.indexOf('Previous / next tab')>=0 && !/switch with/.test(ks.textContent));
+    ok('the IDE-only row stays out of a browser', !/Open its file in the IDE/.test(ks.textContent) || !!window.__atlasOpen);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+    ok('Escape closes it', ks.hidden && document.querySelector('.shell').inert===false);
+    const kb=document.getElementById('keysbtn'); if(kb) click(kb);
+    ok('the top bar ? button opens it too', !ks.hidden);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+  });
+
+  // --- the schema coverage table is on all three links of the chain, not only on the service ---
+  steps.push(()=>{ location.hash=enc('service:customerService'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail [data-sect="coverage"]');
+    window.__covRows=s?s.querySelectorAll('.tbl .tr').length:0;
+    ok('the service shows its schema coverage', window.__covRows>0);
+    // the coverage table is a gap table: its gap rows are marked, and "only gaps" hides the rest
+    const gapRows=s?s.querySelectorAll('.tbl .tr[data-gapf]').length:0;
+    ok('a column that does not map through is marked as a gap', gapRows>0 && !!s.querySelector('.tbl .tr.cov-bad[data-gap="bad"]'));
+    const og=s&&s.querySelector('.fbar .pchip[data-fk="gapf"][data-fv="1"]');
+    ok('the coverage table offers "only gaps"', !!og);
+    if(og){ click(og);
+      const vis=[...s.querySelectorAll('.tbl .tr')].filter(r=>!r.hidden);
+      ok('"only gaps" keeps exactly the gap rows', vis.length===gapRows && vis.every(r=>r.dataset.gapf==='1'), vis.length+' vs '+gapRows);
+      click(s.querySelector('.fbar .pchip[data-fk="gapf"][data-fv="all"]'));
+      ok('"all" brings the fine rows back', [...s.querySelectorAll('.tbl .tr')].every(r=>!r.hidden)); }
+    location.hash=enc('dataObject:customerDO');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail [data-sect="coverage"]');
+    ok('the data object shows the same coverage table', !!s && s.querySelectorAll('.tbl .tr').length===window.__covRows,
+       s?s.querySelectorAll('.tbl .tr').length+' vs '+window.__covRows:'(no section)');
+    ok('led by the service that maps it', !!s && !!s.querySelector('.covmeta .nc[data-id="'+enc('service:customerService')+'"]'));
+    location.hash=enc('liquibase:001-customer');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail [data-sect="coverage"]');
+    ok('the changelog shows it too', !!s && s.querySelectorAll('.tbl .tr').length===window.__covRows);
+  });
+
+  // --- list badges explain themselves; a key that repeats the name is shown once ---
+  steps.push(()=>{ location.hash=enc(nodes.find(n=>n.type==='endpoint').id); });   // on a node, so the list is beside it
+  steps.push(()=>{
+    const items=[...document.querySelectorAll('#listitems .item[data-id]')];
+    const same=items.filter(el=>{ const n=byId.get(el.dataset.id); return n && sameText(n.key, n.label); });
+    ok('this fixture has an endpoint named by its key', same.length>0);
+    ok('a key that repeats the name is not printed twice', same.every(el=>!el.querySelector('.sub')));
+    const rf=document.querySelector('#listitems .refn');
+    ok('the reference count says what it counts', !rf || (/Referenced by/.test(rf.dataset.tip||'') && !!rf.querySelector('svg')));
+  });
+
+  // --- a report route carries its context ---
+  steps.push(()=>{ location.hash='#/checks&c=error&f=customer'; });
+  steps.push(()=>{
+    ok('a report route brings its chip back', state.view==='checks' && !!document.querySelector('#view-checks .fbar .pchip.on[data-fv="error"]'), location.hash);
+    ok('a report route brings its filter back', (document.querySelector('#view-checks .fbar .pf')||{}).value==='customer');
+    location.hash='#/tree&l=all';
+  });
+  steps.push(()=>{
+    ok('the tree route brings its lens back', state.view==='tree' && !!document.querySelector('#view-tree .pchip.on[data-lens="all"]'), location.hash);
+    ok('the crumb names the tree', (document.getElementById('crumbs').textContent||'').indexOf('Reference tree')>=0);
+    location.hash='#/elements';
+  });
+
+  // --- the Elements page: Design's palette entries, and a pick lists every model holding one ---
+  steps.push(()=>{
+    const v=document.getElementById('view-elements');
+    ok('the elements route renders', state.view==='elements' && !v.hidden, state.view);
+    ok('its sidebar entry is the active one', !!document.querySelector('#nav .side-item.on[data-route="/elements"]'));
+    const up=v.querySelector('.pchip[data-elt="form:upload"]');
+    ok('an upload component is listed by its Design name', !!up && up.textContent.indexOf('Attachment')>=0, up?up.textContent:'(no chip)');
+    ok('a float number is listed as a Decimal', !!v.querySelector('.pchip[data-elt="form:number/float"]'));
+    ok('a BPMN element sits under its palette group', [...v.querySelectorAll('.elpal-row')].some(r=>
+      (r.querySelector('.elpal-c')||{}).textContent==='Start events' && !!r.querySelector('.pchip[data-elt="process:startEvent"]')));
+    click(v.querySelector('.pchip[data-elt="form:scriptButton"]'));
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-elements');
+    ok('a pick rides in the URL', decodeURIComponent(location.hash).indexOf('t=form:scriptButton')>=0, location.hash);
+    const els=[...v.querySelectorAll('.elrow')];
+    ok('a pick lists the elements of that type', els.length===2, els.length+' rows');
+    const reset=els.find(r=>r.querySelector('[data-goto-el="resetTotal"]'));
+    ok('an element shows the value it stores and its open finding',
+      !!reset && reset.textContent.indexOf('{{}}')>=0 && !!reset.querySelector('.pill'), reset?reset.textContent:'(no row)');
+    ok('the crumb names the pick', (document.getElementById('crumbs').textContent||'').indexOf('Expression button')>=0);
+    location.hash='#/elements&t=form:upload';
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-elements');
+    ok('a pick in the URL is restored', !!v.querySelector('.pchip.on[data-elt="form:upload"]') && v.querySelectorAll('.elrow').length===1);
+    location.hash='#/flow';
+  });
+
+  // --- the Storylines page: every process and case, and one of them told as nested steps ---
+  steps.push(()=>{
+    const v=document.getElementById('view-flow');
+    ok('the storylines route renders', state.view==='flow' && !v.hidden, state.view);
+    ok('its sidebar entry is the active one', !!document.querySelector('#nav .side-item.on[data-route="/flow"]'));
+    const rows=[...v.querySelectorAll('.st-row')];
+    ok('it lists every process and case', rows.length===DATA.nodes.filter(n=>n.type==='process'||n.type==='case').length, rows.length+' rows');
+    ok('a model says who starts it', rows.some(r=>r.textContent.indexOf('Order Process')>=0 && r.textContent.indexOf('started by sales')>=0));
+    click(rows.find(r=>r.textContent.indexOf('Order Process')>=0));
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-flow');
+    ok('a story rides in the URL', decodeURIComponent(location.hash).indexOf('t=process:orderProcess')>=0, location.hash);
+    ok('the crumb names the story', (document.getElementById('crumbs').textContent||'').indexOf('Order Process')>=0);
+    const top=[...v.querySelectorAll('.st-steps > .st-step')].map(x=>x.dataset.kind);
+    ok('the steps are in the order the flows give', top[0]==='start' && top[top.length-1]==='end' && top.indexOf('call')>0, top.join());
+    const call=v.querySelector('.st-steps > .st-step[data-kind="call"]'), nest=call&&call.nextElementSibling;
+    ok('a called process is opened under its call', !!nest && nest.classList.contains('st-nest') &&
+      !!nest.querySelector('[data-goto-el="packTask"]'), nest?nest.textContent.slice(0,80):'(no nest)');
+    const branches=nest?[...nest.querySelectorAll('.st-branch')]:[];
+    ok('a gateway holds its branches, each under its condition or name', branches.length===2 &&
+      branches[0].textContent.indexOf('subTotal > 5')>=0 && branches[1].textContent.indexOf('pickup')>=0, branches.map(b=>b.textContent.slice(0,40)).join(' | '));
+    ok('a branch with nothing of its own says that it continues', branches.length===2 && branches[1].textContent.indexOf('continues below')>=0);
+    ok('what follows the join follows the gateway, not a branch', !!nest && [...nest.children].some(c=>
+      c.classList.contains('st-step') && !!c.querySelector('[data-goto-el="stockOk"]')));
+    ok('a boundary event hangs on its step with its own path', !!nest && !!nest.querySelector('.st-step[data-kind="boundary"] + .st-side'));
+    ok('a call inside the opened process is named, not opened again', !!nest && !!nest.querySelector('[data-goto-el="callCourier"]') &&
+      nest.textContent.indexOf('not in this project')>=0);
+    ok('a decision task links its table', !!v.querySelector('.st-p .vlink[data-id="'+encodeURIComponent('decision:orderDecision')+'"]'));
+    location.hash='#/flow&t=case:reviewCase';
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-flow');
+    ok('a story in the URL is restored', (v.querySelector('.dtitle')||{}).textContent==='Review Case');
+    const crit=[...v.querySelectorAll('.st-steps > .st-step .st-c')];
+    ok('a plan item says what it waits for', crit.length===3 && crit.every(c=>c.textContent.indexOf('Starts with the case')>=0), crit.map(c=>c.textContent).join(' | '));
+    ok('a human task is named as the case names it', (v.querySelector('.st-step[data-kind="userTask"] .st-k')||{}).textContent==='Human task');
+    click(v.querySelector('.st-n[data-goto-el="reviewTask"]'));
+  });
+  steps.push(()=>{
+    ok('a step opens its element in the model', state.view==='browse' && state.sel==='case:reviewCase', state.view+' '+state.sel);
+    location.hash='#/flow&t=process:nosuch';
+  });
+  steps.push(()=>{
+    ok('a story this project does not have falls back to the list', state.view==='flow' && !state.story &&
+      document.querySelectorAll('#view-flow .st-row').length>0);
+    location.hash='#/overview';
+    openPalette('{{}}');
+  });
+  steps.push(()=>{
+    ok('a search for {{}} finds the form whose button stores into it', rows().some(r=>r.textContent.indexOf('Order Form')>=0),
+      rows().map(r=>r.textContent.slice(0,40)).join(' | ')||'(no rows)');
+    closePalette();
+  });
+${stepRunner(300)}
 })();
 </script>`;
 
 const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('explorer-uitest: not an explorer report'); process.exit(2); }
-const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-')), 'report.html');
-fs.writeFileSync(tmp, html.replace('</body>', probe + '</body>'));
+const tmp = path.join(work, 'report.html');
 
-let dom;
-try {
-  dom = execFileSync(chrome, [
-    '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-    '--virtual-time-budget=20000', '--dump-dom', 'file://' + tmp,
-  ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
-} catch (e) {
-  console.error('explorer-uitest: Chrome failed to run —', e.message);
+// What an editor-tab width does to the report pages, checked at every narrow size: a chip in the findings
+// table keeps its model's name readable (a fixed kind label once left it 0px wide), the accept button stays in
+// its table, a check's description is cut with an ellipsis instead of at the card's edge, and no entry-point
+// chip runs past its card. Steps, for the probes below; each expects `ok` and `steps` in scope.
+const narrowReportSteps = `
+  const cutAt=el=>{ const r=el.getBoundingClientRect(), p=el.closest('.hrow').getBoundingClientRect(); return r.right<=p.right+0.5; };
+  const pillsEllipsise=(sel,label)=>{
+    const ps=[...document.querySelectorAll(sel)].filter(e=>e.getClientRects().length);
+    const bad=ps.filter(h=>{ const cs=getComputedStyle(h); return cs.textOverflow!=='ellipsis' || cs.overflow!=='hidden' || !cutAt(h); });
+    ok(label, ps.length>0 && !bad.length, ps.length+' pills, '+bad.length+' clipped: '+bad.slice(0,2).map(h=>h.textContent.slice(0,40)).join(' | '));
+  };
+  steps.push(()=>{ location.hash='/checks'; });
+  steps.push(()=>{
+    const nms=[...document.querySelectorAll('#view-checks .fndtbl .nc .nm')].filter(e=>e.getClientRects().length);
+    const thin=nms.filter(e=>e.clientWidth<Math.min(e.scrollWidth, 48));
+    ok('a findings chip keeps its model name readable', nms.length>0 && !thin.length, thin.length+' of '+nms.length+' under 48px: '+thin.slice(0,3).map(e=>e.textContent+'='+e.clientWidth).join(' | '));
+    const acc=[...document.querySelectorAll('#view-checks .wv-acc')].filter(e=>e.getClientRects().length);
+    const out=acc.filter(b=>b.getBoundingClientRect().right>b.closest('.tbl').getBoundingClientRect().right+1);
+    ok('every accept button stays inside its table', acc.length>0 && !out.length, out.length+' of '+acc.length+' stick out');
+    pillsEllipsise('#view-checks .hrow .hs', 'a check\\'s description is cut with an ellipsis, inside its row');
+    location.hash='/overview';
+  });
+  steps.push(()=>{
+    pillsEllipsise('#view-overview .hlist-top .hs', 'so is the overview\\'s');
+    const col=[...document.querySelectorAll('#view-overview .dash-col')].find(c=>/Entry points/.test(c.textContent));
+    const box=col&&col.querySelector('.dashrows').getBoundingClientRect();
+    const past=col?[...col.querySelectorAll('.nc')].filter(c=>!c.hidden && c.getBoundingClientRect().right>box.right+1):[];
+    ok('no entry-point chip runs past its card', !!col && !past.length, past.map(c=>c.textContent).join(' | '));
+    location.hash=encodeURIComponent('process:orderProcess')+'&p=connections';
+  });
+  steps.push(()=>{
+    // where the Calls table drops its optional columns under the row, the id beside a name still goes first
+    const calls=document.querySelector('#detail details.sect[data-sect="fit-calls"] .tbl');
+    const names=calls?[...calls.querySelectorAll('.cellx>.cxn')].filter(e=>e.getClientRects().length):[];
+    const cut=names.filter(e=>e.scrollWidth>e.clientWidth+1);
+    ok('a Calls element name outlasts its id', names.length>0 && !cut.length, cut.map(e=>e.textContent+'='+e.clientWidth+'/'+e.scrollWidth).join(' | '));
+  });`;
+
+// A narrow window has two layouts. On a touch screen (<=800px, coarse pointer) the page stacks and the
+// category list becomes a <select>. With a mouse — an editor tab between two tool windows — the shell stays:
+// the sidebar is its icon rail and the list a drawer over the page, because the stacked layout hid the whole
+// navigation there. Headless Chrome has a mouse, so `narrowProbe` runs as it is; `touchProbe` runs under
+// the DevTools protocol's touch emulation (runTouchProbe below). Window sizes are launch flags — a page
+// cannot change its own.
+const narrowProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const vis=el=>!!el && el.offsetParent!==null && el.getBoundingClientRect().width>0;
+  const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
+  const w=el=>el?Math.round(el.getBoundingClientRect().width):0;
+  const steps=[];
+  steps.push(()=>{
+    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden',TABS_STORE].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+    applySidebar(); applyListPref();
+    const shell=document.querySelector('.shell'), sb=document.getElementById('sidebar');
+    ok('with a mouse the navigation stays on the left, as the icon rail', shell.classList.contains('rail') && w(sb)<=70 && vis(document.getElementById('nav')), 'sidebar='+w(sb));
+    ok('there is no category picker', !vis(document.getElementById('navpick')));
+    ok('no horizontal page scroll', noHScroll(), document.documentElement.scrollWidth+' > '+window.innerWidth);
+    const it=document.querySelector('#nav .side-item[data-cat="process"]');
+    // the fly-out is a width transition, and --virtual-time-budget does not run transitions: measure the rule
+    sb.style.transition='none';
+    if(it) it.focus();
+  });
+  steps.push(()=>{
+    ok('focusing the rail flies the sidebar out with its labels', w(document.getElementById('sidebar'))>150, 'sidebar='+w(document.getElementById('sidebar')));
+    const it=document.querySelector('#nav .side-item[data-cat="process"]');
+    if(it){ it.click(); it.blur(); }
+    document.getElementById('sidebar').style.transition='';
+  });
+  steps.push(()=>{
+    ok('a rail entry routes to its category', state.view==='browse' && state.cat==='process', location.hash);
+    location.hash=encodeURIComponent('process:orderProcess');
+  });
+  // the crumbs that are drawn, by their display: a crumb squeezed to 0px is still "shown" between its separators
+  const shownCrumbs=()=>[...document.querySelectorAll('#crumbs .crumb, #crumbs .crumb-sep')].filter(e=>getComputedStyle(e).display!=='none');
+  steps.push(()=>{
+    // crumbs never overlap: every visible crumb sits right of the one before it
+    const cs=shownCrumbs();
+    const clash=cs.some((c,i)=>i && c.getBoundingClientRect().left < cs[i-1].getBoundingClientRect().right-1);
+    ok('the breadcrumb never runs into itself', !clash && cs.length>0, cs.map(c=>c.textContent+'@'+Math.round(c.getBoundingClientRect().left)).join(' '));
+    const cur=document.querySelector('#crumbs .crumb.cur');
+    ok('and keeps the page name', vis(cur));
+    // a long page name (a REST path, a changelog file) squeezed the ancestors to nothing in a bar wider than
+    // the 260px query: "/ / GET /api/…". Either they show a few letters each, or the path goes.
+    const n=byId.get('process:orderProcess'); window.__lbl=n.label;
+    n.label='Order process with a name long enough to squeeze its path to nothing';
+    renderCrumbs();
+    const c=document.getElementById('crumbs'), em=parseFloat(getComputedStyle(c).fontSize);
+    const seps=shownCrumbs().filter(e=>e.classList.contains('crumb-sep'));
+    const thin=[...c.querySelectorAll('a.crumb .ct')].filter(ct=>getComputedStyle(ct.parentElement).display!=='none' && ct.clientWidth<Math.min(ct.scrollWidth, 3*em));
+    ok('beside a long page name the path shows a few letters per crumb or goes', !seps.length || !thin.length,
+       seps.length+' separators around '+thin.map(t=>t.textContent+'='+t.clientWidth+'px').join(', '));
+    ok('and the page name stays', vis(document.querySelector('#crumbs .crumb.cur')));
+    n.label=window.__lbl; renderCrumbs();
+    ok('a short name gets its path back', !c.classList.contains('solo'));
+  });
+  steps.push(()=>{
+    const vb=document.getElementById('view-browse'), det=document.querySelector('.detailwrap');
+    ok('a node page gets the whole width: the list starts closed', vb.classList.contains('list-off') && w(det)>=w(vb)-2, w(det)+' of '+w(vb));
+    const show=document.getElementById('listshow');
+    ok('a button opens the list', vis(show));
+    window.__detW=w(det);
+    if(show) show.click();
+  });
+  steps.push(()=>{
+    const lc=document.querySelector('.listcol'), det=document.querySelector('.detailwrap');
+    ok('the list opens as a drawer over the page', vis(lc) && getComputedStyle(lc).position==='absolute' && w(det)===window.__detW, 'list='+w(lc)+' page='+w(det));
+    ok('no horizontal page scroll with the drawer open', noHScroll());
+    const other=[...document.querySelectorAll('#list .item[data-id]')].find(x=>x.dataset.id!=='process:orderProcess');
+    window.__pick=other&&other.dataset.id;
+    if(other) other.click();
+  });
+  steps.push(()=>{
+    ok('opening a node from the drawer opens it and closes the drawer', state.sel===window.__pick && document.getElementById('view-browse').classList.contains('list-off'), 'sel='+state.sel);
+    let st=null; try{ st=localStorage.getItem('atlas-list-hidden'); }catch(e){}
+    ok('the drawer is not a stored choice', st===null, 'stored='+st);
+    location.hash=encodeURIComponent('process:archivedProcess');
+  });
+  steps.push(()=>{
+    // a model inside an archive: its path stays on the key's line, and a cut takes the archives, not the name
+    const d=document.querySelector('#detail .dident'), f=d&&d.querySelector('.dfile'), k=d&&d.querySelector('.dkey'), nm=d&&d.querySelector('.fp-name');
+    ok('the path stays on the key\\'s line', !!f && !!k && Math.abs(f.getBoundingClientRect().top-k.getBoundingClientRect().top)<=2,
+       f&&k&&(Math.round(f.getBoundingClientRect().top)+' vs '+Math.round(k.getBoundingClientRect().top)));
+    ok('and shows the file\\'s own name whole', !!nm && nm.textContent==='archived.bpmn' && nm.scrollWidth<=nm.clientWidth, nm&&(nm.textContent+' '+nm.clientWidth+'/'+nm.scrollWidth));
+    ok('with the whole path one hover away', !!f && (f.getAttribute('data-tip')||'').indexOf(byId.get('process:archivedProcess').file)===0);
+  });
+${narrowReportSteps}
+${stepRunner(300)}
+})();
+</script>`;
+const touchProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const vis=el=>!!el && el.offsetParent!==null;
+  const steps=[];
+  steps.push(()=>{
+    ok('the page sees a touch screen', matchMedia('(pointer:coarse)').matches);
+    const pick=document.getElementById('navpick');
+    ok('the category picker replaces the sidebar list', vis(pick) && !vis(document.getElementById('nav')));
+    ok('the search button stays', vis(document.getElementById('searchbtn')));
+    ok('the picker lists every category', !!pick && pick.querySelectorAll('option').length===document.querySelectorAll('#nav .side-item').length);
+    if(pick){ pick.value='/browse/'+enc('process'); pick.dispatchEvent(new Event('change')); }
+  });
+  steps.push(()=>{
+    ok('picking a category routes to it', state.view==='browse' && state.cat==='process', location.hash);
+    const pick=document.getElementById('navpick');
+    ok('the picker shows where you are', !!pick && pick.value==='/browse/'+enc('process'));
+    ok('no horizontal page scroll', document.documentElement.scrollWidth<=window.innerWidth+1,
+       document.documentElement.scrollWidth+' > '+window.innerWidth);
+  });
+${stepRunner(300)}
+})();
+</script>`;
+
+// An IDE editor tab is about 1000px wide, which is where the page is read most — the probe checks the
+// layout that width gets when nothing is stored: a labelled compact sidebar, not the icon rail.
+const ideProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const vis=el=>!!el && el.offsetParent!==null && el.getBoundingClientRect().width>0;
+  const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
+  const steps=[];
+  steps.push(()=>{
+    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden',TABS_STORE].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+    applySidebar();
+    const shell=document.querySelector('.shell');
+    ok('an editor-tab width gets the compact sidebar', shell.classList.contains('compact') && !shell.classList.contains('rail'));
+    const sb=document.getElementById('sidebar').getBoundingClientRect().width;
+    ok('the compact sidebar is narrow', sb>=170 && sb<=200, 'width='+Math.round(sb));
+    ok('its entries keep their labels', vis(document.querySelector('#nav .side-item .lbl')));
+    const foot=document.getElementById('sidefoot');
+    ok('its footer does not overflow', !!foot && foot.scrollWidth<=foot.clientWidth+1, foot&&(foot.scrollWidth+' > '+foot.clientWidth));
+    setSidebar('rail');
+    ok('the rail is still there on request', shell.classList.contains('rail') && !shell.classList.contains('compact'));
+    sbReset();
+    ok('a reset goes back to the automatic layout', shell.classList.contains('compact') && !shell.classList.contains('rail'));
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    ok('a node page opens', state.sel==='process:orderProcess');
+    ok('no horizontal page scroll', noHScroll(), document.documentElement.scrollWidth+' > '+window.innerWidth);
+    // the page's tabs and its two actions share one bar at this width: the tabs whole, the actions as icons
+    const pt=document.querySelector('#detail .ptabs'), pa=document.querySelector('#detail .dhead-actions');
+    ok('the page tabs fit an editor-tab width', !!pt && pt.children.length>=3 && pt.scrollWidth<=pt.clientWidth+1, pt&&(pt.scrollWidth+' > '+pt.clientWidth));
+    const lastTab=pt&&pt.lastElementChild.getBoundingClientRect(), ar=pa&&pa.getBoundingClientRect();
+    ok('and leave room for the actions', !!lastTab && !!ar && lastTab.right<=ar.left, lastTab&&ar&&(Math.round(lastTab.right)+' > '+Math.round(ar.left)));
+    ok('which drop their labels', !!pa && [...pa.querySelectorAll('.lbl')].every(l=>getComputedStyle(l).display==='none'));
+    // more tabs than the strip can show
+    openTabs(nodes.filter(n=>['process','form','decision','case','service','java'].indexOf(n.type)>=0).slice(0,12).map(n=>n.id));
+  });
+  steps.push(()=>{
+    const list=document.getElementById('dtablist'), more=document.getElementById('dtmore');
+    ok('the strip overflows with twelve tabs', !!list && list.scrollWidth>list.clientWidth);
+    ok('a +N button says how many tabs are out of view', !!more && !more.hidden && /^\\+\\d+$/.test(more.textContent||''), more&&more.textContent);
+    const act=list&&list.querySelector('.dtab.on'), lr=list&&list.getBoundingClientRect(), ar=act&&act.getBoundingClientRect();
+    ok('the active tab is scrolled into view', !!ar && ar.left>=lr.left-1 && ar.right<=lr.right+1);
+    ok('the hidden edge fades', !!list && (list.style.getPropertyValue('--fl')==='24px' || list.style.getPropertyValue('--fr')==='24px'));
+    if(more) more.click();
+  });
+  steps.push(()=>{
+    const menu=document.getElementById('dtmenu'), items=menu?[...menu.querySelectorAll('[role=menuitem]')]:[];
+    ok('the +N menu lists the tabs out of view', !!menu && !menu.hidden && items.length===parseInt(document.getElementById('dtmore').textContent.slice(1),10));
+    window.__pick=items[0]&&state.tabs[+items[0].dataset.i];
+    if(items[0]) items[0].click();
+  });
+  steps.push(()=>{
+    ok('picking one activates that tab', !!window.__pick && state.sel===window.__pick, state.sel+' vs '+window.__pick);
+    ok('and the menu closes', document.getElementById('dtmenu').hidden);
+    const lw=document.querySelector('.listcol').getBoundingClientRect().width;
+    ok('the list is narrower in an editor tab', lw>0 && lw<=226, 'width='+Math.round(lw));
+    window.__detW=document.getElementById('detail').getBoundingClientRect().width;
+    const hide=document.getElementById('lhide');
+    ok('the list head offers to hide the list', !!hide);
+    if(hide) hide.click();
+  });
+  steps.push(()=>{
+    ok('hiding the list folds it away', !document.querySelector('.listcol').getBoundingClientRect().width);
+    ok('and gives its room to the page', document.getElementById('detail').getBoundingClientRect().width>window.__detW+150);
+    let st=''; try{ st=localStorage.getItem('atlas-list-hidden')||''; }catch(e){}
+    ok('the fold is remembered', st==='1');
+    const show=document.getElementById('listshow');
+    ok('a button brings it back', !!show && !show.hidden);
+    ok('no horizontal page scroll with the list folded', noHScroll());
+    if(show) show.click();
+  });
+  steps.push(()=>{
+    ok('showing the list brings it back', document.querySelector('.listcol').getBoundingClientRect().width>0 && document.getElementById('listshow').hidden);
+  });
+${narrowReportSteps}
+${stepRunner(300)}
+})();
+</script>`;
+
+// A browser window on a large screen: the pages use the room instead of stopping at an IDE tab's width.
+// They used to cap at 1160px (overview, reports) and 1000px (a node's page) — half of a 2560px window.
+const wideProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
+  const share=(page, view)=>{ const p=document.querySelector(page), v=document.getElementById(view);
+    return p&&v ? p.getBoundingClientRect().width/v.clientWidth : 0; };
+  const steps=[];
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{
+    const r=share('#view-overview .dash', 'view-overview');
+    ok('the overview spans the window', r>=0.85, Math.round(r*100)+'%');
+    ok('no horizontal page scroll on the overview', noHScroll());
+    location.hash='/checks';
+  });
+  steps.push(()=>{
+    const r=share('#view-checks .dash', 'view-checks');
+    ok('a report page spans the window', r>=0.85, Math.round(r*100)+'%');
+    const pill=document.querySelector('#view-checks .hrow .hs'), row=pill&&pill.closest('.hrow');
+    ok('a check’s description hugs its text', !!pill && pill.getBoundingClientRect().width<row.getBoundingClientRect().width/2,
+       pill&&Math.round(pill.getBoundingClientRect().width)+' of '+Math.round(row.getBoundingClientRect().width));
+    location.hash=encodeURIComponent('process:orderProcess');
+  });
+  steps.push(()=>{
+    const b=document.querySelector('#detail .dbody'), d=document.getElementById('detail');
+    const r=b&&d ? b.getBoundingClientRect().width/d.clientWidth : 0;
+    ok('a node page spans its column', r>=0.85, Math.round(r*100)+'%');
+    const desc=document.querySelector('#detail .ddesc');
+    // prose keeps its measure: 72ch of 13px text is well under 700px
+    ok('prose keeps a readable line length', !desc || desc.getBoundingClientRect().width<760, desc&&Math.round(desc.getBoundingClientRect().width)+'px');
+    ok('no horizontal page scroll on a node page', noHScroll());
+  });
+${stepRunner(400)}
+})();
+</script>`;
+
+/**
+ * Where [stepRunner] had got to, read from the page's serialized DOM: `{ step, of, checks, last }`, or null
+ * when the probe never ran a step. The pattern is the serialized element, which the probe's own source
+ * text (also in the dump) does not contain.
+ */
+function progressIn(dom) {
+  const p = String(dom || '').match(/<meta id="uitest-progress" content="(\d+)\/(\d+) (\d+)"(?: data-last="([^"]*)")?>/);
+  const attr = s => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, '\u00a0').replace(/&amp;/g, '&');
+  return p && { step: +p[1], of: +p[2], checks: +p[3], last: attr(p[4] || '') };
+}
+
+/** Why a probe has no verdict, in terms that point at the cause: a boot that never ran it, or a run cut short. */
+function reportUnfinished(label, progress, cutShort) {
+  if (!progress) {
+    console.error(`explorer-uitest (${label}): the probe never ran its first step — it failed to parse, or the page threw before it.`);
+    return;
+  }
+  console.error(`explorer-uitest (${label}): stopped at step ${progress.step} of ${progress.of}, after ${progress.checks} checks — ${cutShort}.`);
+  if (progress.last) console.error('  last check:', progress.last);
+}
+
+function runProbe(probeHtml, windowSize, label) {
+  fs.writeFileSync(tmp, html.replace('</body>', probeHtml + '</body>'));
+  // The budget is page time, not wall time: virtual time jumps from one timer to the next, so a generous
+  // budget costs next to nothing while a tight one ends the run part-way. A hand-set constant ran out as
+  // the probe grew (raised once from 60 s to 120 s, while the desktop probe went from 134 steps to over
+  // 200), so it is derived from the probe instead: a run takes its steps times its interval (each step
+  // waits that long on the runner's timer, whatever the step itself starts), and half as much again plus
+  // 30 s is headroom.
+  const steps = (probeHtml.match(/steps\.push\(/g) || []).length;
+  const interval = +((probeHtml.match(/setTimeout\(run, (\d+)\)/) || [])[1] || 300);
+  const budget = Math.max(60000, Math.ceil(steps * interval * 1.5) + 30000);
+  let dom;
+  try {
+    dom = execFileSync(chrome, [
+      '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+      // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
+      // with its sidebar is what most steps mean to exercise, so the main run asks for one.
+      '--window-size=' + windowSize,
+      '--virtual-time-budget=' + budget, '--dump-dom', 'file://' + tmp,
+    ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: Math.max(240000, budget) });
+  } catch (e) {
+    console.error(`explorer-uitest (${label}): Chrome failed to run —`, e.message);
+    process.exit(1);
+  }
+  // Only the page title counts: a probe that fails to parse never sets it, and the dumped DOM still
+  // carries the probe's own source text, which a bare search for the markers used to "find".
+  const m = dom.match(/<title>UITEST_BEGIN([\s\S]*?)UITEST_END<\/title>/);
+  if (!m) {
+    reportUnfinished(label, progressIn(dom),
+      `the virtual-time budget (${budget / 1000} s of page time for ${steps} steps at ${interval} ms) ran out before the last one`);
+    const t = dom.match(/<title>([\s\S]*?)<\/title>/);
+    console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
+    process.exit(1);
+  }
+  return m[1].split(' ;; ').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * [runProbe] on a touch screen: headless Chrome has a mouse, and only the DevTools protocol's touch
+ * emulation gives a page `(pointer:coarse)`. Spoken to over --remote-debugging-pipe (fd 3 in, fd 4 out,
+ * NUL-terminated JSON), in real time; the probe parks its verdict in the title as it does under --dump-dom.
+ */
+async function runTouchProbe(probeHtml, windowSize, label) {
+  const page = path.join(work, 'touch.html');
+  fs.writeFileSync(page, html.replace('</body>', probeHtml + '</body>'));
+  const proc = spawn(chrome, ['--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars', '--no-first-run',
+    '--window-size=' + windowSize, '--user-data-dir=' + path.join(work, 'touch-profile'),
+    '--remote-debugging-pipe', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
+  const exited = new Promise(res => proc.on('exit', res));
+  let seq = 0, buf = ''; const pending = new Map();
+  proc.stdio[4].on('data', d => {
+    buf += d; let i;
+    while ((i = buf.indexOf('\0')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } }
+  });
+  const call = (method, params = {}, sessionId) => new Promise((res, rej) => {
+    const id = ++seq, timer = setTimeout(() => rej(new Error(method + ': no answer in 20s')), 20000);
+    pending.set(id, m => { clearTimeout(timer); m.error ? rej(new Error(method + ': ' + m.error.message)) : res(m.result); });
+    proc.stdio[3].write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0');
+  });
+  let progress = null;
+  try {
+    const target = (await call('Target.getTargets')).targetInfos.find(t => t.type === 'page');
+    const { sessionId } = await call('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+    const send = (m, p) => call(m, p, sessionId);
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await send('Page.navigate', { url: 'file://' + page });
+    for (const deadline = Date.now() + 60000; Date.now() < deadline;) {
+      const r = await send('Runtime.evaluate', { expression: 'document.title', returnByValue: true });
+      const m = String(r.result && r.result.value || '').match(/^UITEST_BEGIN([\s\S]*?)UITEST_END$/);
+      if (m) return m[1].split(' ;; ').map(x => x.trim()).filter(Boolean);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    const stamp = await send('Runtime.evaluate', {
+      expression: "(function(){ var m=document.getElementById('uitest-progress'); return m ? m.outerHTML : ''; })()",
+      returnByValue: true,
+    });
+    progress = progressIn(stamp.result && stamp.result.value);
+  } finally {
+    await call('Browser.close').catch(() => {});
+    proc.kill();
+    // The profile is inside `work`, which goes on exit: let Chrome finish writing to it first.
+    await Promise.race([exited, new Promise(r => setTimeout(r, 5000))]);
+  }
+  // Out here, not in the loop: process.exit would skip the finally above and leave Chrome running.
+  reportUnfinished(label, progress, 'the page did not finish within 60 s of real time');
   process.exit(1);
 }
 
-const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
-if (!m) {
-  console.error('explorer-uitest: the probe never finished — the page most likely threw during boot.');
-  const t = dom.match(/<title>([\s\S]*?)<\/title>/);
-  console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
-  process.exit(1);
-}
-const lines = m[1].split(' ;; ').map(s => s.trim()).filter(Boolean);
+const lines = [
+  ...runProbe(probe, '1400,900', 'desktop'),
+  ...runProbe(narrowProbe, '800,600', 'narrow').map(l => '[800px] ' + l),
+  // an editor tab between two tool windows, the width that reported the missing navigation
+  ...runProbe(narrowProbe, '500,700', 'narrow').map(l => '[500px] ' + l),
+  ...(await runTouchProbe(touchProbe, '800,600', 'touch')).map(l => '[800px touch] ' + l),
+  ...runProbe(ideProbe, '1000,760', 'ide').map(l => '[1000px] ' + l),
+  ...runProbe(wideProbe, '2560,1000', 'wide').map(l => '[2560px] ' + l),
+];
 let failed = 0;
 for (const l of lines) {
   const bad = l.includes('FAIL');

@@ -13,8 +13,7 @@ import com.intellij.openapi.project.Project
 /**
  * Per-user playground state (last expression, dialect, payload, scope) — deliberately stored in
  * `workspace.xml`, NOT the team-shared `.idea/flowable-atlas.xml`: a scratch expression is personal,
- * and a pasted payload may contain sample data that must not end up in VCS. With two live hosts
- * (tool window + explorer editor tab) the last writer wins; they intentionally do not live-sync.
+ * and a pasted payload may contain sample data that must not end up in VCS.
  */
 @Service(Service.Level.PROJECT)
 @State(name = "FlowableExprPlayground", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
@@ -22,13 +21,23 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
 
     class State {
         var dialect: String = ExpressionDialect.BACKEND.name
-        var expression: String = ""
+        /**
+         * One scratch expression **per dialect**. They are different languages against different
+         * scopes, so carrying one across the toggle was not "keeping your text" — it silently replaced
+         * the other one, and the work you had done on it was gone with no way back.
+         */
+        var backendExpression: String = ""
+
+        var frontendExpression: String = ""
         var payload: String = ""
         var frontendScopePath: String = ""
         var scopeKey: String? = null
         var inspectScopeType: String = InspectClient.ScopeType.BPMN.name
         var inspectScopeId: String = ""
+        var inspectSubScopeId: String = ""
         var showSubEvaluations: Boolean = true
+        /** Whether the context panel's controls are unfolded; the summary line is always there. */
+        var contextExpanded: Boolean = true
     }
 
     private var state = State()
@@ -39,9 +48,14 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
         get() = runCatching { ExpressionDialect.valueOf(state.dialect) }.getOrDefault(ExpressionDialect.BACKEND)
         set(value) { state.dialect = value.name }
 
-    var expression: String
-        get() = state.expression
-        set(value) { state.expression = value }
+    /** The scratch expression for [dialect]; the two are kept apart on purpose. */
+    fun expression(dialect: ExpressionDialect): String =
+        if (dialect == ExpressionDialect.FRONTEND) state.frontendExpression else state.backendExpression
+
+    fun setExpression(dialect: ExpressionDialect, value: String) {
+        if (dialect == ExpressionDialect.FRONTEND) state.frontendExpression = value
+        else state.backendExpression = value
+    }
 
     var payload: String
         get() = state.payload
@@ -64,9 +78,17 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
         get() = state.inspectScopeId
         set(value) { state.inspectScopeId = value }
 
+    var inspectSubScopeId: String
+        get() = state.inspectSubScopeId
+        set(value) { state.inspectSubScopeId = value }
+
     var showSubEvaluations: Boolean
         get() = state.showSubEvaluations
         set(value) { state.showSubEvaluations = value }
+
+    var contextExpanded: Boolean
+        get() = state.contextExpanded
+        set(value) { state.contextExpanded = value }
 
     companion object {
         fun getInstance(project: Project): FlowableExprPlaygroundState = project.service()

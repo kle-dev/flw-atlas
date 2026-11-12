@@ -9,28 +9,46 @@ import com.flowable.atlas.graph.Ctx
  */
 object VarHarvest {
 
+    // The attribute patterns below start with a literal and keep their word boundary as a lookbehind
+    // *after* it (`elementVariable(?<=\belementVariable)=`) rather than in front (`\belementVariable=`).
+    // Same matches, in the same order — but java.util.regex only searches with Boyer-Moore when a pattern
+    // starts with a literal; a leading `\b`, alternation or optional group makes it try every position of
+    // the text. Run over every part of every model, these scans were a third of extraction time. An
+    // alternation stays one pattern (over the literal its alternatives share), not one pattern each:
+    // split up, the names would come out grouped by attribute instead of in document order.
     private val DECL_VAR_RE = Regex(
-        "\\b(?:resultVariableName|elementVariable|counterVariable|collectionVariable|" +
-            "initiatorVariableName|variableName)=\"([A-Za-z_]\\w*)\"")
-    private val COLL_RE = Regex("(?:flowable:|activiti:)?collection=\"([A-Za-z_]\\w*)\"")
+        "ariable(?:Name)?(?<=\\b(?:resultVariableName|elementVariable|counterVariable|collectionVariable|" +
+            "initiatorVariableName|variableName|additionalVariableName))=\"([A-Za-z_]\\w*)\"")
+    // a `flowable:`/`activiti:` prefix was optional and never captured, so it never decided a match
+    private val COLL_RE = Regex("collection=\"([A-Za-z_]\\w*)\"")
     private val INOUT_RE = Regex("<(?:flowable:|activiti:)?(?:in|out)\\b([^>]*?)/?>")
     private val VARMAP_RE = Regex("<(?:flowable:|activiti:)?variableMapping\\b([^>]*?)/?>")
-    private val PARAM_RE = Regex("<(?:flowable:|activiti:)?(?:input|output)Parameter\\b([^>]*?)/?>")
     private val OUTVAR_RE = Regex("<(?:flowable:|activiti:)?outputVariableName>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
+    // Design's own namespace: the variable a data-import or report task writes its result to, the
+    // variable a column of an import lands in, and the extra variables a task sets — `design:` elements
+    // no structured parser reads, so the raw text is the one place they can be seen.
+    private val DESIGN_OUT_RE = Regex("<design:(?:outputvariablename|importreportvariablename)>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
+    private val DESIGN_VARMAP_RE = Regex("<design:variablemapping\\b[^>]*\\bvariableName=\"([A-Za-z_]\\w*)\"")
+    private val ADDITIONAL_VAR_RE = Regex("additionalVariableName(?<=\\badditionalVariableName)=\"([A-Za-z_]\\w*)\"")
     private val NAME_TARGET_RE = Regex("\\b(?:name|target)=\"([A-Za-z_]\\w*)\"")
     private val SRC_TARGET_RE = Regex("\\b(?:source|target)=\"([A-Za-z_]\\w*)\"")
-    private val NAME_ATTR_RE = Regex("\\bname=\"([A-Za-z_]\\w*)\"")
 
     // The directional split of DECL_VAR_RE / COLL_RE, used by `collectDirectedVars`.
     /** The current item of a multi-instance loop — normally consumed inside the loop. */
-    private val MI_ELEMENT_RE = Regex("\\belementVariable=\"([A-Za-z_]\\w*)\"")
+    private val MI_ELEMENT_RE = Regex("elementVariable(?<=\\belementVariable)=\"([A-Za-z_]\\w*)\"")
     /** The loop/repetition index. `elementIndexVariable` is CMMN's name for it and shares nothing but a
      *  suffix with `elementVariable`, so it needs its own alternative rather than a looser pattern. */
     private val MI_COUNTER_RE =
-        Regex("\\b(?:counterVariable|elementIndexVariable)=\"([A-Za-z_]\\w*)\"")
-    private val MI_COLLECTION_RE = Regex("\\bcollectionVariable=\"([A-Za-z_]\\w*)\"")
-    private val INITIATOR_RE = Regex("\\binitiatorVariableName=\"([A-Za-z_]\\w*)\"")
-    private val VARIABLE_NAME_RE = Regex("\\bvariableName=\"([A-Za-z_]\\w*)\"")
+        Regex("Variable(?<=\\b(?:counterVariable|elementIndexVariable))=\"([A-Za-z_]\\w*)\"")
+    private val MI_COLLECTION_RE = Regex("collectionVariable(?<=\\bcollectionVariable)=\"([A-Za-z_]\\w*)\"")
+    private val INITIATOR_RE = Regex("initiatorVariableName(?<=\\binitiatorVariableName)=\"([A-Za-z_]\\w*)\"")
+    private val VARIABLE_NAME_RE = Regex("variableName(?<=\\bvariableName)=\"([A-Za-z_]\\w*)\"")
+    /** `<flowable:variableAggregation target="T"><variable source="S" target="field"/></…>` — the engine's
+     *  own format (`MultiInstanceExport`), in a BPMN loop and a CMMN repetition rule alike. */
+    private val AGGREGATION_RE = Regex(
+        "<(?:\\w+:)?variableAggregation\\b([^>]*)>([\\s\\S]*?)</(?:\\w+:)?variableAggregation>")
+    private val AGG_TARGET_RE = Regex("\\btarget=\"([A-Za-z_]\\w*)\"")
+    private val AGG_SOURCE_RE = Regex("<(?:\\w+:)?variable\\b[^>]*\\bsource=\"([A-Za-z_]\\w*)\"")
 
     /**
      * Variables a script body touches — the Flowable APIs *and* the bare identifiers the script reads
@@ -57,7 +75,8 @@ object VarHarvest {
                 ctx.addVarSite(k, n, Ctx.READ, "scriptRead", element, elementName, elementType, proven = false)
             }
             for (n in use.undecided) ctx.markReadsUnknown(n)
-            if (use.readsWholeScope) ctx.varScopeReadsAll.add(k.toString())
+            // typed, like every record about the model: by bare key it silenced a same-key model instead
+            if (use.readsWholeScope) ctx.modelId(k)?.let { ctx.varScopeReadsAll.add(it) }
         }
     }
 
@@ -67,9 +86,11 @@ object VarHarvest {
         DECL_VAR_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         COLL_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         OUTVAR_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
+        DESIGN_OUT_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         INOUT_RE.findAll(raw).forEach { m -> SRC_TARGET_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
         VARMAP_RE.findAll(raw).forEach { m -> NAME_TARGET_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
-        PARAM_RE.findAll(raw).forEach { m -> NAME_ATTR_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
+        // An input/output parameter's `name` is a field of the callee's contract, not a variable of this
+        // model; its `value` side is read by the structured parser (Ctx.addParams), which knows the element.
         for (k in mkeys) for (n in names) ctx.addVar(k, n)
     }
 
@@ -102,12 +123,28 @@ object VarHarvest {
             for (k in mkeys) ctx.addVarSite(k, m.groupValues[1], Ctx.WRITE, "multiInstanceCounter")
             ctx.markReadsUnknown(m.groupValues[1])
         }
+        // Design's data-import and report tasks write where their `design:` elements say; an import's
+        // column mapping writes the variable named per column, and `additionalvariables` sets one more.
+        emit(DESIGN_OUT_RE, Ctx.WRITE, "designOutput")
+        emit(DESIGN_VARMAP_RE, Ctx.WRITE, "importColumn")
+        emit(ADDITIONAL_VAR_RE, Ctx.WRITE, "additionalVariable")
         // A multi-instance collection is read to be iterated over.
         emit(MI_COLLECTION_RE, Ctx.READ, "multiInstanceCollection")
         emit(COLL_RE, Ctx.READ, "multiInstanceCollection")
-        // `flowable:variableName` belongs to a variable listener or a multi-instance aggregation. Both
-        // watch or build a variable rather than reading or writing it outright, so the direction is not
-        // ours to declare — recording the name as undecidable keeps the check quiet about it.
+        // A multi-instance aggregation reads each `<variable source>` out of every instance and writes the
+        // collected list to its `target`. The inner `<variable target>` is a field of each collected item,
+        // no variable; a `targetExpression` / `sourceExpression` is read by the expression sweep.
+        for (agg in AGGREGATION_RE.findAll(raw)) {
+            AGG_TARGET_RE.find(agg.groupValues[1])?.let { t ->
+                for (k in mkeys) ctx.addVarSite(k, t.groupValues[1], Ctx.WRITE, "variableAggregation")
+            }
+            for (s in AGG_SOURCE_RE.findAll(agg.groupValues[2])) {
+                for (k in mkeys) ctx.addVarSite(k, s.groupValues[1], Ctx.READ, "variableAggregationSource")
+            }
+        }
+        // `flowable:variableName` belongs to a variable listener, which watches a variable rather than
+        // reading or writing it outright, so the direction is not ours to declare — recording the name as
+        // undecidable keeps the check quiet about it.
         for (m in VARIABLE_NAME_RE.findAll(raw)) ctx.markReadsUnknown(m.groupValues[1])
     }
 }

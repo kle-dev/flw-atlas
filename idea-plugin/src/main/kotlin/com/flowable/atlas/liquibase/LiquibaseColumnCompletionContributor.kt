@@ -1,5 +1,6 @@
 package com.flowable.atlas.liquibase
 
+import com.flowable.atlas.completion.AtlasLookups
 import com.flowable.atlas.parsing.ServiceTable
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionParameters
@@ -65,7 +66,7 @@ class LiquibaseColumnCompletionContributor : CompletionContributor() {
             for (st in scoped(file, text, tableName)) for (c in st.columns) {
                 val physical = c.columnName ?: c.name ?: continue
                 if (physical.isBlank() || !seen.add(physical)) continue
-                var b = LookupElementBuilder.create(physical).withTypeText(st.tableName ?: st.key, true)
+                var b = LookupElementBuilder.create(physical).withIcon(AtlasLookups.COLUMN).withTypeText(st.tableName ?: st.key, true)
                 if (c.type != null) b = b.withTailText("  [${c.type}]", true)
                 result.addElement(b)
             }
@@ -86,12 +87,13 @@ class LiquibaseColumnCompletionContributor : CompletionContributor() {
                 LiquibaseChangelog.liquibaseType(mapping?.type)?.let { mapped ->
                     if (added.add(mapped)) {
                         val b = LookupElementBuilder.create(mapped).bold()
+                            .withIcon(AtlasLookups.COLUMN_TYPE)
                             .withTypeText(mapping?.type ?: "", true)
                         result.addElement(PrioritizedLookupElement.withPriority(b, 100.0))
                     }
                 }
             }
-            for (t in LiquibaseChangelog.TYPE_PALETTE) if (added.add(t)) result.addElement(LookupElementBuilder.create(t))
+            for (t in LiquibaseChangelog.TYPE_PALETTE) if (added.add(t)) result.addElement(LookupElementBuilder.create(t).withIcon(AtlasLookups.COLUMN_TYPE))
         }
 
         private fun addTables(file: XmlFile, text: String, result: CompletionResultSet) {
@@ -99,7 +101,7 @@ class LiquibaseColumnCompletionContributor : CompletionContributor() {
             val seen = HashSet<String>()
             for (st in services) {
                 val table = st.tableName ?: continue
-                if (seen.add(table)) result.addElement(LookupElementBuilder.create(table).withTypeText(st.key, true))
+                if (seen.add(table)) result.addElement(LookupElementBuilder.create(table).withIcon(AtlasLookups.TABLE).withTypeText(st.key, true))
             }
         }
     }

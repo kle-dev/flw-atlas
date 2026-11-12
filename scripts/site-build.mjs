@@ -14,7 +14,8 @@
  * blocks (a line starting with `<` at column 0, running to the next blank line). Inline: `code`,
  * **bold**, *italic*, [links](url), ![images](src) and the raw tags listed in RAW_INLINE_TAGS.
  *
- * Page sources may also use {{mockup:<name>}}, which inlines site/mockups/<name>.html.
+ * Page sources may also use {{mockup:<name>}}, which inlines site/mockups/<name>.html, and {{VERSION}},
+ * which becomes the build's version (a backslash before the braces keeps the placeholder as text).
  *
  * Usage:  node scripts/site-build.mjs [--out <dir>] [--demo <dir>] [--serve] [--strict]
  *         --strict turns a missing generated screenshot from a warning into a failure (CI uses it)
@@ -256,6 +257,38 @@ function inlineMockups(html, where) {
   });
 }
 
+/**
+ * {{icon:type}} -> the explorer's own node-type icon, lifted out of explorer.js's TYPE_ICONS table and
+ * coloured with the light `--c-<type>` token from explorer.css. A mockup that drew its own dots drifted
+ * from the product the moment a colour or a glyph changed; this way it cannot — it has no copy.
+ */
+const ICON_TABLE = (() => {
+  const js = read(path.join(ROOT, 'core/src/main/resources/frontend/explorer.js'));
+  const m = js.match(/\nconst TYPE_ICONS=\{\n([\s\S]*?)\n\};\n/);
+  if (!m) { fail('explorer.js', 'the TYPE_ICONS table is gone — {{icon:…}} in the mockups has nothing to draw'); return {}; }
+  const out = {};
+  for (const line of m[1].split('\n')) {
+    const e = line.match(/^\s*(\w+):'(.*)',$/);
+    if (e) out[e[1]] = e[2];
+  }
+  return out;
+})();
+const ICON_COLORS = (() => {
+  const css = read(path.join(ROOT, 'core/src/main/resources/frontend/explorer.css'));
+  const light = css.slice(0, css.indexOf(':root[data-theme=dark]'));
+  const out = {};
+  for (const m of light.matchAll(/--c-(\w+):(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2];
+  return out;
+})();
+function inlineIcons(html, where) {
+  return html.replace(/\{\{icon:(\w+)\}\}/g, (_, type) => {
+    const body = ICON_TABLE[type];
+    if (!body) { fail(where, `unknown icon "${type}" (no TYPE_ICONS.${type} in explorer.js)`); return ''; }
+    return `<svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"` +
+      ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:${ICON_COLORS[type] || '#79848f'}">${body}</svg>`;
+  });
+}
+
 /* ---------------------------------------------------------------------- output */
 
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -271,9 +304,12 @@ for (let idx = 0; idx < pages.length; idx++) {
     continue;
   }
   const where = path.relative(ROOT, srcPath);
-  const md = read(srcPath).replace(/\{\{VERSION\}\}/g, VERSION);
+  // A backslash before the braces is the placeholder itself, for the page that has to explain it
+  // (develop.md): without an escape that page rendered "a page writes `<the version>`", the very literal
+  // the version check below forbids.
+  const md = read(srcPath).replace(/(\\?)\{\{VERSION\}\}/g, (_, escaped) => escaped ? '{{VERSION}}' : VERSION);
   const rendered = renderMarkdown(md, where);
-  const html = inlineMockups(rendered.html, where);
+  const html = inlineIcons(inlineMockups(rendered.html, where), where);
   const headings = rendered.headings;
 
   // The first plain paragraph is the meta description.
@@ -353,8 +389,9 @@ if (fs.existsSync(DEMO_IN)) {
   const demoOut = path.join(OUT, 'demo');
   fs.mkdirSync(demoOut, { recursive: true });
   const friendly = {
-    '.explorer.html': 'explorer.html', '.summary.md': 'summary.md', '.overview.md': 'overview.md',
+    '.explorer.html': 'explorer.html', '.erd.html': 'erd.html', '.summary.md': 'summary.md', '.overview.md': 'overview.md',
     '.graph.json': 'graph.json', '.CLAUDE.md': 'CLAUDE.md',
+    '.playwright.md': 'playwright.md', '.playwright-map.md': 'playwright-map.md',
   };
   for (const f of fs.readdirSync(DEMO_IN)) {
     const from = path.join(DEMO_IN, f);
@@ -377,12 +414,20 @@ if (fs.existsSync(indexHtml)) {
 }
 
 /* --------------------------------------------------------------- version check */
-/* A literal version in a page is how a docs site starts lying. Pages must write {{VERSION}}. */
+/* A literal of the CURRENT version in a page is how a docs site starts lying: it is true on release day
+   and stale from the next bump. Pages write {{VERSION}} where they mean "this release".
+   The opposite mistake is just as easy, and it is what rejecting the current literal invites: a page
+   that dates a change writes "until {{VERSION}}" because "until 0.24.0" was refused on the day 0.24.0
+   was current — and from then on every release claims the change happened in it. {{VERSION}} after a
+   word that dates something is wrong from day one, so a past release is written as its number. */
 for (const page of pages) {
   if (page.source) continue;                       // CHANGELOG.md is a list of versions by definition
   const src = read(path.join(SITE, 'pages', page.file + '.md'));
   for (const m of src.matchAll(/\b\d+\.\d+\.\d+\b/g)) {
     if (m[0] === VERSION) fail(page.file, `hardcoded version "${m[0]}" — write {{VERSION}} instead`);
+  }
+  for (const m of src.matchAll(/\b(?:since|until|before|after|as of|from|in)\s+\{\{VERSION\}\}/gi)) {
+    fail(page.file, `"${m[0]}" — {{VERSION}} is always the current release; write the past release as a literal`);
   }
 }
 

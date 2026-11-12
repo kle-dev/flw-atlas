@@ -30,22 +30,30 @@ as an update badge, with nothing to download by hand.
 [latest release](https://github.com/kle-dev/flw-atlas/releases/latest), then *Settings → Plugins → ⚙ →
 Install Plugin from Disk…* and restart.
 
-Installs on **IntelliJ IDEA 2026.1 and later**; verified on 2026.2. The Atlas Hub's footer states what
-was actually verified and flags a running IDE outside that range, in either direction. Releases are
-signed when a signing key is configured, and `SHA256SUMS.txt` in each release carries the checksums.
+Needs **IntelliJ IDEA 2026.2 or later** — the version Atlas is built against and verified on. A bug
+report submitted from the IDE states what was actually verified, so a newer IDE is never presented as
+covered. Releases are signed when a signing key is configured, and `SHA256SUMS.txt` in each release
+carries the checksums.
 
-There is nothing to configure. Open a project that contains Flowable models — an app `.zip` or
-deployment `.bar`, loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files, or a Flowable
-Design `*-models` workspace — and start typing. The plugin indexes every model it finds and the rest
-follows.
+There is nothing to configure for exported models. Open a project that contains them — an app `.zip` or
+deployment `.bar`, or loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files — and start
+typing. The plugin indexes every model it finds and the rest follows.
+
+A Flowable Design `*-models` workspace checked in as loose JSON is one checkbox away. The CLI reads it as
+it is; the plugin indexes it once *Settings → Tools → Flowable Atlas → Also index raw Flowable Design
+workspace sources* is on ([settings](../plugin/reference/#settings-tools-flowable-atlas)). Until then
+the explorer generated in the IDE shows those models, but the editor knows none of their keys.
 
 > Building it yourself instead: `./gradlew :idea-plugin:buildPlugin`.
 
 ## The CLI
 
-Download `cli-<version>-all.jar` into `lib/` and use the launcher:
+Download the launcher `atlas` and `cli-<version>-all.jar` from the
+[latest release](https://github.com/kle-dev/flw-atlas/releases/latest) into one folder, and run the
+launcher from there — it finds the jar beside it:
 
 ```bash
+chmod +x atlas          # a downloaded file loses its executable bit
 ./atlas /path/to/your-flowable-project
 ```
 
@@ -55,11 +63,11 @@ Or run the jar directly, from anywhere:
 java -jar cli-<version>-all.jar /path/to/your-flowable-project --all -o ./reports
 ```
 
-The jar is self-contained — a JRE 21+ and nothing else. If the launcher cannot find a jar it will build
-one with Gradle; set `ATLAS_NO_BUILD=1` on a machine that has no JDK, and it will tell you what to
-download instead.
+The jar is self-contained — a JRE 21+ and nothing else; the launcher is a bash script around it.
 
-> First run not executable? `chmod +x atlas`
+**In a clone of the repository** the launcher is at its root. Put the jar in `lib/`, or let the launcher
+build one with Gradle when it finds none; set `ATLAS_NO_BUILD=1` on a machine that has no JDK, and it
+will tell you what to download instead.
 
 ## Your first run
 
@@ -67,8 +75,10 @@ download instead.
 ./atlas ~/projects/order-management
 ```
 
-Atlas walks the project, resolves every relationship it can, and writes five files to
-`./atlas-output/order-management/` before opening the explorer in your browser:
+Atlas walks the project, resolves every relationship it can, and writes six artifacts — the guide for
+driving Flowable Work comes as two files — to `atlas-output/order-management/` beside the launcher, not
+inside the analysed project (a second argument names another folder). Then it opens the explorer in your
+browser:
 
 ```
 order-management.explorer.html   ← opens automatically
@@ -76,12 +86,15 @@ order-management.summary.md
 order-management.overview.md
 order-management.graph.json
 order-management.CLAUDE.md
+order-management.playwright.md
+order-management.playwright-map.md
 ```
 
-The last line on stderr is the health check, and it is the first thing worth reading:
+After the list of the files it wrote, the last line on stderr is the health check, and it is the first
+thing worth reading:
 
 ```
-412 models · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · ⚠ 3 parse issue(s)
+Flowable Atlas — order-management: 412 models (9 files · 3 archives) · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · ⚠ 3 parse issue(s), see -v · 19 defects · 24 advice
 ```
 
 If it says *parse issues*, start there — a file Atlas could not read costs you every reference into and
@@ -93,8 +106,9 @@ Once the explorer is open, three views answer most first questions:
 
 - the **overview** — what this project is, what is central to it, who can start what;
 - **`#/checks`** — everything already known to be wrong;
-- any model's detail panel — and specifically its **Used by** list, which is the question a model file
-  cannot answer about itself.
+- any model's detail panel — and specifically its **Connections** tab: whether it fits what it meets,
+  and the *Used by* side of its **Relations**, which is the question a model file cannot answer about
+  itself.
 
 Then:
 
@@ -113,9 +127,13 @@ It discovers models — `.bpmn`, `.cmmn`, `.dmn`, `.form`, `.app`, `.service`, `
 and Liquibase changelogs. Then it resolves the relationships between them:
 
 - app → its models; process or case → the process, case, decision or form it calls;
-- `${bean.method()}`, `delegateExpression` and listeners → the **Java class and method**, with
-  `file:line`;
-- form or process → **REST endpoint** → the controller that serves it;
+- `${bean.method()}`, `delegateExpression`, `flowable:class` and listeners → the **Java or Kotlin class
+  and method**, a `@Bean` factory method included (the bean is the class the method returns), and a
+  nested class or the second class of a Kotlin file too, with the `file:line` of that type's declaration;
+- form or process → **REST endpoint** → the controller that serves it, where the URL spells out the
+  handler's path — a `#/…` route, another host, a base the model does not name (`${crmUrl}/…`), Flowable's
+  own API (`{{endpoints.idm}}` is `idm-api`) or a URL of nothing but placeholders reaches no endpoint of the
+  project;
 - action → the Java `BotService` that implements it; agent → its tools;
 - data object → its backing service, its columns and its **Liquibase** table;
 - **who can do what** — candidate starter groups, app and page access, identity links, security

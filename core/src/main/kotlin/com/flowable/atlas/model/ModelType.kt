@@ -76,6 +76,9 @@ enum class ModelType(val id: String, val display: String) {
             "action-models" to ACTION, "template-models" to TEMPLATE,
             "security-policy-models" to SECURITY_POLICY,
             "variable-extractor-models" to VARIABLE_EXTRACTOR, "document-models" to DOCUMENT,
+            "decision-service-models" to DECISION, "sla-models" to SLA, "knowledge-base-models" to KNOWLEDGE_BASE,
+            "master-data-models" to MASTER_DATA, "dashboard-component-models" to DASHBOARD_COMPONENT,
+            "palette-models" to PALETTE,
         )
 
         /** The three compound XML suffixes (matched before their single-segment forms). */

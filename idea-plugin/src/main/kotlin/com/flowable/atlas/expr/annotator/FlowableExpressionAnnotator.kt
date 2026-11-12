@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.annotator
 
+import com.flowable.atlas.expr.inspection.REPLACE_FAMILY
 import com.flowable.atlas.expr.ExprSeverity
 import com.flowable.atlas.expr.ExpressionValidator
 import com.flowable.atlas.expr.lang.FlowableExprFile
@@ -52,7 +53,7 @@ class FlowableExpressionAnnotator : Annotator {
         private val replacement: String,
     ) : IntentionAction {
         override fun getText(): String = "Replace with '$replacement'"
-        override fun getFamilyName(): String = "Flowable expression"
+        override fun getFamilyName(): String = REPLACE_FAMILY
         override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean = true
         override fun startInWriteAction(): Boolean = true
 

@@ -2,6 +2,7 @@ package com.flowable.atlas.parsing
 
 import com.flowable.atlas.graph.Ctx
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,6 +16,13 @@ class ModelParsersTest {
 
     private fun refs(ctx: Ctx): Set<Triple<Any?, Any?, Any?>> =
         ctx.refs.map { Triple(it["rel"], it["kind"], it["value"]) }.toSet()
+
+    @Test
+    fun aGateWrittenAsAStringLiteralIsTheLiteral() {
+        assertNull(ModelParsers.gatingOf(mapOf("visible" to "true", "enabled" to " TRUE ", "ignore" to "false")))
+        assertEquals(mapOf("visible" to false), ModelParsers.gatingOf(mapOf("visible" to "false")))
+        assertEquals(mapOf("enabled" to "{{locked}}"), ModelParsers.gatingOf(mapOf("enabled" to "{{locked}}")))
+    }
 
     @Test
     fun modelTypeFor() {
@@ -94,6 +102,40 @@ class ModelParsersTest {
         assertEquals("GET", ctx.restCalls[0]["method"])
     }
 
+    /**
+     * A relation as Design writes it: no column of the table, but a join table of two columns — the owning
+     * row's lookup id and the referenced row's. The referenced service is named only now and then (the
+     * runtime then takes it from the data object field of the same name), and `lookupId` names a mapping
+     * whose column the join table refers to.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun parseServiceKeepsADesignRelationsJoinTable() {
+        val doc = """{"key": "DEMO-S1", "name": "Orders", "type": "database", "tableName": "DEMO_ORDER_", "lookupId": "id",
+            "columnMappings": [
+              {"name": "id", "columnName": "ID_", "type": "string"},
+              {"name": "customer", "type": "object-relation",
+               "relation": {"joinTableName": "DEMO_ORDER_CUSTOMER_", "owningColumnName": "DEMO_ORDER_ID_", "referenceColumnName": "DEMO_CUSTOMER_ID_", "eager": true}},
+              {"name": "payer", "type": "object-relation",
+               "relation": {"joinTableName": "DEMO_ORDER_PAYER_", "owningColumnName": "DEMO_ORDER_ID_", "referenceColumnName": "DEMO_CUSTOMER_ID_",
+                            "referenceServiceDefinitionKey": "DEMO-S2"}},
+              {"name": "notes", "type": "list-relation", "relation": {"joinTableName": ""}}]}""".toByteArray()
+        val ctx = Ctx()
+        val info = ModelParsers.parseService(doc, ctx, "s.service")
+        val cols = (info["columns"] as List<Map<String, Any?>>).associateBy { it["name"] }
+        assertEquals(mapOf("joinTable" to "DEMO_ORDER_CUSTOMER_", "owningColumn" to "DEMO_ORDER_ID_", "referenceColumn" to "DEMO_CUSTOMER_ID_"),
+            cols.getValue("customer")["relation"])
+        assertNull("a relation is no column of the table", cols.getValue("customer")["columnName"])
+        assertEquals("the referenced service, where the relation names it", "DEMO-S2", (cols.getValue("payer")["relation"] as Map<*, *>)["service"])
+        assertNull("no join table, nothing to join through", cols.getValue("notes")["relation"])
+        assertNull("a plain column has no relation", cols.getValue("id")["relation"])
+        assertEquals("lookupId names a mapping: its column", "ID_", info["lookupColumn"])
+        assertTrue(Triple("relates-to-service", "service", "DEMO-S2") in refs(ctx))
+        assertEquals("naming no mapping, lookupId is the column itself", "ORDER_ID_",
+            ModelParsers.parseService("""{"key": "DEMO-S3", "lookupId": "ORDER_ID_"}""".toByteArray(), Ctx(), "s.service")["lookupColumn"])
+        assertFalse("no lookupId, no key", ModelParsers.parseService("""{"key": "DEMO-S4"}""".toByteArray(), Ctx(), "s.service").containsKey("lookupColumn"))
+    }
+
     @Test
     fun parseAppChildModels() {
         val doc = """{"key": "app1", "name": "A", "groupsAccess": "g1",
@@ -104,4 +146,56 @@ class ModelParsersTest {
         assertTrue(Triple("contains", "model:bpmn", "p1") in refs(ctx))
         assertEquals(listOf("g1"), ctx.access[0]["groups"])
     }
+
+    @Test
+    fun modelDescriptionSurvivesEveryParser() {
+        // Design keeps a Description on the model, and it is usually the only sentence in the file that
+        // says why the model exists. Each parser builds its own result map, so each one dropped it and
+        // the explorer could search everything about a model except that.
+        val d = "Why this model exists"
+        fun descOf(parsed: Map<String, Any?>) = parsed["description"]
+        assertEquals(d, descOf(ModelParsers.parseService(
+            """{"key": "s1", "name": "S", "description": "$d"}""".toByteArray(), Ctx(), "s.service")))
+        assertEquals(d, descOf(ModelParsers.parseAgent(
+            """{"key": "a1", "name": "A", "description": "$d"}""".toByteArray(), Ctx(), "a.agent")))
+        assertEquals(d, descOf(ModelParsers.parseAction(
+            """{"key": "ac1", "name": "Ac", "description": "$d"}""".toByteArray(), Ctx(), "ac.action")))
+        assertEquals(d, descOf(ModelParsers.parseChannel(
+            """{"key": "c1", "name": "C", "description": "$d"}""".toByteArray(), Ctx(), "c.channel")))
+        assertEquals(d, descOf(ModelParsers.parseEvent(
+            """{"key": "e1", "name": "E", "description": "$d"}""".toByteArray(), Ctx(), "e.event")))
+        assertEquals(d, descOf(ModelParsers.parsePolicy(
+            """{"key": "p1", "name": "P", "description": "$d"}""".toByteArray(), Ctx(), "p.policy")))
+        assertEquals(d, descOf(ModelParsers.parseDictionary(
+            """{"key": "dd1", "name": "DD", "description": "$d"}""".toByteArray(), Ctx(), "dd.dictionary")))
+        assertEquals(d, descOf(ModelParsers.parseDataObject(
+            """{"key": "do1", "name": "DO", "description": "$d"}""".toByteArray(), Ctx(), "do.data")))
+        assertEquals(d, descOf(ModelParsers.parseGeneric(
+            """{"key": "q1", "name": "Q", "description": "$d"}""".toByteArray(), Ctx(), "q.query", "query")))
+        // A form/page keeps its key and name in a `metadata` header, so look there as well as at the
+        // top level — a deployment `.form` and a Design export do not agree on which one it is.
+        assertEquals(d, descOf(ModelParsers.parseForm(
+            """{"metadata": {"key": "f1", "name": "F", "description": "$d"}}""".toByteArray(), Ctx(), "f.form")))
+        assertEquals(d, descOf(ModelParsers.parseForm(
+            """{"metadata": {"key": "f1", "name": "F"}, "description": "$d"}""".toByteArray(), Ctx(), "f.form")))
+        // A DMN decision carries it as a child element. `<description>` inside a `<rule>` is the row
+        // annotation and must not be mistaken for the table's own description.
+        val dmn = """<definitions>
+                       <decision id="d1" name="D">
+                         <description>$d</description>
+                         <decisionTable><rule><description>row note</description></rule></decisionTable>
+                       </decision>
+                     </definitions>"""
+        val dec = ModelParsers.parseDmn(dmn.toByteArray(), Ctx(), "d.dmn")[0]
+        assertEquals(d, descOf(dec))
+    }
+
+    @Test
+    fun aModelWithoutADescriptionGetsNoDescriptionKey() {
+        // Not a `null` value: a key on every model of every project is a line of noise in the goldens
+        // and a byte on every node of the explorer payload.
+        val info = ModelParsers.parseService("""{"key": "s1", "name": "S"}""".toByteArray(), Ctx(), "s.service")
+        assertFalse("empty description must not be written at all", info.containsKey("description"))
+    }
+
 }

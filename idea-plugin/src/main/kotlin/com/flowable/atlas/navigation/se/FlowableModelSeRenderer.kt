@@ -1,11 +1,11 @@
 package com.flowable.atlas.navigation.se
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
-import com.intellij.ui.speedSearch.SpeedSearchUtil
-import com.intellij.util.text.Matcher
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.codeStyle.MinusculeMatcher
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Component
@@ -19,8 +19,9 @@ import javax.swing.ListCellRenderer
  * left, the **file name** right-aligned at the far edge — two [ColoredListCellRenderer]s in a
  * [BorderLayout], the same shape as the platform's text-search and run-configuration renderers.
  *
- * Left is the model **key** (bold, typed fragment highlighted) or, for a full-text hit, the matched
- * line with the found fragment highlighted. Right is the bare file name and nothing else; the
+ * Left is the model **key** (bold, typed fragment highlighted), an element's **id** with its model in
+ * grey (`approveTask  in DEMO-P001`) or, for a full-text hit, the matched line with the found fragment
+ * highlighted. Right is the bare file name and nothing else; the
  * archive-qualified path lives in the item's description rather than in the row.
  *
  * Search Everywhere has no grouped list model (results are one flat, weight-sorted list), so the two
@@ -29,7 +30,7 @@ import javax.swing.ListCellRenderer
  * Typed on `Any` because the platform reuses the renderer for its own synthetic rows.
  */
 internal class FlowableModelSeRenderer(
-    private val matcher: () -> Matcher?,
+    private val highlight: () -> SeHighlight?,
 ) : JPanel(BorderLayout()), ListCellRenderer<Any> {
 
     private val main = MainRenderer()
@@ -53,6 +54,8 @@ internal class FlowableModelSeRenderer(
         main.getListCellRendererComponent(list, value, index, selected, hasFocus)
         fileName.getListCellRendererComponent(list, value, index, selected, hasFocus)
         background = if (selected) list.selectionBackground else list.background
+        // What the row leaves out — type, name, archive — one hover away.
+        toolTipText = (value as? FlowableSeItem)?.description
         return this
     }
 
@@ -67,17 +70,13 @@ internal class FlowableModelSeRenderer(
         ) {
             when (val item = value as? FlowableSeItem) {
                 is FlowableSeItem.Model -> {
-                    icon = MODEL_ICON
-                    val m = matcher()
-                    if (m == null) {
-                        append(item.entry.key, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
-                    } else {
-                        // Ranges come from the matcher's camel-hump half, so a purely infix hit
-                        // (`0061` in `DEMO-DO-0061`) renders unhighlighted — it still matched.
-                        SpeedSearchUtil.appendColoredFragmentForMatcher(
-                            item.entry.key, this, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES, m, null, selected,
-                        )
-                    }
+                    icon = AtlasIcons.forType(item.entry.type)
+                    appendKey(item.entry.key, highlight())
+                }
+                is FlowableSeItem.Element -> {
+                    icon = item.element.kind.icon
+                    appendKey(item.element.id, highlight())
+                    append("  in ${item.element.owner.key}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
                 }
                 is FlowableSeItem.TextHit -> {
                     icon = TEXT_ICON
@@ -87,6 +86,31 @@ internal class FlowableModelSeRenderer(
             }
         }
 
+        /**
+         * The key with the typed fragment highlighted. The minuscule matcher reports ranges for its
+         * camel-hump matches; a purely infix hit (`0061` in `DEMO-DO-0061`) matched through the `*`
+         * prefix but comes back without ranges, so it used to render unhighlighted — the one row the
+         * reader typed for looked like the one that merely happened to be there. The ranges are painted
+         * here rather than by the platform helper, whose highlighting depends on a registry flag.
+         */
+        private fun appendKey(key: String, h: SeHighlight?) {
+            val base = SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
+            if (h == null) return append(key, base)
+            var ranges: List<TextRange> = h.matcher.match(key)?.map { TextRange(it.startOffset, it.endOffset) }.orEmpty()
+            if (ranges.isEmpty()) {
+                val at = key.indexOf(h.pattern, ignoreCase = true)
+                if (at >= 0) ranges = listOf(TextRange(at, at + h.pattern.length))
+            }
+            if (ranges.isEmpty()) return append(key, base)
+            var pos = 0
+            for (r in ranges.sortedBy { it.startOffset }) {
+                if (r.startOffset > pos) append(key.substring(pos, r.startOffset), base)
+                append(key.substring(r.startOffset, r.endOffset), matchOf(base))
+                pos = r.endOffset
+            }
+            if (pos < key.length) append(key.substring(pos), base)
+        }
+
         /** The matched line with the found fragment highlighted, so the eye lands on it directly. */
         private fun appendLine(hit: FlowableSeItem.TextHit) {
             val end = hit.matchStart + hit.matchLength
@@ -94,10 +118,20 @@ internal class FlowableModelSeRenderer(
                 append(hit.lineText, SimpleTextAttributes.REGULAR_ATTRIBUTES)
                 return
             }
-            append(hit.lineText.substring(0, hit.matchStart), SimpleTextAttributes.REGULAR_ATTRIBUTES)
-            append(hit.lineText.substring(hit.matchStart, end), MATCH_ATTRIBUTES)
-            append(hit.lineText.substring(end), SimpleTextAttributes.REGULAR_ATTRIBUTES)
+            appendWithMatch(hit.lineText, hit.matchStart, hit.matchLength, SimpleTextAttributes.REGULAR_ATTRIBUTES)
         }
+
+        /** [text] as three fragments — before, the match, after — in [base] with the match styled. */
+        private fun appendWithMatch(text: String, start: Int, length: Int, base: SimpleTextAttributes) {
+            val end = start + length
+            append(text.substring(0, start), base)
+            append(text.substring(start, end), matchOf(base))
+            append(text.substring(end), base)
+        }
+
+        /** The platform's search-match styling on top of [base] — the same highlight the other tabs use. */
+        private fun matchOf(base: SimpleTextAttributes) =
+            SimpleTextAttributes(base.style or SimpleTextAttributes.STYLE_SEARCH_MATCH, base.fgColor)
     }
 
     /** The file name — right-aligned and nothing else, so the names line up down the list. */
@@ -120,11 +154,14 @@ internal class FlowableModelSeRenderer(
     }
 
     private companion object {
-        val MODEL_ICON: Icon = IconLoader.getIcon("/META-INF/atlas-hub.svg", FlowableModelSeRenderer::class.java)
         val TEXT_ICON: Icon = AllIcons.Actions.Find
 
-        /** The platform's search-match styling — the same highlight the other tabs use. */
-        val MATCH_ATTRIBUTES = SimpleTextAttributes(SimpleTextAttributes.STYLE_SEARCH_MATCH, null)
         const val RIGHT_GAP = 8
     }
 }
+
+/**
+ * The live pattern for the renderer: the matcher for the ranges it can report, the raw text for the
+ * infix hits it cannot.
+ */
+internal class SeHighlight(val pattern: String, val matcher: MinusculeMatcher)

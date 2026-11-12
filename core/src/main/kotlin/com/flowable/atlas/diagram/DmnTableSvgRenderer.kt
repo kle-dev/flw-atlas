@@ -1,5 +1,7 @@
 package com.flowable.atlas.diagram
 
+import com.flowable.atlas.diagram.SvgText.esc
+import com.flowable.atlas.diagram.SvgText.fmt
 import com.flowable.atlas.parsing.AtlasXml
 import kotlin.math.max
 import kotlin.math.min
@@ -15,9 +17,10 @@ import kotlin.math.min
  * an input band and an output band, one row per rule, annotations last — from the `<decisionTable>`
  * markup that every decision model does carry.
  *
- * Deliberately kept out of [DiagramRenderer.renderSvg]: that feeds the Atlas explorer payload and the
- * `Diagrams (SVG)` artifacts, and the explorer already renders a decision's rules as a real (searchable,
- * themed) HTML table. This is used where there is no such alternative — the IDE's diagram gutter icon.
+ * [ModelPicture] draws it for a decision in XML that has no `dmndi` layout. The explorer does not embed it
+ * — its decision page renders the rules as a real (searchable, themed) HTML table in the same grammar —
+ * but the IDE's gutter icon and preview and the diagrams folder do. Every rule row is a
+ * `<g data-el="<rule id>">` and a [Picture.Hotspot], so a click in the preview lands on the rule.
  *
  * Output is deterministic (source order, locale-free numbers) and draws its own white background, so it
  * is safe for byte-comparison tests and legible in any viewer theme.
@@ -57,8 +60,12 @@ object DmnTableSvgRenderer {
      * Render every decision table in a `.dmn` document to one SVG, or null when the document carries no
      * decision table (a pure DRD — [DiagramRenderer] draws that from its `dmndi` layout instead).
      */
-    fun renderSvg(bytes: ByteArray): String? {
+    fun renderSvg(bytes: ByteArray): String? = picture(bytes)?.svg
+
+    /** The decision tables with every rule row as a hotspot. */
+    fun picture(bytes: ByteArray): Picture? {
         val tables = runCatching { parse(bytes) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        val hits = ArrayList<Picture.Hotspot>()
         val laidOut = tables.map { layout(it) }
         val width = laidOut.maxOf { it.width } + 2 * PAD
         val height = laidOut.sumOf { it.height } + TABLE_GAP * (laidOut.size - 1) + 2 * PAD
@@ -69,13 +76,14 @@ object DmnTableSvgRenderer {
                 """viewBox="0 0 ${fmt(width)} ${fmt(height)}">""",
         )
         sb.append("""<rect width="${fmt(width)}" height="${fmt(height)}" fill="#ffffff"/>""")
+        sb.append("""<g font-family="$FONT" font-size="12" fill="$TEXT">""")
         var y = PAD
         for (t in laidOut) {
-            draw(sb, t, PAD, y)
+            draw(sb, t, PAD, y, hits)
             y += t.height + TABLE_GAP
         }
-        sb.append("</svg>")
-        return sb.toString()
+        sb.append("</g></svg>")
+        return Picture(sb.toString(), Picture.Kind.DECISION_TABLE, Picture.Box(0.0, 0.0, width, height), hits)
     }
 
     // ---- model -------------------------------------------------------------------------------
@@ -83,7 +91,7 @@ object DmnTableSvgRenderer {
     /** A column header: its label plus the expression (input) or output name it stands for. */
     private class Column(val label: String, val detail: String?)
 
-    private class Rule(val cells: List<String>, val annotation: String?)
+    private class Rule(val id: String?, val cells: List<String>, val annotation: String?)
 
     private class Table(
         val title: String,
@@ -116,7 +124,8 @@ object DmnTableSvgRenderer {
                 val outsCells = r.findChildren("outputEntry").map { it.textOfDescendant("text").orEmpty() }
                 // Pad to the header width so a rule with missing entries stays column-aligned.
                 val cells = pad(ins, inputs.size) + pad(outsCells, outputs.size)
-                Rule(cells, r.textOfDescendant("description"))
+                // The rule's own annotation — an entry's <description> sits deeper and is not it.
+                Rule(r.attr("id")?.takeIf { it.isNotBlank() }, cells, r.childText("description"))
             }
             out.add(
                 Table(
@@ -183,7 +192,7 @@ object DmnTableSvgRenderer {
 
     // ---- painting ----------------------------------------------------------------------------
 
-    private fun draw(sb: StringBuilder, l: Laid, x0: Double, y0: Double) {
+    private fun draw(sb: StringBuilder, l: Laid, x0: Double, y0: Double, hits: MutableList<Picture.Hotspot>) {
         val t = l.table
         sb.append(text(x0, y0 + 16.0, t.title, size = 14.0, weight = "600"))
         sb.append(text(x0 + t.title.length * 7.6 + 12.0, y0 + 16.0, "Hit policy: ${t.hitPolicy}", fill = MUTED))
@@ -226,6 +235,11 @@ object DmnTableSvgRenderer {
         // Rule rows.
         for ((r, rule) in t.rules.withIndex()) {
             val y = bodyY + ROW_H * r
+            // the row is one clickable element, named by the rule's id
+            rule.id?.let {
+                sb.append("""<g data-el="${esc(it)}" tabindex="0" role="button">""")
+                hits.add(Picture.Hotspot(it, x0, y, right - x0, ROW_H))
+            }
             if (r % 2 == 1) sb.append(rect(x0, y, right - x0, ROW_H, ROW_ALT))
             sb.append(text(x0 + CELL_PAD, y + 17.5, "${r + 1}", size = 10.5, fill = MUTED))
             for (i in headers.indices) {
@@ -239,6 +253,7 @@ object DmnTableSvgRenderer {
             if (l.hasAnnotations && !rule.annotation.isNullOrBlank()) {
                 sb.append(text(annoX + CELL_PAD, y + 17.5, clip(rule.annotation), fill = MUTED))
             }
+            if (rule.id != null) sb.append("</g>")
         }
 
         // Grid: the outer frame plus every column / row separator.
@@ -260,14 +275,14 @@ object DmnTableSvgRenderer {
 
     private fun frame(x: Double, y: Double, right: Double, bottom: Double): String =
         """<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(right - x)}" height="${fmt(bottom - y)}" """ +
-            """fill="none" stroke="$STROKE_STRONG" stroke-width="1"/>"""
+            """fill="none" stroke="$STROKE_STRONG"/>"""
 
     private fun vline(x: Double, y1: Double, y2: Double): String =
-        """<line x1="${fmt(x)}" y1="${fmt(y1)}" x2="${fmt(x)}" y2="${fmt(y2)}" stroke="$STROKE" stroke-width="1"/>"""
+        """<line x1="${fmt(x)}" y1="${fmt(y1)}" x2="${fmt(x)}" y2="${fmt(y2)}" stroke="$STROKE"/>"""
 
     private fun hline(x1: Double, x2: Double, y: Double, strong: Boolean = false): String =
         """<line x1="${fmt(x1)}" y1="${fmt(y)}" x2="${fmt(x2)}" y2="${fmt(y)}" """ +
-            """stroke="${if (strong) STROKE_STRONG else STROKE}" stroke-width="1"/>"""
+            """stroke="${if (strong) STROKE_STRONG else STROKE}"/>"""
 
     private fun text(
         x: Double,
@@ -277,23 +292,13 @@ object DmnTableSvgRenderer {
         fill: String = TEXT,
         weight: String = "400",
         mono: Boolean = false,
-    ): String =
-        """<text x="${fmt(x)}" y="${fmt(y)}" font-family="${if (mono) MONO else FONT}" """ +
-            """font-size="${fmt(size)}" font-weight="$weight" fill="$fill">${esc(s)}</text>"""
-
-    private fun fmt(v: Double): String {
-        val r = Math.round(v * 100.0) / 100.0
-        return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString()
-    }
-
-    private fun esc(s: String): String = buildString {
-        for (c in s) when (c) {
-            '&' -> append("&amp;")
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '"' -> append("&quot;")
-            '\'' -> append("&#39;")
-            else -> append(c)
-        }
+    ): String = buildString {
+        // only what differs from the drawing's group — family, 12px, regular, text colour — is written
+        append("""<text x="${fmt(x)}" y="${fmt(y)}"""")
+        if (mono) append(""" font-family="$MONO"""")
+        if (size != 12.0) append(""" font-size="${fmt(size)}"""")
+        if (weight != "400") append(""" font-weight="$weight"""")
+        if (fill != TEXT) append(""" fill="$fill"""")
+        append(">").append(esc(s)).append("</text>")
     }
 }

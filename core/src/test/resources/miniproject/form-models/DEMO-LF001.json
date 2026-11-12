@@ -1,0 +1,43 @@
+{
+  "id": "FORM_MODEL-0b7c1d2e-legacy",
+  "name": "Legacy order lookup",
+  "key": "DEMO-LF001",
+  "description": "A Design-workspace export in the legacy editor's shape.",
+  "editorJson": {
+    "resourceId": "canvas",
+    "stencil": {"id": "XForm"},
+    "pathProperties": {"id": "id", "url": "extraSettings.url"},
+    "properties": {
+      "stencilid": "XForm", "id": "DEMO-LF001", "name": "Legacy order lookup",
+      "outcomevariablename": "legacyAction",
+      "outcomes": {"totalCount": 1, "items": [{"label": "Save", "value": "save", "outcomeFormKey": "orderForm", "navigationUrl": ""}]}
+    },
+    "childShapes": [
+      {"resourceId": "panel1", "stencil": {"id": "SlotPanel"},
+       "properties": {"stencilid": "SlotPanel", "id": "panel1", "label": "Order"},
+       "childShapes": [
+         {"resourceId": "text1", "stencil": {"id": "base-text"},
+          "properties": {"stencilid": "cloud-text", "id": "legacyOrderId", "label": "Order id", "value": "{{legacyOrderId}}",
+                         "required": false, "required-run": "{{legacyMode == 'strict'}}", "visible": true, "enabled": true, "ignored": false}},
+         {"resourceId": "sub1", "stencil": {"id": "SubForm"},
+          "properties": {"stencilid": "cloud-sub-form", "id": "orderSub", "label": "Order details",
+                         "form-ref": {"id": "FORM_MODEL-4f1b9c2e", "key": "orderForm"}}},
+         {"resourceId": "sel1", "stencil": {"id": "Component"},
+          "properties": {"stencilid": "data-object-select", "id": "customerPick", "label": "Customer",
+                         "dataobjectselectsearch": {"dataObjectreference": "DATA_OBJECT_MODEL-1", "key": "customerDO", "operationType": "search", "operationKey": "findAll"}}},
+         {"resourceId": "btn1", "stencil": {"id": "Button"},
+          "properties": {"stencilid": "cloud-rest-button", "id": "loadOrder", "button-text": "Load", "value": "{{$temp.loaded}}",
+                         "rest-button-url": "/api/orders/{{legacyOrderId}}", "rest-button-method": "get",
+                         "rest-button-response-payload-mapping": {"totalCount": 1, "items": [{"name": "total", "expression": "{{$response.total}}"}]}}},
+         {"resourceId": "btn2", "stencil": {"id": "Button"},
+          "properties": {"stencilid": "work-action", "id": "runCheck", "button-text_en_us": "Run the check",
+                         "actiondefinitionkey": "notifyCustomerAction",
+                         "sendpayloadmapping": {"totalCount": 1, "items": [{"name": "email", "expression": "{{contactEmail}}"}]}}},
+         {"resourceId": "tbl1", "stencil": {"id": "base-datatable"},
+          "properties": {"stencilid": "cloud-datatable", "id": "orderRows", "label": "Rows",
+                         "url": "#/{{$route.currentAppId}}/case/{{$row.id}}", "datasource": "Rest",
+                         "query-url": "/api/orders?customer={{customerPick}}"}}
+       ]}
+    ]
+  }
+}

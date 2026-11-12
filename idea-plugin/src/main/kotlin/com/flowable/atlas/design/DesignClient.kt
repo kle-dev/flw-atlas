@@ -1,9 +1,14 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.environment.auth.AuthContext
+import com.flowable.atlas.environment.auth.BrowserSessions
 import com.flowable.atlas.model.MiniJson
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import java.io.ByteArrayOutputStream
+import java.net.ConnectException
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -47,18 +52,15 @@ object DesignClient {
     private val EXPORT_TIMEOUT = Duration.ofSeconds(120)
 
     /**
-     * How a request authenticates. A sealed type on purpose: the two schemes are mutually exclusive, so
-     * "password *and* token" is unrepresentable and [authorizationHeader] can only ever produce one
-     * header value.
+     * A server and how to authenticate to it. [auth] is the plugin-wide [AuthContext] — the same type
+     * the Atlas Playground sends — so a Design behind an identity provider can be reached with a
+     * captured browser session, which used to be impossible here: this client set exactly one
+     * `Authorization` header and had no way to carry a cookie.
      */
-    sealed interface Auth {
-        data class Basic(val username: String, val password: String) : Auth
-        data class Token(val token: String) : Auth
-    }
-
-    data class Connection(val baseUrl: String, val auth: Auth) {
-        /** Basic-auth shorthand. */
-        constructor(baseUrl: String, username: String, password: String) : this(baseUrl, Auth.Basic(username, password))
+    data class Connection(val baseUrl: String, val auth: AuthContext) {
+        /** Basic-auth shorthand, for callers that have nothing else. */
+        constructor(baseUrl: String, username: String, password: String) :
+            this(baseUrl, AuthContext.basic(username, password))
     }
 
     data class Workspace(val key: String, val name: String)
@@ -112,11 +114,17 @@ object DesignClient {
     fun tokenManagementUrl(baseUrl: String): String = "${normalizeBaseUrl(baseUrl)}/#/token-mgmt"
 
     /**
-     * An access token the way a human pastes it: surrounding whitespace and quotes are dropped, and a
-     * copied-along `Bearer ` prefix is removed so the header never becomes `Bearer Bearer …`.
+     * An access token the way a human pastes it — the public Design spelling of
+     * [AuthContext.normalizeToken], which is where the rule lives now that Work accepts tokens too.
      */
-    fun normalizeAccessToken(raw: String): String =
-        raw.trim().trim('"', '\'').replace(Regex("^bearer\\s+", RegexOption.IGNORE_CASE), "").trim()
+    fun normalizeAccessToken(raw: String): String = AuthContext.normalizeToken(raw)
+
+    /** The `message` a Flowable error body carries, short enough for one status line — else null. */
+    internal fun serverMessage(body: String): String? {
+        val map = runCatching { MiniJson.parse(body) as? Map<*, *> }.getOrNull() ?: return null
+        val message = (map["message"] as? String)?.takeUnless { it.isBlank() } ?: return null
+        return if (message.length <= 120) message else message.take(117) + "…"
+    }
 
     private fun encode(pathSegment: String): String =
         URLEncoder.encode(pathSegment, StandardCharsets.UTF_8).replace("+", "%20")
@@ -166,7 +174,7 @@ object DesignClient {
                 .header("Accept", "application/zip")
                 .GET()
                 .build()
-            val resp = newClient().send(request, HttpResponse.BodyHandlers.ofByteArray())
+            val resp = sendTryingEveryAddress(newClient(), request, HttpResponse.BodyHandlers.ofByteArray())
             val body = resp.body() ?: ByteArray(0)
             when {
                 resp.statusCode() !in 200..299 -> failedForStatus(conn.auth, resp.statusCode(), String(body, StandardCharsets.UTF_8))
@@ -206,20 +214,21 @@ object DesignClient {
     ): Result<NewToken> {
         if (baseUrl.isBlank()) return Result.Failed("Design base URL is required")
         if (name.isBlank()) return Result.Failed("A token name is required")
-        val auth = Auth.Basic(username, password)
+        val auth = AuthContext.basic(username, password, BrowserSessions.get(baseUrl).orEmpty())
         val fields = LinkedHashMap<String, Any?>()
         fields["name"] = name
         if (!validFor.isNullOrBlank()) fields["validFor"] = validFor
         return try {
-            val request = HttpRequest.newBuilder()
-                .uri(URI.create(accessTokensEndpoint(baseUrl)))
-                .timeout(LIST_TIMEOUT)
-                .header("Authorization", authorizationHeader(auth))
+            val request = auth.apply(
+                HttpRequest.newBuilder()
+                    .uri(URI.create(accessTokensEndpoint(baseUrl)))
+                    .timeout(LIST_TIMEOUT),
+            )
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(MiniJson.stringify(fields)))
                 .build()
-            val resp = newClient().send(request, HttpResponse.BodyHandlers.ofString())
+            val resp = sendTryingEveryAddress(newClient(), request, HttpResponse.BodyHandlers.ofString())
             if (resp.statusCode() !in 200..299) {
                 return if (resp.statusCode() == 401) {
                     Result.Failed(
@@ -240,7 +249,7 @@ object DesignClient {
         }
     }
 
-    /** The `CreateAccessTokenResponse` body, or null when it carries no token value. */
+    /** The token-creation response body, or null when it carries no token value. */
     fun parseNewToken(json: String): NewToken? {
         val map = runCatching { MiniJson.parse(json) }.getOrNull() as? Map<*, *> ?: return null
         val value = (map["value"] as? String)?.takeUnless { it.isBlank() } ?: return null
@@ -306,7 +315,7 @@ object DesignClient {
                     .header("Accept", "application/json")
                     .GET()
                     .build()
-                val resp = newClient().send(request, HttpResponse.BodyHandlers.ofString())
+                val resp = sendTryingEveryAddress(newClient(), request, HttpResponse.BodyHandlers.ofString())
                 if (resp.statusCode() !in 200..299) return failedForStatus(conn.auth, resp.statusCode(), resp.body())
                 val page = parse(resp.body())
                 all += page.data
@@ -321,18 +330,27 @@ object DesignClient {
         }
     }
 
-    private fun failedForStatus(auth: Auth, code: Int, body: String): Result.Failed = when (code) {
+    private fun failedForStatus(auth: AuthContext, code: Int, body: String): Result.Failed = when (code) {
         401 -> Result.Failed(unauthorizedMessage(auth))
         403 -> Result.Failed("No read access to this workspace/app (HTTP 403)")
         404 -> Result.Failed("Not found — is the base URL a Flowable Design server, and do workspace/app still exist? (HTTP 404)")
-        else -> Result.Failed("HTTP $code: ${body.take(200)}")
+        // The server's own message when it sent one, never the raw body: half a JSON document in a red
+        // status line tells the reader nothing they can act on, and the app's log holds the rest.
+        else -> Result.Failed("The server answered HTTP $code" + serverMessage(body)?.let { ": $it" }.orEmpty())
     }
 
-    /** The 401 hint for the scheme actually used — a wrong password and a stale token need different fixes. */
-    internal fun unauthorizedMessage(auth: Auth): String = when (auth) {
-        is Auth.Basic -> "Authentication failed — check username/password (HTTP 401)"
-        is Auth.Token -> "Authentication failed — the access token is invalid or expired; " +
+    /** The 401 hint for the scheme actually used — each one needs a different fix. */
+    internal fun unauthorizedMessage(auth: AuthContext): String = when (auth.credential) {
+        is AuthContext.Credential.Basic -> "Authentication failed — check username/password (HTTP 401)"
+        is AuthContext.Credential.Token -> "Authentication failed — the access token is invalid or expired; " +
             "create a new one in Design under \"Access tokens\" (HTTP 401)"
+        // Only a captured session, and the server rejected it: cookies expire, and the fix is to sign
+        // in again rather than to go looking for a password that was never the problem.
+        null -> if (auth.hasSession) {
+            "Authentication failed — the captured browser session has expired; sign in again (HTTP 401)"
+        } else {
+            "Authentication failed — no credentials are configured for this server (HTTP 401)"
+        }
     }
 
     private fun failureMessage(baseUrl: String, e: Exception): String = when (e) {
@@ -343,27 +361,81 @@ object DesignClient {
     /** Configuration pre-flight shared by the list and export paths — never touches the network. */
     private fun missingConfig(conn: Connection): Result.Failed? {
         if (conn.baseUrl.isBlank()) return Result.Failed("Design base URL is required")
-        val auth = conn.auth
-        if (auth is Auth.Token && normalizeAccessToken(auth.token).isBlank()) {
+        val credential = conn.auth.credential
+        // A blank token is a misconfiguration the server cannot explain back — unless a browser session
+        // was captured, which authenticates on its own and is the whole point of the SSO route.
+        if (credential is AuthContext.Credential.Token &&
+            AuthContext.normalizeToken(credential.token).isBlank() && !conn.auth.hasSession
+        ) {
             return Result.Failed("A Flowable Design access token is required")
         }
         return null   // a blank Basic username stays a server-side 401, exactly as before
     }
 
+    /** [AuthContext.apply] owns the header precedence — see it for why a captured one wins. */
     private fun requestBuilder(conn: Connection, url: String, timeout: Duration): HttpRequest.Builder =
-        HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .timeout(timeout)
-            // `header()` appends rather than replaces, so this single call — together with the sealed
-            // Auth type — is what guarantees exactly one Authorization header.
-            .header("Authorization", authorizationHeader(conn.auth))
+        conn.auth.apply(
+            HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(timeout),
+        )
 
-    internal fun authorizationHeader(auth: Auth): String = when (auth) {
-        is Auth.Basic -> "Basic " + Base64.getEncoder().encodeToString("${auth.username}:${auth.password}".toByteArray())
-        is Auth.Token -> "Bearer " + normalizeAccessToken(auth.token)
+    /**
+     * Pinned to HTTP/1.1 on purpose. The JDK client defaults to HTTP/2, which over cleartext `http://`
+     * is an h2c *upgrade* request (`Connection: Upgrade` + `HTTP2-Settings`). A server that neither
+     * completes nor declines that upgrade — as a Design behind a plain dev port can do — leaves the
+     * request hanging until the timeout, so a URL that answers a curl instantly was reported as
+     * "Cannot reach … request timeout". Nothing here needs HTTP/2, and `https://` negotiates it via
+     * ALPN anyway, so there is no upside to trading that failure mode for.
+     */
+
+    /**
+     * Sends [request], retrying the host's other addresses when the connection itself fails.
+     *
+     * The JDK's `HttpClient` connects to the **first** address a name resolves to and does not fall
+     * back. On macOS `localhost` resolves to `127.0.0.1` and then `::1`, so a Design server bound to
+     * IPv6 only — which a node dev server is by default — is unreachable from Java while a browser and
+     * `curl` reach it, because they do fall back. Only a *connect* failure is retried; an HTTP answer of
+     * any status is the server's own answer.
+     */
+    private fun <T> sendTryingEveryAddress(
+        client: HttpClient,
+        request: HttpRequest,
+        handler: HttpResponse.BodyHandler<T>,
+    ): HttpResponse<T> {
+        val candidates = addressCandidates(request.uri())
+        candidates.forEachIndexed { index, uri ->
+            val attempt = if (uri == request.uri()) request else HttpRequest.newBuilder(request, { _, _ -> true })
+                .uri(uri)
+                .build()
+            try {
+                return client.send(attempt, handler)
+            } catch (e: ConnectException) {
+                if (index == candidates.lastIndex) throw e
+            }
+        }
+        throw ConnectException("No address for ${request.uri().host} accepted a connection")
     }
 
-    private fun newClient(): HttpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build()
+    /** The URI itself, then the same URI against each address its host resolves to. */
+    internal fun addressCandidates(uri: URI): List<URI> {
+        val host = uri.host ?: return listOf(uri)
+        if (host.startsWith("[") || host.firstOrNull()?.isDigit() == true) return listOf(uri)
+        val addresses = runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
+        if (addresses.size <= 1) return listOf(uri)
+        val port = if (uri.port > 0) ":${uri.port}" else ""
+        val query = uri.rawQuery?.let { "?$it" }.orEmpty()
+        return listOf(uri) + addresses.map { address ->
+            val literal = address.hostAddress.substringBefore('%')
+            val bracketed = if (address is Inet6Address) "[$literal]" else literal
+            URI.create("${uri.scheme}://$bracketed$port${uri.rawPath}$query")
+        }
+    }
+
+    private fun newClient(): HttpClient = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .connectTimeout(CONNECT_TIMEOUT)
+        .build()
 
     private fun isZip(body: ByteArray): Boolean =
         body.size >= 2 && body[0] == 'P'.code.toByte() && body[1] == 'K'.code.toByte()

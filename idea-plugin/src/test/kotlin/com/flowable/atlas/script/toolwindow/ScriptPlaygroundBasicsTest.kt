@@ -1,7 +1,7 @@
 package com.flowable.atlas.script.toolwindow
 
 import com.flowable.atlas.expr.ExprSeverity
-import com.flowable.atlas.expr.toolwindow.PlaygroundProblemsStrip
+import com.flowable.atlas.playground.PlaygroundProblemsStrip
 import com.flowable.atlas.script.ScriptContext
 import com.flowable.atlas.script.ScriptProblemKind
 import com.intellij.lang.Language

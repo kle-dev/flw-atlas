@@ -4,12 +4,17 @@
   "type": "db",
   "tableName": "ord_order",
   "referencedLiquibaseModelKey": "002-order",
+  "lookupId": "id",
   "columnMappings": [
     {"name": "id", "columnName": "id_", "type": "string"},
     {"name": "orderNumber", "columnName": "order_no_", "type": "string"},
+    {"name": "customer", "type": "object-relation",
+     "relation": {"joinTableName": "ORD_ORDER_CUST_CUSTOMER_", "owningColumnName": "ORD_ORDER_ID_", "referenceColumnName": "CUST_CUSTOMER_ID_", "eager": true}},
     {"name": "companyName", "columnName": "company_", "type": "string"},
     {"name": "totalAmount", "columnName": "total_", "type": "number"},
-    {"name": "internalScore", "columnName": "score_", "type": "number"}
+    {"name": "internalScore", "columnName": "score_", "type": "number"},
+    {"name": "deliveryCity", "columnName": "delivery_zip_", "type": "string"},
+    {"name": "deliveryZip", "columnName": "delivery_city_", "type": "string"}
   ],
   "operations": [
     {"key": "findAll", "name": "Find all", "config": {"method": "GET", "url": "/api/orders"}},

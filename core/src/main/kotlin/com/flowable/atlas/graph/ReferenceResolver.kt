@@ -31,13 +31,38 @@ object ReferenceResolver {
      * from the cleaned-up sections written into `result` (Python passes these directly as arguments):
      *  - [resolved]: the FULL resolved-refs list (each entry carries `targetFqn` for bean/class refs);
      *  - [allJava]: fqn → parsed-java object for every `.java` (Python's `all_java`);
-     *  - [beanMethods]: bean name → set of method names called on it in expressions (Python's `bean_methods`).
+     *  - [beanMethods]: bean name → set of method names called on it in expressions (Python's `bean_methods`);
+     *  - [knownBeans]: every name the project may treat as a bean — the platform's, Java's, the ones a
+     *    delegate names bare, and the expression roots [isBean] accepted. A root outside it is a variable.
      */
     data class Resolved(
         val resolved: List<Map<String, Any?>>,
         val allJava: Map<String, Map<String, Any?>>,
         val beanMethods: Map<String, Set<String>>,
+        val knownBeans: Set<String>,
     )
+
+    /** A bean ref whose root may as well be a variable: a `${x.method()}` harvest, or an `expression` attribute. */
+    private fun isCallRel(rel: String) = rel.startsWith("calls ") || rel.endsWith("-expression")
+
+    /** The line a parsed Java/Kotlin file declares its type [type] on — the file's own line when unknown. */
+    private fun typeLine(jc: Map<String, Any?>, type: String): Any? =
+        (jc["typeLines"] as? Map<*, *>)?.get(type) ?: jc["line"]
+
+    /**
+     * A type a file declares besides its primary one, as a name finds it: the file's record and the type.
+     * [loads] is whether Flowable can load the type by that name — `Class.forName` takes a nested type's
+     * binary name `pkg.Outer$Inner` only, so its source spelling `pkg.Outer.Inner` finds it but would fail
+     * at runtime.
+     */
+    private class TypeAlias(val jc: Map<String, Any?>, val type: String, val loads: Boolean)
+
+    /** [type] as a reader names it: `pkg.Outer.Inner` for a nested type, `pkg.Type` for any other. */
+    private fun typeName(jc: Map<String, Any?>, type: String): String {
+        val pkg = (jc["package"] as? String).orEmpty()
+        val outer = ((jc["nestedIn"] as? Map<*, *>)?.get(type) as? String)?.replace('$', '.')
+        return listOf(pkg, outer.orEmpty(), type).filter { it.isNotEmpty() }.joinToString(".")
+    }
 
     /** Ref kinds that name a Flowable model (mirrors the tuple in the Python `resolve references` step). */
     internal val MODEL_KIND_NAMES = setOf(
@@ -49,38 +74,53 @@ object ReferenceResolver {
     )
 
     /**
-     * Cross-type fallback compatibility: an expected model kind may silently fall back only to these
-     * types (tagged `fallbackType`, still a normal edge). Any other cross-type match is kept but
-     * flagged `suspect` — a `process --callActivity--> form` edge is semantically impossible and must
-     * be visible as such instead of looking like a clean resolution.
+     * Cross-type fallback compatibility: an expected model kind may fall back only to these types (tagged
+     * `fallbackType`, still a normal edge). Any other model of the same key is a different model: the
+     * reference stays unresolved — a missing model — instead of drawing a `process --callActivity--> form`
+     * edge that also hid the missing callee.
      */
     private val FALLBACK_COMPAT = mapOf(
-        "process" to setOf("case"),          // call activity may start a case (calledElementType)
-        "case" to setOf("process"),          // work definitions cover both
         "form" to setOf("page"),             // casePage-/work-form keys may name a page model
         "page" to setOf("form"),
         "dataObject" to setOf("masterData"), // master data is a data-object specialisation
         "masterData" to setOf("dataObject"),
     )
 
+    /**
+     * The references whose target may be a process or a case: the model naming it cannot say which (a
+     * variable extractor, an SLA, a query over instances). A call activity, a process task or a case
+     * task can only start its own kind — a BPMN call activity never starts a case.
+     */
+    private val PROCESS_OR_CASE_RELS = setOf("extracts-from", "sla-of-process", "queries-process")
+
+    private val PROCESS_OR_CASE = setOf("process", "case")
+
+    /** App child-model types the app definition spells differently from the model kind. */
+    private val KIND_ALIASES = mapOf("security" to "securityPolicy", "decisionService" to "decision")
+
+    /**
+     * A model ref's kind as the model index keys it: `model:form` → `form`, an app's `security` →
+     * `securityPolicy`, a model type's `dmn` → `decision`. The one normalisation every lookup by kind
+     * goes through — resolution here, the platform's own models in the graph builder.
+     */
+    internal fun modelKind(kind: String): String {
+        val norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
+        return KIND_ALIASES[norm] ?: ModelKinds.NORMALIZE_TYPE[norm] ?: norm
+    }
+
     /** A value that is exactly one `${ident}` / `#{ident}` — the only shape we best-effort resolve. */
-    private val SIMPLE_EXPR_RE = Regex("^[#$]\\{\\s*([A-Za-z_]\\w*)\\s*}$")
 
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
     private val STR_LIT_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
     private val ROOT_IDENT_RE = Regex("(?<![\\w.\$])([A-Za-z_]\\w*)")
-    private val MUSTACHE_HEAD_RE = Regex("^\\$?([A-Za-z_]\\w*)")
+    private val MUSTACHE_HEAD_RE = Regex("^([A-Za-z_]\\w*)")   // a `$` root is the forms runtime's, no variable
+    private val NS_CALL_AFTER_RE = Regex("^:[A-Za-z_]\\w*\\s*\\(")
     private val DATA_OBJ_KEY_RE = Regex("dataObjectDefinitionKey=([A-Za-z0-9_.\\-]+)")
     private val QUERY_PATH_RE = Regex("/query/([A-Za-z0-9_.\\-]+)")
     private val IDENT_RE = Regex("[A-Za-z_]\\w*")
 
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
-    private val MUSTACHE_IGNORE = setOf(
-        "endpoints", "item", "index", "ctx", "root", "parent", "event", "self",
-        "first", "last", "start", "pageSize", "flw", "payload", "temp", "filter",
-        "sortColumn", "sortDirection", "orderBy", "sortBy", "total", "response",
-        "page", "size", "data", "value", "params",
-    )
+    private val MUSTACHE_IGNORE = Constants.FRONTEND_SCRATCH_ROOTS
 
     /**
      * Run the full tail. Mutates [result] and [ctx] in place. [relOf] turns a discovered file into the
@@ -108,14 +148,37 @@ object ReferenceResolver {
         // Global `static final String` constants (simple name → value) and per-class data-object
         // operation calls, collected during the java pass and resolved into op-uses just below.
         val javaConstants = LinkedHashMap<String, String>()
+        val constantsByFile = HashMap<String, Map<String, String>>()
+        val constantsByType = HashMap<String, Map<String, String>>()
+        val ambiguousTypes = HashSet<String>()
+        // A simple name two classes give different values: resolving through it would be a guess.
+        val ambiguousConstants = HashSet<String>()
         val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
+        // fqn → (service keys it names, raw; operation keys it names; its own string-constant values)
+        val javaServiceCalls = LinkedHashMap<String, Triple<List<String>, List<String>, Collection<String>>>()
         // Simple class names shared by more than one class — resolving through them is a guess
-        // (first-wins), so any ref that falls back to such a name is flagged `suspect`.
+        // (first-wins), so any ref that falls back to such a name is flagged `suspect`. The same for a
+        // bean name two classes both claim (`@Component("x")` twice, or a factory method of that name).
         val ambiguousSimple = HashSet<String>()
+        val ambiguousBeans = HashSet<String>()
+        // A type a file declares besides its primary one — the second class of a Kotlin file, a nested
+        // `@Component` — by `pkg.T`, or for a nested one by `pkg.Outer$T` (the binary name `flowable:class`
+        // loads) and, as names that find it but would not load, `pkg.Outer.T` and `pkg.T`; and by its simple
+        // name. Kept out of [fqnIndex] on purpose: that index is the set of Java nodes, one per file, and a
+        // reference through an alias lands on its file's node.
+        val typeAlias = HashMap<String, TypeAlias>()
+        val aliasSimple = HashMap<String, TypeAlias>()
+        fun alias(name: String, a: TypeAlias) {
+            val prev = typeAlias[name]
+            if (prev == null || a.loads && !prev.loads) typeAlias[name] = a
+        }
         for (path in javas) {
             val rel = relOf(path)
-            val srcText = String(path.readBytes(), Charsets.UTF_8)
+            // The read is inside the try as well: one unreadable source used to abort the whole run
+            // with a stack trace instead of costing that one file.
+            val srcText: String
             val jc: Map<String, Any?> = try {
+                srcText = String(path.readBytes(), Charsets.UTF_8)
                 JavaParser.parseJava(srcText, rel)
             } catch (e: Exception) {
                 diag("java", rel, e.message ?: e.toString())
@@ -123,14 +186,28 @@ object ReferenceResolver {
             }
             val primary = jc["primary"] as String
             val fqn = jc["fqn"] as String
-            for (b in jc["beanNames"] as Collection<String>) beanIndex.putIfAbsent(b, jc)
-            if (classIndex.putIfAbsent(primary, jc) != null) ambiguousSimple.add(primary)
+            for (b in jc["beanNames"] as Collection<String>) if (beanIndex.putIfAbsent(b, jc) != null) ambiguousBeans.add(b)
+            if (classIndex.putIfAbsent(primary, jc) != null || primary in aliasSimple) ambiguousSimple.add(primary)
             fqnIndex[fqn] = jc
+            val pkg = (jc["package"] as? String).orEmpty().let { if (it.isEmpty()) "" else "$it." }
+            val nestedIn = jc["nestedIn"] as? Map<String, String> ?: emptyMap()
+            for (t in (jc["typeLines"] as? Map<String, Any?>)?.keys.orEmpty()) {
+                if (t == primary) continue
+                val outer = nestedIn[t]
+                if (outer == null) alias("$pkg$t", TypeAlias(jc, t, loads = true))
+                else {
+                    alias("$pkg$outer$$t", TypeAlias(jc, t, loads = true))
+                    for (name in listOf("$pkg${outer.replace('$', '.')}.$t", "$pkg$t")) alias(name, TypeAlias(jc, t, loads = false))
+                }
+                if (aliasSimple.putIfAbsent(t, TypeAlias(jc, t, loads = true)) != null || t in classIndex) ambiguousSimple.add(t)
+            }
             for (ep in jc["endpoints"] as List<Map<String, Any?>>) {
                 val ep2 = LinkedHashMap(ep)
                 ep2["file"] = rel
-                ep2["controller"] = primary
-                ep2["controllerFqn"] = fqn
+                // the annotated type, which need not be the file's first
+                val ctl = (ep["controller"] as? String) ?: primary
+                ep2["controller"] = ctl
+                ep2["controllerFqn"] = if (ctl == primary) fqn else fqn.substringBeforeLast('.', "").let { if (it.isEmpty()) ctl else "$it.$ctl" }
                 bucketList("endpoints").add(ep2)
             }
             if (jc["isController"] as Boolean) bucketList("javaControllers").add(jc)
@@ -138,9 +215,88 @@ object ReferenceResolver {
             for (role in jc["roles"] as Collection<String>) {
                 javaByRole.getOrPut(role) { ArrayList() }.add(jc)
             }
-            for ((n, v) in JavaParser.stringConstants(srcText)) javaConstants.putIfAbsent(n, v)
+            val ownConstants = JavaParser.stringConstants(srcText)
+            for ((n, v) in ownConstants) {
+                val prev = javaConstants.putIfAbsent(n, v)
+                if (prev != null && prev != v) ambiguousConstants.add(n)
+            }
+            constantsByFile[fqn] = ownConstants
+            // every type the file declares may hold them — a text scan cannot tell a nested holder apart
+            for (t in (jc["types"] as? List<*>).orEmpty()) {
+                val t2 = t as? String ?: continue
+                if (constantsByType.containsKey(t2) && constantsByType[t2] != ownConstants) ambiguousTypes.add(t2)
+                constantsByType.putIfAbsent(t2, ownConstants)
+            }
             val ops = JavaParser.dataObjectOpCalls(srcText)
             if (ops.isNotEmpty()) javaOpCalls[fqn] = ops
+            val (svcKeys, svcOps) = JavaParser.serviceInvocations(srcText)
+            if (svcOps.isNotEmpty()) javaServiceCalls[fqn] = Triple(svcKeys, svcOps, ownConstants.values)
+        }
+
+        /**
+         * The value of a string constant as the class [fromFqn] writes it: a literal is itself; `Owner.NAME`
+         * is `Owner`'s constant, and nothing when the project declares no `Owner` — a library's key class is
+         * not the project's namesake; a bare `NAME` is the class's own, a statically imported one, or the
+         * one constant of that name in the project. A name two classes define differently stays unresolved.
+         */
+        fun resolveConst(ref: String, fromFqn: String?): String? {
+            val r = ref.trim()
+            if (r.length >= 2 && r.startsWith('"') && r.endsWith('"')) return r.substring(1, r.length - 1)
+            val name = r.substringAfterLast('.')
+            if (!IDENT_RE.matches(name)) return null
+            if ('.' in r) {
+                val owner = r.substringBeforeLast('.').substringAfterLast('.')
+                if (owner in ambiguousTypes) return null
+                return constantsByType[owner]?.get(name)
+            }
+            fromFqn?.let { constantsByFile[it]?.get(name) }?.let { return it }
+            for (si in (fromFqn?.let { fqnIndex[it] }?.get("staticImports") as? List<*>).orEmpty()) {
+                val imp = si as? String ?: continue
+                val owner = when {
+                    imp.endsWith(".$name") -> imp.substringBeforeLast('.')
+                    imp.endsWith(".*") -> imp.removeSuffix(".*")
+                    else -> continue
+                }.substringAfterLast('.')
+                constantsByType[owner]?.get(name)?.let { return if (owner in ambiguousTypes) null else it }
+            }
+            return if (name in ambiguousConstants) null else javaConstants[name]
+        }
+
+        // ---- Constants in mapping paths: `@RequestMapping(ApiPaths.BASE)` with the constant in another file.
+        // Resolved like a key constant; one nothing resolves — or a Spring `${…}` property — leaves the
+        // path unknown, and an unknown path is kept out of matching instead of matching as a variable.
+        for (ep in bucketList("endpoints")) {
+            @Suppress("UNCHECKED_CAST") val e = ep as MutableMap<String, Any?>
+            var path = e["path"] as? String ?: continue
+            if (JavaParser.PATH_CONST in path) {
+                path = Regex("${JavaParser.PATH_CONST}([^${JavaParser.PATH_CONST}]*)${JavaParser.PATH_CONST}").replace(path) { m ->
+                    val n = m.groupValues[1]
+                    resolveConst(n, e["controllerFqn"] as? String) ?: ("\${" + n + "}")
+                }
+                e["path"] = "/" + path.split("/").filter { it.isNotEmpty() }.joinToString("/")
+                // the resolved path may name a `{variable}` the constant hid from the parser
+                @Suppress("UNCHECKED_CAST")
+                (e["params"] as? List<Map<String, Any?>>)?.let { e["params"] = JavaParser.withPathVariables(e["path"] as String, it) }
+            }
+            if ("\${" in (e["path"] as String)) e["pathUnresolved"] = true
+        }
+
+        // ---- Constants at key positions: `.caseDefinitionKey(ModelConstants.MAIN_CASE)` names the model the
+        // constant's value names. Resolved now that every source is read, and recorded exactly like a
+        // literal at the same position, so the graph builder draws the same confident edge. A name two
+        // classes define differently stays unresolved rather than guessed.
+        for (jc in fqnIndex.values) {
+            val idents = jc["keyedIdents"] as? Collection<*> ?: continue
+            val keyed = jc["keyedStrings"] as? MutableSet<String> ?: continue
+            val strings = jc["strings"] as? MutableSet<String> ?: continue
+            val kinds = jc["keyedKinds"] as? MutableMap<String, MutableSet<String>>
+            val identKinds = jc["keyedIdentKinds"] as? Map<String, Set<String>>
+            for (id in idents) {
+                val n = id as? String ?: continue
+                val v = resolveConst(n, jc["fqn"] as? String) ?: continue
+                keyed.add(v); strings.add(v)
+                kinds?.getOrPut(v) { sortedSetOf() }?.addAll(identKinds?.get(n).orEmpty())
+            }
         }
 
         // ---- Java data-object operation calls (dataObjectRuntimeService…definitionKey(key).operation("op")) ----
@@ -148,16 +304,31 @@ object ReferenceResolver {
         // reference (a generated model-keys class field) — to a model key, then record it as an op-use so
         // the Java class shows up in the operation's "Used by" list (data objects resolve to their
         // backing service in the graph builder, exactly like the form/page data-source usages).
-        fun resolveDefKey(expr: String): String? {
-            val e = expr.trim()
-            if (e.length >= 2 && e.startsWith('"') && e.endsWith('"')) return e.substring(1, e.length - 1)
-            val simple = e.substringAfterLast('.')
-            return if (IDENT_RE.matches(simple)) javaConstants[simple] else null
-        }
         for ((fqn, calls) in javaOpCalls) {
             for (call in calls) {
-                val key = resolveDefKey(call["def"] ?: continue) ?: continue
-                ctx.addOpUse(fqn, "dataObject", key, call["op"])
+                val key = resolveConst(call["def"] ?: continue, fqn) ?: continue
+                ctx.addOpUse(fqn, "dataObject", key, resolveConst(call["op"] ?: continue, fqn) ?: continue)
+            }
+        }
+
+        // ---- Java service-registry invocations (…createServiceInvocationBuilder().serviceKey(s).operationKey("op")) ----
+        // The operation belongs to the class's service: the one its `.serviceKey(…)` names, or else the one
+        // a string constant of the class holds (a helper taking `SERVICE_KEY`). A class naming several
+        // services credits each operation to the one service that defines it, and to none when that is
+        // not decidable. Without this, an operation only Java calls was reported unused.
+        val serviceOps = HashMap<String, Set<String>>()
+        for (o in bucketList("services")) {
+            val svc = o as? Map<*, *> ?: continue
+            val key = svc["key"] as? String ?: continue
+            serviceOps[key] = (svc["operations"] as? List<*>).orEmpty().mapNotNullTo(HashSet()) { (it as? Map<*, *>)?.get("key") as? String }
+        }
+        for ((fqn, call) in javaServiceCalls) {
+            val (rawKeys, rawOps, ownConstants) = call
+            val named = rawKeys.mapNotNull { resolveConst(it, fqn) }.filter { it in serviceOps }.distinct()
+            val candidates = named.ifEmpty { ownConstants.filter { it in serviceOps }.distinct() }
+            for (op in rawOps.mapNotNull { resolveConst(it, fqn) }.distinct()) {
+                val target = candidates.filter { op in serviceOps.getValue(it) }.singleOrNull() ?: continue
+                ctx.addOpUse(fqn, "service", target, op)
             }
         }
 
@@ -168,20 +339,28 @@ object ReferenceResolver {
             for (it in items) if (seen.add(keyfn(it))) out.add(it)
             return out
         }
-        fun refKey(r: Map<String, Any?>) = listOf(r["from"], r["rel"], r["kind"], r["value"])
+        // The source's type is part of the identity: a case and its start form share a key, and the same
+        // reference from both is two references — collapsed, the form's one was credited to the case.
+        fun refKey(r: Map<String, Any?>) = listOf(
+            (r["fromType"] as? String)?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it }, r["from"], r["rel"], r["kind"], r["value"],
+        )
 
         replaceInPlace(ctx.refs, dedupe(ctx.refs, ::refKey))
         replaceInPlace(ctx.dynamicRefs, dedupe(ctx.dynamicRefs, ::refKey))
-        replaceInPlace(ctx.restCalls, dedupe(ctx.restCalls) { rc -> listOf(rc["source"], rc["where"], rc["url"]) })
+        replaceInPlace(ctx.restCalls, dedupe(ctx.restCalls) { rc -> listOf(rc["sourceId"] ?: rc["source"], rc["where"], rc["url"]) })
         for (bucket in ModelKinds.MODEL_BUCKETS) {
             val cur = bucketList(bucket)
+            // Identity is (type, key), never the key alone: a form and a page, or a query and a
+            // template, share a bucket and may legitimately share a key — the second one used to be
+            // dropped here as a "duplicate", without a trace.
             replaceInPlace(cur, dedupe(cur) { o ->
-                val k = (o as? Map<*, *>)?.get("key")
-                if (k is String && k.isNotEmpty()) k else Any()
+                val m = o as? Map<*, *>
+                val k = m?.get("key")
+                if (k is String && k.isNotEmpty()) listOf(m["modelType"] ?: bucket, k) else Any()
             })
         }
         replaceInPlace(ctx.access, dedupe(ctx.access) { a ->
-            listOf(a["model"], a["scope"], a["action"], a["groups"], a["users"])
+            listOf(a["modelType"], a["model"], a["scope"], a["action"], a["groups"], a["users"])
         })
 
         // ---- Platform query URLs carry model references in their query string / path ----
@@ -189,13 +368,14 @@ object ReferenceResolver {
             val url = (rc["url"] as? String) ?: ""
             val source = rc["source"]
             val sourceFile = (rc["sourceFile"] as? String) ?: ""
-            // The originating model type follows the call's kind — an http-task URL comes from a
-            // process, a service-op URL from a service model, everything else from a form/page.
-            val srcType = when (rc["kind"]) {
-                "service-op" -> "service"
-                "http-task" -> "process"
-                else -> "form"
-            }
+            // The originating model type is the one the call was recorded under; the kind is only the
+            // fallback for a record without it (a page's call is not a form's).
+            val srcType = (rc["sourceId"] as? String)?.substringBefore(':', "")?.takeIf { it.isNotEmpty() }
+                ?: when (rc["kind"]) {
+                    "service-op" -> "service"
+                    "http-task" -> "process"
+                    else -> "form"
+                }
             for (m in DATA_OBJ_KEY_RE.findAll(url)) {
                 ctx.addRef(source, srcType, sourceFile, "queries-dataObject", "dataObject", m.groupValues[1])
             }
@@ -205,84 +385,127 @@ object ReferenceResolver {
         }
         replaceInPlace(ctx.refs, dedupe(ctx.refs, ::refKey))
 
+        // ---- Beans vs variables ----
+        // `${x.method()}` reads like a bean call and like a method on a variable's value — `${issue.asText()}`,
+        // `${attachments.size()}` — and the harvest cannot tell them apart. Every such root used to be a
+        // bean: on four real projects 25 variables vanished from the variable graph and stood in the
+        // "review — unresolved" list as beans nobody could find, and 15 service tasks reading a variable
+        // were calls out of the engine. A root is a bean when something says so: the platform declares
+        // it, Java declares it, a delegate expression names it bare, or its name is shaped like a bean's
+        // ([Constants.looksLikeBeanName] — the one signal a Java-less Design export leaves). Everything
+        // else is a variable, and the variable pass records the read.
+        val declaredBeans = ctx.refs.asSequence()
+            .filter { it["kind"] == "bean" && !isCallRel(it["rel"] as String) }
+            .map { it["value"] as String }.toSet()
+        // A class named like the root is no bean by that fact: Spring names a bean only what a stereotype,
+        // a `@Bean` method or Spring Data declares — all in [beanIndex]. `${order.getTotal()}` with a POJO
+        // `Order` in the project read `order` as a bean call and lost the variable.
+        fun isBean(name: String): Boolean =
+            name in Constants.FLOWABLE_PLATFORM_BEANS || name in beanIndex || name in declaredBeans ||
+                Constants.looksLikeBeanName(name)
+
         // ---- Resolve references ----
         val resolved = ArrayList<Map<String, Any?>>()
         val unresolved = ArrayList<Map<String, Any?>>()
         for (ref in ctx.refs) {
             val kind = ref["kind"] as String
             val value = ref["value"] as String
+            // A method call on something that is not a bean is a variable read: nothing to resolve, and
+            // no bean to report as unresolved.
+            if (kind == "bean" && isCallRel(ref["rel"] as String) && !isBean(value)) continue
             var target: String? = null
             val ref2 = LinkedHashMap(ref)
             when {
                 kind.startsWith("model:") || kind in MODEL_KIND_NAMES -> {
-                    var norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
-                    norm = ModelKinds.NORMALIZE_TYPE[norm] ?: norm
+                    val norm = modelKind(kind)
                     target = modelIndex[norm to value]
                     ref2["target"] = target
                     ref2["targetType"] = "model"
+                    // The resolved node type travels with the ref: the graph builder used to look the
+                    // target up by key alone, so a formKey naming `orderX` landed on the *process*
+                    // `orderX` whenever both existed — a clean-looking edge to the wrong model.
+                    if (target != null) ref2["targetNodeType"] = norm
                     if (target == null && value in byKey) {
-                        // Fallback across model types: prefer a same-type entry, then a semantically
-                        // compatible one ([FALLBACK_COMPAT]) — anything else stays resolvable but is
-                        // flagged `suspect` so impossible edges are visible instead of looking clean.
+                        // Fallback across model types: a same-type entry, then a compatible one
+                        // ([FALLBACK_COMPAT], process↔case only where the relation allows both). Any
+                        // other type of that key is another model, and the reference stays missing.
                         val entries = byKey[value]!!
-                        val compat = FALLBACK_COMPAT[norm] ?: emptySet()
+                        val compat = (FALLBACK_COMPAT[norm] ?: emptySet()) +
+                            (if (ref["rel"] in PROCESS_OR_CASE_RELS && norm in PROCESS_OR_CASE) PROCESS_OR_CASE - norm else emptySet())
                         val match = entries.firstOrNull { it.first == norm }
                             ?: entries.firstOrNull { it.first in compat }
-                            ?: entries[0]
-                        target = match.second
-                        ref2["target"] = target
-                        if (match.first != norm) {
-                            ref2["fallbackType"] = match.first
-                            if (match.first !in compat) ref2["suspect"] = true
+                        if (match != null) {
+                            target = match.second
+                            ref2["target"] = target
+                            ref2["targetNodeType"] = match.first
+                            if (match.first != norm) ref2["fallbackType"] = match.first
                         }
                     }
                 }
                 kind == "bean" -> {
-                    val cap = if (value.isNotEmpty()) value[0].uppercaseChar() + value.substring(1) else value
-                    val jc = beanIndex[value] ?: classIndex[cap]
-                    target = if (jc != null) "${jc["file"]}:${jc["line"]} (${jc["fqn"]})" else null
+                    // Only a declared bean name: a class that merely has the name's shape declares none,
+                    // and one with an explicit name (`@Service("other")`) answers to that name only.
+                    val jc = beanIndex[value]
+                    // A factory bean points at its @Bean method, not at the configuration class's header —
+                    // and *is* the type that method returns, when that is a project class: the configuration
+                    // class declares none of the methods a model calls on it. A bean of a library type (a
+                    // `JavaDelegate` lambda) stays with the class whose factory defines it, marked `factory`
+                    // so no method of it is credited to that class.
+                    val factoryType = (jc?.get("beanTypes") as? Map<*, *>)?.get(value) as? String
+                    val beanType = factoryType?.let { JavaTypes.resolve(it, jc, fqnIndex.keys) }
+                    val targetFqn = beanType ?: jc?.get("fqn")
+                    // a stereotype on a type other than the file's primary one: its declaration, by its name
+                    val owner = (jc?.get("beanOwners") as? Map<*, *>)?.get(value) as? String
+                    val line = (jc?.get("beanMethods") as? Map<*, *>)?.get(value)
+                        ?: owner?.let { typeLine(jc, it) } ?: jc?.get("line")
+                    val shown = if (owner != null && beanType == null) typeName(jc!!, owner) else targetFqn
+                    target = if (jc != null) "${jc["file"]}:$line ($shown)" else null
                     ref2["target"] = target
                     ref2["targetType"] = "bean"
-                    ref2["targetFqn"] = jc?.get("fqn")
-                    // Resolved through a shared simple name — first-wins guess, keep it flagged.
-                    if (jc != null && beanIndex[value] == null && cap in ambiguousSimple) ref2["suspect"] = true
+                    ref2["targetFqn"] = targetFqn
+                    if (jc != null && (jc["beanMethods"] as? Map<*, *>)?.containsKey(value) == true && beanType == null) ref2["factory"] = true
+                    // a bean name two classes claim — a first-wins guess, so keep it flagged
+                    if (jc != null && value in ambiguousBeans) ref2["suspect"] = true
                 }
                 kind == "class" -> {
-                    val simple = value.substringAfterLast('.')
-                    val jc = fqnIndex[value] ?: classIndex[simple]
-                    target = if (jc != null) "${jc["file"]}:${jc["line"]}" else null
+                    // the binary name of a nested class is `Outer$Inner`; its simple name is what follows the `$`
+                    val simple = value.substringAfterLast('.').substringAfterLast('$')
+                    val byFqn = fqnIndex[value]
+                    // a type that is not its file's primary one: the reference lands on the file's node, at
+                    // the type's own declaration — by a name of it, else (like a primary) by its simple one
+                    val named = if (byFqn == null) typeAlias[value] else null
+                    val alias = named ?: if (byFqn == null && classIndex[simple] == null) aliasSimple[simple] else null
+                    val exact = byFqn ?: named?.takeIf { it.loads }?.jc
+                    val jc = byFqn ?: named?.jc ?: classIndex[simple] ?: alias?.jc
+                    target = when {
+                        jc == null -> null
+                        alias != null -> "${jc["file"]}:${typeLine(jc, alias.type)} (${typeName(jc, alias.type)})"
+                        else -> "${jc["file"]}:${jc["line"]}"
+                    }
                     ref2["target"] = target
                     ref2["targetType"] = "class"
                     ref2["targetFqn"] = jc?.get("fqn")
-                    if (jc != null && fqnIndex[value] == null && simple in ambiguousSimple) ref2["suspect"] = true
+                    if (jc != null && exact == null && simple in ambiguousSimple) ref2["suspect"] = true
+                    // A qualified name that matched only by its simple name names a class in another
+                    // package — `org.flowable….Foo` from a library bound to the project's own `com.acme.Foo` —
+                    // and a nested type by its source spelling names one Flowable cannot load by that name.
+                    if (jc != null && exact == null && '.' in value) ref2["suspect"] = true
                 }
                 else -> {
                     ref2["target"] = null
                     ref2["targetType"] = kind
                 }
             }
+            // a reference its producer could not tell from another kind of value is no missing model
+            if (target == null && ref["ifResolved"] == true) continue
             (if (target != null) resolved else unresolved).add(ref2)
         }
 
-        // ---- Best-effort resolution of dynamic (expression-valued) references ----
-        // A model ref whose value is exactly `${ident}` resolves when `ident` is a project constant
-        // (`static final String`, e.g. a generated model-keys class) whose value is an indexed model
-        // key. Everything else keeps its expression text; either way the graph builder renders these
-        // as `dynamic` edges (resolved → the model, unresolved → an expression placeholder node).
-        for (ref in ctx.dynamicRefs) {
-            ref["dynamic"] = true
-            val kind = ref["kind"] as? String ?: continue
-            if (!(kind.startsWith("model:") || kind in MODEL_KIND_NAMES)) continue
-            var norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
-            norm = ModelKinds.NORMALIZE_TYPE[norm] ?: norm
-            val value = ref["value"] as? String ?: continue
-            val ident = SIMPLE_EXPR_RE.matchEntire(value)?.groupValues?.get(1) ?: continue
-            val candidate = javaConstants[ident] ?: continue
-            val hit = modelIndex[norm to candidate] ?: continue
-            ref["resolvedValue"] = candidate
-            ref["target"] = hit
-            ref["targetType"] = "model"
-        }
+        // ---- Dynamic (expression-valued) references ----
+        // Rendered as `dynamic` edges to an expression placeholder node. They are not resolved: `${SUB}`
+        // reads a variable or a bean when the engine evaluates it, never a Java constant of that name,
+        // so linking it through one (as this once did) drew an edge to whichever model the constant names.
+        for (ref in ctx.dynamicRefs) ref["dynamic"] = true
 
         // Must land in result BEFORE the graph step — it reads unresolvedRefs.
         result["resolvedRefs"] = resolved
@@ -292,14 +515,15 @@ object ReferenceResolver {
         // ---- Resolve REST calls -> code endpoints ----
         val codeEndpoints = bucketList("endpoints") as List<Map<String, Any?>>
         for (rc in ctx.restCalls) {
-            val matchEps = JavaParser.matchRest(rc["url"] as? String, codeEndpoints)
+            // the call's verb too: a GET is not answered by the POST handler on the same path
+            val matchEps = JavaParser.matchRest(rc["url"] as? String, codeEndpoints, rc["method"] as? String)
             rc["_matchEps"] = matchEps
             fun describe(m: Map<String, Any?>) =
-                "${m["http"]} ${m["path"]} -> ${m["controller"]}#${m["handler"]} (${m["file"]}:${m["line"]})"
-            // Clean (segment-suffix) and loose (shared-last-literal-segment) hits are kept apart: a loose
-            // hit is a guess, and reporting it as "served by" states something untrue — e.g. a call to
-            // `…/customers/{{id}}/canEdit` loosely matches `GET /api/customers` on the shared `customers`
-            // segment. [JavaParser.matchRest] annotates them; only the graph honoured that until now.
+                "${m["http"]} ${m["path"]} -> ${m["controller"]}#${m["handler"]} (${m["file"]}:${m["line"]})" +
+                    (if (m["methodMismatch"] == true) " (verb differs)" else "")
+            // A path hit whose handler serves another verb is kept apart from the real matches: the call
+            // does reach that path, but reporting it as "served by" states something untrue.
+            // [JavaParser.matchRest] marks it `loose`.
             val (loose, clean) = matchEps.partition { it["loose"] == true }
             rc["matches"] = clean.map(::describe)
             rc["looseMatches"] = loose.map(::describe)
@@ -314,7 +538,9 @@ object ReferenceResolver {
             body = STR_LIT_IN_EXPR_RE.replace(body, " ")   // drop string literals
             for (bm in Constants.METHOD_CALL_FULL_RE.findAll(body)) {
                 val b = bm.groupValues[1]
-                if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) {
+                // a call on a variable's value (`${order.getTotal()}`) leaves `order` to the identifier
+                // scan below, where it is the variable it always was
+                if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS && isBean(b)) {
                     beans.add(b)
                     beanMethods.getOrPut(b) { LinkedHashSet() }.add(bm.groupValues[2])
                 }
@@ -323,14 +549,25 @@ object ReferenceResolver {
                 val n = im.groupValues[1]
                 val after = body.substring(im.range.last + 1).trimStart()
                 if ((after.isNotEmpty() && after[0] == '(') ||
+                    // an EL function's namespace (`json:object(`), a lambda's parameter (`x -> …`)
+                    NS_CALL_AFTER_RE.containsMatchIn(body.substring(im.range.last + 1)) || after.startsWith("->") ||
                     n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS
                 ) continue
                 variables.add(n)
             }
+            // `${root.x}` reads `x` of the root instance — the rule the graph builder applies, so this list
+            // and the variable nodes agree
+            for ((_, n) in Constants.hierarchyReads(body, Constants.HIERARCHY_TOKENS)) {
+                if (n !in Constants.INSTANCE_FIELDS) variables.add(n)
+            }
         }
         for (ph in ctx.mustache) {
-            val m = MUSTACHE_HEAD_RE.find(ph.trim('{', '}', ' ').trim())
+            val inner = ph.trim('{', '}', ' ').trim()
+            val m = MUSTACHE_HEAD_RE.find(inner)
             if (m != null && m.groupValues[1] !in MUSTACHE_IGNORE) variables.add(m.groupValues[1])
+            for ((_, n) in Constants.hierarchyReads(STR_LIT_IN_EXPR_RE.replace(inner, " "), Constants.FRONTEND_HIERARCHY_TOKENS)) {
+                if (n !in Constants.INSTANCE_FIELDS) variables.add(n)
+            }
         }
 
         // ---- Result-section assembly ----
@@ -349,8 +586,11 @@ object ReferenceResolver {
         result["javaByRole"] = javaByRole
         result["customFunctions"] = null
 
+        val knownBeans = LinkedHashSet<String>().apply {
+            addAll(Constants.FLOWABLE_PLATFORM_BEANS); addAll(beanIndex.keys); addAll(declaredBeans); addAll(beans)
+        }
         // `fqnIndex` is Python's `all_java` (both are `map[jc.fqn] = jc`, same loop, last wins).
-        return Resolved(resolved, fqnIndex, beanMethods)
+        return Resolved(resolved, fqnIndex, beanMethods, knownBeans)
     }
 
     /** Replace the contents of [dst] with [src] in place (the Python `ctx[..] = _dedupe(..)` idiom). */

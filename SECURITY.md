@@ -40,10 +40,18 @@ is fine, but knowing the reasoning first will save you time.
   targets a base URL you configured. Nothing contacts Flowable AG.
 - **XML is parsed with DTDs and external entities disabled** — see `AtlasXml` and
   `ModelMemberExtractor`. Model files are treated as untrusted input.
+- **What a run reads is bounded, and stays inside the analysed folder.** A model above the per-file
+  limit is skipped, the changelog and template text one run keeps has a ceiling, and a symbolic link
+  out of the folder is not followed. A skipped model, text past the ceiling, and a link to a folder or
+  to a file of a kind Atlas reads are each a `skip` diagnostic rather than silence. See
+  [Health checks](https://kle-dev.github.io/flw-atlas/checks/) and the
+  [CLI](https://kle-dev.github.io/flw-atlas/cli/).
 - **Generated artifacts contain your project's data by construction.** An `.explorer.html` embeds
   model keys, expressions, and code references. It is a report about your repository; treat sharing
   one the way you would treat sharing the repository. `.gitignore` keeps them out of this repo for
-  that reason.
+  that reason. The one thing they leave out is a credential written into a model: the value a
+  [`hardcodedSecrets`](https://kle-dev.github.io/flw-atlas/checks/) finding points at — a literal
+  password, the credentials in a URL — appears as `***`.
 - **The plugin requires a restart on install/update** (`require-restart="true"`). It registers
   languages and file types, which cannot be loaded dynamically.
 

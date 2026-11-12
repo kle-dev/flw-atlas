@@ -2,9 +2,10 @@ package com.flowable.atlas
 
 import com.flowable.atlas.inspection.FlowableBrokenKeyInspection
 import com.flowable.atlas.liquibase.LiquibaseCoverageInspection
+import com.intellij.codeInsight.lookup.LookupElementPresentation
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.TestDialogManager
 import com.intellij.openapi.ui.TestInputDialog
-import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
@@ -59,6 +60,8 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         )
         myFixture.completeBasic()
         assertTrue(myFixture.lookupElementStrings.orEmpty().contains("orderPlaced"))
+        // A message is a named definition — it wears the constant icon, like every other vocabulary item.
+        assertSame(AllIcons.Nodes.Constant, iconOf("orderPlaced"))
     }
 
     fun testVariableNameCompletionAtArgOne() {
@@ -112,6 +115,13 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         assertTrue("expected unknown-key warning", infos.any { (it.description ?: "").contains("is not a known") })
     }
 
+    /** A pull's *Find broken references* runs this inspection by the short name plugin.xml registers. */
+    fun testThePullBalloonNamesTheBrokenKeyInspectionAsRegistered() {
+        val ep = com.intellij.codeInspection.LocalInspectionEP.LOCAL_INSPECTION.extensionList
+            .singleOrNull { it.shortName == com.flowable.atlas.design.DesignPullService.BROKEN_KEY_INSPECTION }
+        assertEquals(FlowableBrokenKeyInspection::class.java.name, ep?.implementationClass)
+    }
+
     fun testBrokenKeyInspectionAcceptsKnown() {
         addStubs()
         myFixture.addFileToProject("models/DEMO-C001.cmmn", """<definitions><case id="DEMO-C001" name="C"/></definitions>""")
@@ -150,7 +160,10 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable key reference", ref)
         val target = ref!!.resolve()
-        assertTrue("reference must resolve to the model file", target is PsiFile && target.name == "DEMO-C001.cmmn")
+        assertEquals("reference must resolve into the model file", "DEMO-C001.cmmn", target?.containingFile?.name)
+        // …and onto the key's declaration, not line 1: the `id` of the case element
+        val text = target!!.containingFile.text
+        assertEquals(text.indexOf("DEMO-C001"), target.textRange.startOffset + (target.text.indexOf("DEMO-C001").coerceAtLeast(0)))
     }
 
     /** A data object + its backing service, declaring the operation `create` with input `label`. */
@@ -182,7 +195,7 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable operation reference", ref)
         val target = ref!!.resolve()
-        assertTrue("operation must resolve to the backing service model", target is PsiFile && target.name == "DEMO-S010.service")
+        assertEquals("operation must resolve into the backing service model", "DEMO-S010.service", target?.containingFile?.name)
     }
 
     fun testValueFieldReferenceResolvesToBackingServiceModel() {
@@ -195,7 +208,7 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable value-field reference", ref)
         val target = ref!!.resolve()
-        assertTrue("value field must resolve to the backing service model", target is PsiFile && target.name == "DEMO-S010.service")
+        assertEquals("value field must resolve into the backing service model", "DEMO-S010.service", target?.containingFile?.name)
     }
 
     private fun addDatabaseService() {
@@ -225,7 +238,13 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
                </databaseChangeLog>""",
         )
         val infos = myFixture.doHighlighting()
-        assertTrue("expected BOGUS_ flagged", infos.any { (it.description ?: "").contains("is not mapped") })
+        val finding = infos.firstOrNull { (it.description ?: "").contains("is not mapped") }
+        assertNotNull("expected BOGUS_ flagged", finding)
+        // The message names the service it compared against, not "the backing model".
+        assertTrue(finding!!.description, finding.description.contains("'DEMO-S010'"))
+        // …and offers the way out: the service model whose mappings decide.
+        val fixes = myFixture.getAllQuickFixes().map { it.text }
+        assertTrue("expected the open-service fix among $fixes", "Open the Flowable service model 'DEMO-S010'" in fixes)
     }
 
     fun testLiquibaseColumnCompletion() {
@@ -243,9 +262,15 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         )
         myFixture.completeBasic()
         val strings = myFixture.lookupElementStrings.orEmpty()
+        assertSame(AllIcons.Nodes.DataColumn, iconOf(strings.first { it.endsWith("_") }))
         assertTrue("expected physical column ID_ among $strings", strings.contains("ID_"))
         assertTrue("expected physical column LABEL_ among $strings", strings.contains("LABEL_"))
     }
+
+    /** The rendered icon of the lookup item [lookupString], or null when it is not offered. */
+    private fun iconOf(lookupString: String): javax.swing.Icon? =
+        myFixture.lookupElements.orEmpty().firstOrNull { it.lookupString == lookupString }
+            ?.let { val p = LookupElementPresentation(); it.renderElement(p); p.icon }
 
     fun testLiquibaseColumnTypeCompletion() {
         addDatabaseService()
@@ -265,6 +290,34 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         // COUNT_ maps to LONG → bigint, ranked first (the palette is offered as fallback too).
         assertEquals("mapped type must rank first: $strings", "bigint", strings.firstOrNull())
         assertTrue("varchar palette entry expected too: $strings", strings.any { it.contains("varchar.type") })
+    }
+
+    fun testLiquibaseCoverageHonoursADropInALaterVersionFolder() {
+        addDatabaseService()
+        myFixture.enableInspections(LiquibaseCoverageInspection::class.java)
+        // v3 drops FAX_: the table the service maps no longer has it, so v2's declaration is no gap
+        myFixture.addFileToProject(
+            "src/main/resources/db/changelog/v3/order.xml",
+            """<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+                 <changeSet id="2" author="demo"><dropColumn tableName="DB_ORDER" columnName="FAX_"/></changeSet>
+               </databaseChangeLog>""",
+        )
+        val v2 = myFixture.addFileToProject(
+            "src/main/resources/db/changelog/v2/order.xml",
+            """<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+                 <changeSet id="1" author="demo">
+                   <createTable tableName="DB_ORDER">
+                     <column name="ID_" type="varchar(255)"/>
+                     <column name="FAX_" type="varchar(255)"/>
+                     <column name="BOGUS_" type="varchar(255)"/>
+                   </createTable>
+                 </changeSet>
+               </databaseChangeLog>""",
+        )
+        myFixture.configureFromExistingVirtualFile(v2.virtualFile)
+        val flagged = myFixture.doHighlighting().mapNotNull { it.description }.filter { it.contains("is not mapped") }
+        assertTrue("BOGUS_ stays in the table: $flagged", flagged.any { it.contains("'BOGUS_'") })
+        assertFalse("FAX_ is dropped in v3: $flagged", flagged.any { it.contains("'FAX_'") })
     }
 
     fun testLiquibaseCoverageAcceptsMappedColumns() {

@@ -31,7 +31,9 @@ class FlowableExprUnknownFunctionInspection : LocalInspectionTool() {
         if (file !is FlowableExprFile) return null
         val dialect = dialectOf(file.language) ?: return null
         val allowlist = FlowableAtlasProjectSettings.getInstance(file.project)
-        val custom = FlowableCustomFunctions.getInstance(file.project).catalog()
+        // Not read yet: judging now would call the project's own functions unknown. The daemon runs
+        // again once the catalog lands.
+        val custom = (FlowableCustomFunctions.getInstance(file.project).readyOrRequest() ?: return null).catalog
         val problems = ExpressionValidator.validateSemantics(file.text, dialect, custom)
             .filterNot { allowlist.isAllowlisted(it) }
         if (problems.isEmpty()) return null

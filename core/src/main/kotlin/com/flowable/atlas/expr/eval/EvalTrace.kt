@@ -43,6 +43,10 @@ data class TraceEntry(
     /** 0 = the whole expression; children of the root operator are 1, and so on. */
     val depth: Int,
     val outcome: TraceOutcome,
+    /** The operator of a binary node (`||`, `==`, `+`, …) or `|>` for a pipe; null for every other kind.
+     *  `a || b || c` parses as `(a || b) || c`: a consumer that wants the operands of a chain as
+     *  siblings recognises the inner `a || b` as a link of the same operator. */
+    val op: String? = null,
 )
 
 /** The overall result plus one [TraceEntry] per AST node in source (pre-)order. */
@@ -79,7 +83,8 @@ internal class TraceCollector {
         val out = ArrayList<TraceEntry>()
         fun walk(node: ExprNode, depth: Int) {
             val kind = kindOf(node) ?: return
-            out += TraceEntry(node.start + shift, node.end + shift, kind, depth, outcomes[node] ?: TraceOutcome.NotEvaluated)
+            val op = when (node) { is BinaryNode -> node.op; is PipeNode -> "|>"; else -> null }
+            out += TraceEntry(node.start + shift, node.end + shift, kind, depth, outcomes[node] ?: TraceOutcome.NotEvaluated, op)
             for (child in childrenOf(node)) walk(child, depth + 1)
         }
         walk(root, 0)

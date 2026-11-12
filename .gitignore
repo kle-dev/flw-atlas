@@ -10,6 +10,10 @@ APP_SUMMARY.*
 APP_EXPLORER.*
 *.CLAUDE.md
 /CLAUDE.md
+*.playwright.md
+*.playwright-map.md
+*.erd.html
+*.diagrams/
 
 # Screenshots / images
 screenshots/
@@ -25,7 +29,6 @@ email/
 .gradle/
 build/
 out/
-bin/
 *.iml
 .intellijPlatform/
 .kotlin/
@@ -33,12 +36,6 @@ bin/
 # Editor / OS
 .idea/
 .vscode/
-# .claude/ holds a mix of session-local state (settings.local.json, scheduled_tasks.lock, …) and
-# team-shared slash commands under .claude/commands/. Ignore everything by default, un-ignore
-# commands/ so the /narrate skill and its siblings travel with the repo.
-.claude/*
-!.claude/commands/
-.gitattributes
 .DS_Store
 
 # Release artifacts are NOT committed — they are attached to GitHub Releases instead.
@@ -64,3 +61,6 @@ lib/*.jar
 *.pem
 *.crt
 *.p12
+
+# Claude Code worktrees (full duplicate checkouts) — never staged, never grepped as source
+.claude/worktrees/

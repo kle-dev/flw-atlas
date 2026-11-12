@@ -39,6 +39,8 @@ object DataObjectKeyAtCaret {
         }
         val value = SiteMatching.constantValueOf(expr) ?: return null
         if (!ValueKeyMatching.plausible(value)) return null
+        // Availability is asked on every caret move: the cached index only, no request — the startup
+        // warm-up and every other consumer see to it that one exists.
         val index = project.service<FlowableModelIndexService>().cachedOrNull() ?: return null
         return value.takeIf { index.find(it, ModelType.DATA_OBJECT) != null }
     }

@@ -3,53 +3,43 @@ package com.flowable.atlas.settings
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.openapi.components.service
-import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.panel
 
 /**
- * Settings → Tools → Flowable Atlas: the root page with the application-wide core toggles.
- * Expression validation, generation output and the Design/Inspect connections live on the
- * project-level sub-pages (Expressions / Generation / Connections).
+ * Settings → Tools → Flowable Atlas: the root page with the application-wide toggles, most consequential
+ * first — what the index reads, what a string literal is taken for, what completion lists. Everything
+ * per project lives on the child pages (Environments / Expressions / Generation). The two inline hints
+ * are switched on the IDE's own Inlay Hints page and nowhere else: a second box here meant two switches
+ * the daemon had to honour separately.
  */
-class FlowableAtlasConfigurable : BoundSearchableConfigurable(
+class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
     FlowableAtlasBundle.message("configurable.atlas"),
-    helpTopic = "",
-    _id = "com.flowable.atlas.settings",
+    "com.flowable.atlas.settings",
 ) {
 
     override fun createPanel(): DialogPanel {
         val settings = FlowableAtlasSettings.getInstance()
         return panel {
-            group("Completion") {
+            group("Model Index") {
                 row {
-                    checkBox("List extra completion domains at an empty prefix")
+                    checkBox("Also index raw Flowable Design workspace sources")
                         .comment(
-                            "Messages, signals, variables, task/activity keys, DMN &amp; master-data fields and " +
-                                "form outcomes are always offered once you type a prefix; enable this to also list " +
-                                "them with no prefix typed (aggressive).",
+                            "By default deployment artifacts (.bpmn/.cmmn/.dmn/.form/.data/.service) are indexed, " +
+                                "and inside a .bar/.zip also the forms, pages, actions and data objects a Design " +
+                                "export keeps as form-models/*.json and the like. Enable this to also read loose " +
+                                "Design-workspace JSON (bpmn-models/, form-models/, …) checked into the repository. " +
+                                "The index, the preview, the outline and the file icons all follow this setting.",
                         )
-                        .bindSelected(settings::extraCompletions)
-                }
-            }
-            group("Inline Hints") {
-                row {
-                    checkBox("Data object table names")
-                        .comment(
-                            "Shows the physical table name inline next to a string literal that is a data-object " +
-                                "key. Hover/Ctrl-Q always shows it regardless of this setting.",
-                        )
-                        .bindSelected(settings::showDataObjectTableInlay)
-                }
-                row {
-                    checkBox("Action names")
-                        .comment(
-                            "Shows the action model's name inline next to a string literal that is an action " +
-                                "key — so an opaque key in a constants class reads as what it starts.",
-                        )
-                        .bindSelected(settings::showActionNameInlay)
+                        .bindSelected(settings::indexDesignWorkspace)
+                        .onApply {
+                            // The design-workspace toggle changes what gets indexed; drop cached indexes.
+                            ProjectManager.getInstance().openProjects.forEach {
+                                if (!it.isDisposed) it.service<FlowableModelIndexService>().invalidate()
+                            }
+                        }
                 }
             }
             group("Navigation") {
@@ -63,35 +53,30 @@ class FlowableAtlasConfigurable : BoundSearchableConfigurable(
                                 "a literal that happens to equal a short/common real key can also light up.",
                         )
                         .bindSelected(settings::recognizeModelKeysAnywhere)
-                        // Takes effect on the next highlighting pass (edit or reopen the file) — the same
-                        // way the index toggle above applies; no explicit daemon restart needed.
+                        // The gutter icons and references this decides are drawn by the highlighting pass,
+                        // and an open file does not get another one until something makes it — so make it.
+                        .onApply { restartHighlightingEverywhere("Flowable Atlas key recognition toggled") }
                 }
             }
-            group("Model Index") {
+            group("Completion") {
                 row {
-                    checkBox("Also index raw Flowable Design workspace sources")
+                    checkBox("List extra completion domains at an empty prefix")
                         .comment(
-                            "By default only exported deployment artifacts are indexed " +
-                                "(.bpmn/.cmmn/.dmn/.form/.data/.service, incl. inside .bar/.zip). Enable this to " +
-                                "also index the raw Design-workspace source JSON (bpmn-models/, form-models/, …) — " +
-                                "needed when the repository holds the Design export rather than deployment artifacts.",
+                            "Messages, signals, variables, task/activity keys, DMN &amp; master-data fields and " +
+                                "form outcomes are always offered once you type a prefix; enable this to also list " +
+                                "them with no prefix typed (aggressive).",
                         )
-                        .bindSelected(settings::indexDesignWorkspace)
-                        .onApply {
-                            // The design-workspace toggle changes what gets indexed; drop cached indexes.
-                            ProjectManager.getInstance().openProjects.forEach {
-                                if (!it.isDisposed) it.service<FlowableModelIndexService>().invalidate()
-                            }
-                        }
+                        .bindSelected(settings::extraCompletions)
                 }
             }
             row {
                 comment(
-                    "Expression validation and the project allowlist: <b>Expressions</b> · " +
-                        "artifact selection, output folder and model constants: <b>Generation</b> · " +
-                        "Flowable Design and Inspect: <b>Connections</b> (sub-pages of this one).<br>" +
-                        "Unknown-function warnings &amp; codebase grounding are inspections: " +
-                        "Settings → Editor → Inspections → Flowable.",
+                    // Environments are stored once per IDE (AtlasEnvironments is an application service) although
+                    // this page is a project configurable — so the line must not call all three "per project".
+                    "IDE-wide, on the page below: <b>Environments</b> (the servers). Per project: <b>Expressions</b> " +
+                        "(validation, allowlist, custom functions), <b>Generation</b> (what Atlas writes, and where).<br>" +
+                        "Inspections: Settings → Editor → Inspections → Flowable. Inline hints: Settings → Editor → " +
+                        "Inlay Hints → Values.",
                 )
             }
         }

@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "key": "claimAssessmentForm",
+    "name": "Claim assessment",
+    "modelType": "form"
+  },
+  "outcomevariablename": "assessmentOutcome",
+  "outcomes": [
+    {
+      "label": "Approve",
+      "value": "approve"
+    },
+    {
+      "label": "Reject",
+      "value": "reject"
+    }
+  ],
+  "rows": [
+    [
+      {
+        "id": "damageAmount",
+        "type": "decimal",
+        "label": "Damage amount",
+        "isRequired": true
+      }
+    ],
+    [
+      {
+        "id": "expertRequested",
+        "type": "boolean",
+        "label": "An expert opinion is needed"
+      }
+    ],
+    [
+      {
+        "id": "expertReport",
+        "type": "textarea",
+        "label": "Expert report",
+        "isRequired": "{{expertRequested}}",
+        "visible": "{{expertRequested}}"
+      }
+    ],
+    [
+      {
+        "id": "estimatePayout",
+        "type": "scriptButton",
+        "value": "{{estimatedPayout}}",
+        "enabled": "{{damageAmount > 0}}",
+        "extraSettings": {
+          "text": "Estimate payout",
+          "script": "{{damageAmount * 0.9}}"
+        }
+      }
+    ],
+    [
+      {
+        "id": "estimatedPayout",
+        "type": "decimal",
+        "label": "Estimated payout",
+        "enabled": false
+      }
+    ]
+  ]
+}

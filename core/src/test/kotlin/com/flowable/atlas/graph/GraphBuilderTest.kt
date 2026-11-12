@@ -47,9 +47,9 @@ class GraphBuilderTest {
     @Test
     fun dataObjectRelationEdge() {
         assertTrue(
-            "object-relation field mappings must become dataObject->dataObject edges",
+            "object-relation field mappings must become dataObject->masterData edges",
             edges().any {
-                it["s"] == "dataObject:customerDO" && it["t"] == "dataObject:priorityMD" && it["rel"] == "relates-to"
+                it["s"] == "dataObject:customerDO" && it["t"] == "masterData:priorityMD" && it["rel"] == "relates-to"
             },
         )
     }
@@ -70,7 +70,10 @@ class GraphBuilderTest {
     @Test
     @Suppress("UNCHECKED_CAST")
     fun masterDataFieldsExtracted() {
-        val md = dataObjects().first { it["key"] == "priorityMD" }
+        // a master-data list is its own kind and lives with the other structured-but-unbucketed models
+        @Suppress("UNCHECKED_CAST")
+        val md = (result["others"] as List<Map<String, Any?>>).first { it["key"] == "priorityMD" }
+        assertEquals("masterData", md["modelType"])
         assertEquals("masterData `variables` map must become fields", listOf("level", "color"), md["fields"])
         assertEquals("key", md["keyField"])
         assertEquals("priority", md["subType"])

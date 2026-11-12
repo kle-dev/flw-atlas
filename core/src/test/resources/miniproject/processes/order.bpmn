@@ -15,6 +15,9 @@
     <userTask id="approveTask" name="Approve order"
               flowable:candidateGroups="backoffice" flowable:formKey="orderForm">
       <documentation>Backoffice checks the order total before it ships.</documentation>
+      <extensionElements>
+        <flowable:sla-definition-key><![CDATA[approvalSla]]></flowable:sla-definition-key>
+      </extensionElements>
     </userTask>
     <sequenceFlow id="f3" sourceRef="approveTask" targetRef="notifyTask">
       <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${vars:bogus(}</conditionExpression>
@@ -23,7 +26,7 @@
                  flowable:delegateExpression="${notifierBean}">
       <extensionElements>
         <flowable:executionListener event="end">
-          <flowable:script scriptFormat="groovy">execution.setVariable('notified', true)</flowable:script>
+          <flowable:script language="groovy">execution.setVariable('notified', true)</flowable:script>
         </flowable:executionListener>
       </extensionElements>
     </serviceTask>

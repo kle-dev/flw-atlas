@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.completion
 
+import com.flowable.atlas.completion.AtlasLookups
 import com.flowable.atlas.completion.withLookupStrings
 import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.completion.KeyLookup
@@ -104,13 +105,19 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
          *  (`flowdemo` → `flowdemo.` + re-popup) and each bare top-level helper. `flw.*` custom members
          *  are offered after `flw.` (see [addFrontendMembers]). */
         private fun addCustomRoot(out: CompletionResultSet, project: com.intellij.openapi.project.Project) {
-            val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
+            val cat = FlowableCustomFunctions.getInstance(project).readyOrRequest()?.catalog ?: return
             for (ns in cat.namespaces.keys.sorted())
                 out.addElement(
                     LookupElementBuilder.create(ns).withIcon(AllIcons.Nodes.Plugin).withTypeText("custom", true)
                         .withTailText("  $ns.…", true).withInsertHandler(DotInsertHandler),
                 )
             for (fn in cat.topLevel.sorted()) out.addElement(customFnLookup(fn, cat.signatureOf(fn)))
+            // a literal value (`$isDesktop: true`) is read, not called: completed with `()` it failed at runtime
+            for (c in cat.constants.sorted())
+                out.addElement(
+                    LookupElementBuilder.create(c).withIcon(AllIcons.Nodes.Constant).withTypeText("custom value", true)
+                        .withLookupStrings(KeyLookup.searchTokens(c, null)),
+                )
         }
 
         /**
@@ -129,10 +136,11 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             }
             exclude += service.variables()   // real variables are offered separately, properly labelled
 
-            val projectScope = com.intellij.psi.search.GlobalSearchScope.projectScope(project)
+            val beans = com.flowable.atlas.usage.SpringBeans.byName(project)
             for (id in service.index().referencedIdentifiers) {
                 if (id.length < 2 || id in exclude) continue
-                val type = if (BackendBeanResolver.resolveClasses(id, project, projectScope).isNotEmpty()) "bean" else "referenced"
+                // labelled a bean only where the project declares one of that name
+                val type = if (id in beans) "bean" else "referenced"
                 out.addElement(referenceLookup(id, type))
             }
         }
@@ -167,7 +175,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 out.addElement(b)
             }
             // Project custom members: `flw.<custom>` and `<namespace>.<member>` from externals.additionalData.
-            val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
+            val cat = FlowableCustomFunctions.getInstance(project).readyOrRequest()?.catalog ?: return
             val qualify = if (receiver == FlowableExpressionCatalog.FRONTEND_NS) "flw." else "$receiver."
             val custom = if (receiver == FlowableExpressionCatalog.FRONTEND_NS) cat.flw else cat.namespaces[receiver]
             custom?.sorted()?.forEach { out.addElement(customFnLookup(it, cat.signatureOf(qualify + it))) }
@@ -201,8 +209,12 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 .withTailText("  ${prefix}:…", true)
                 .withInsertHandler(ColonInsertHandler)
 
+        // A scraped identifier sat iconless between iconed variables; a bean reads as the script
+        // contributor's bean, anything else as a name the engine resolves at runtime.
         private fun referenceLookup(name: String, typeText: String): LookupElement =
-            LookupElementBuilder.create(name).withTypeText(typeText, true)
+            LookupElementBuilder.create(name)
+                .withIcon(if (typeText == "bean") AtlasLookups.BEAN else AtlasLookups.REFERENCED)
+                .withTypeText(typeText, true)
 
         private fun variableLookup(name: String, label: String): LookupElement =
             LookupElementBuilder.create(name).withIcon(AllIcons.Nodes.Variable).withTypeText(label, true)
@@ -224,7 +236,8 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             val scoped = LinkedHashSet<String>()
             scopeModelKey(parameters, service)?.let { key ->
                 val members = if (dialect == ExpressionDialect.FRONTEND) {
-                    service.scopedMembers(key, listOf(ModelType.FORM))?.formFields
+                    // the variables the form binds — a `{{…}}` names `customerName`, never the component `text1`
+                    service.scopedMembers(key, listOf(ModelType.FORM, ModelType.PAGE))?.variables
                 } else {
                     service.scopedMembers(key, listOf(ModelType.PROCESS, ModelType.CASE))?.variables
                 }

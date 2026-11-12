@@ -1,43 +1,43 @@
 package com.flowable.atlas.script.toolwindow
 
-import com.flowable.atlas.expr.toolwindow.PlaygroundProblemsStrip
+import com.flowable.atlas.FlowableAtlasBundle.message
+import com.flowable.atlas.expr.toolwindow.PlaygroundSettingsGroup
+import com.flowable.atlas.expr.toolwindow.StackPanelsToggle
+import com.flowable.atlas.playground.ContextPanel
+import com.flowable.atlas.playground.PlaygroundEditors
+import com.flowable.atlas.playground.PlaygroundProblemsStrip
+import com.flowable.atlas.playground.PlaygroundShell
 import com.flowable.atlas.script.ScriptContext
 import com.flowable.atlas.script.completion.ScriptScope
-import com.intellij.psi.PsiDocumentManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.command.undo.UndoUtil
-import com.intellij.openapi.editor.event.DocumentEvent
-import com.intellij.openapi.editor.event.DocumentListener
-import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.wm.IdeFocusManager
-import com.intellij.ui.JBColor
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.ui.LanguageTextField
+import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
-import java.awt.Dimension
-import javax.swing.BoxLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
- * The Script Playground: paste or write a Groovy/JavaScript/Python script and get the IDE's real
- * language editing (completion, syntax coloring — where the language plugin is available), live
- * structural validation from :core's ScriptValidator (squiggles + problem rows, exactly the checks
- * the CLI/explorer run), and the scope variables the script touches. The toolbar loads any script
- * task / listener / action-bot script straight from the project's models ([ScriptPicker]).
+ * The Script Playground on the shared [PlaygroundShell]: the script on one side with its problems under
+ * it, and on the other what the selected context *provides* (its bindings and beans, as clickable chips)
+ * over what the script *does* (the variables it writes through the API and the ones it likely reads).
+ * The IDE's real language editing where the language plugin is present, :core's structural validation
+ * everywhere. The toolbar loads any script task / listener / action-bot script straight from the
+ * project's models ([ScriptPicker]), or one of the worked examples ([ScriptExamples]).
  *
- * Sibling of [com.flowable.atlas.expr.toolwindow.FlowableExpressionPanel] (same skeleton, no
- * evaluation machinery); hosted as the "Scripts" tab of the Flowable Expressions tool window.
  * Construction must stay cheap and index-free — the factory runs synchronously on the EDT.
  */
-class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, true), Disposable {
+class FlowableScriptPanel(val project: Project, stackedByDefault: Boolean = true) : JPanel(BorderLayout()), Disposable {
 
     private val state = FlowableScriptPlaygroundState.getInstance(project)
+    private val shell = PlaygroundShell(project, "scripts", stackedByDefault)
 
     /** The raw scriptFormat string driving validation; the combo shows its [PlaygroundScriptLanguage]. */
     var scriptFormat: String = state.format
@@ -49,41 +49,23 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
 
     val language: PlaygroundScriptLanguage get() = PlaygroundScriptLanguage.fromFormat(scriptFormat)
 
-    private val field: LanguageTextField =
-        LanguageTextField(language.ideLanguage(), project, state.script, false).apply {
-            border = JBUI.Borders.customLine(JBColor.border(), 1)
-            minimumSize = Dimension(JBUI.scale(120), JBUI.scale(80))
-            addSettingsProvider { editor ->
-                // Same rationale as the expression playground: the document isn't file-backed, so
-                // undo must be enabled explicitly; this provider re-runs after a language switch
-                // swaps the document, re-wiring undo and diagnostics for the new editor.
-                UndoUtil.enableUndoFor(editor.document)
-                editor.setVerticalScrollbarVisible(true)
-                editor.setHorizontalScrollbarVisible(true)
-                editor.setBorder(JBUI.Borders.empty(4))
-                editor.settings.apply {
-                    isLineNumbersShown = true         // scripts are multi-line — offsets matter
-                    isFoldingOutlineShown = false
-                    isLineMarkerAreaShown = false
-                    isUseSoftWraps = false
-                    isCaretRowShown = false
-                    additionalLinesCount = 1
-                    additionalColumnsCount = 2
-                }
-                diagnostics.editorAvailable(editor as EditorEx)
-            }
-            addDocumentListener(object : DocumentListener {
-                override fun documentChanged(event: DocumentEvent) {
-                    state.script = text
-                    diagnostics.scheduleRevalidate()
-                }
-            })
-        }
+    private val field: LanguageTextField = PlaygroundEditors.create(
+        project, language.ideLanguage(), state.script, lineNumbers = true, minHeight = 80,
+        onEditor = { diagnostics.editorAvailable(it) },
+        onChange = {
+            state.script = scriptText()
+            diagnostics.scheduleRevalidate()
+        },
+    )
 
     private val strip = PlaygroundProblemsStrip()
-    private val chips = ScriptVarChipsPanel(onPick = ::insertAtCaret)
+    private val provided = ScriptVarChipsPanel(onPick = ::insertAtCaret, showUsage = false, showContext = true,
+        emptyText = message("playground.scripts.noBindings"))
+    private val touched = ScriptVarChipsPanel(onPick = ::insertAtCaret, showUsage = true, showContext = false,
+        emptyText = message("playground.scripts.noVariables"))
+    private val context = ContextPanel(message("playground.scripts.context"), state.contextExpanded) { state.contextExpanded = it }
     private val diagnostics = ScriptPlaygroundDiagnostics(
-        project, field, strip, chips,
+        project, field, strip, listOf(provided, touched),
         object : ScriptPlaygroundDiagnostics.Host {
             override val format: String get() = this@FlowableScriptPanel.scriptFormat
             override val context: ScriptContext get() = this@FlowableScriptPanel.scriptContext
@@ -91,27 +73,42 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         this,
     )
 
+    var stacked: Boolean
+        get() = shell.stacked
+        set(value) { shell.stacked = value }
+
     init {
-        toolbar = ActionManager.getInstance()
+        shell.toolbar = ActionManager.getInstance()
             .createActionToolbar("FlowableScriptPlayground", buildToolbarGroup(), true)
-            .also { it.targetComponent = this }
+            .also { it.targetComponent = shell }
             .component
-        val editorSection = JPanel(BorderLayout()).apply {
+        shell.setEditorSide(JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(4, 6, 4, 6)
             add(field, BorderLayout.CENTER)
-            add(JPanel().apply {
-                layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                isOpaque = false
-                add(strip)
-                add(chips)
-            }, BorderLayout.SOUTH)
-        }
-        setContent(editorSection)
+            add(strip, BorderLayout.SOUTH)
+        })
+        context.setBody(provided)
+        shell.setContext(context)
+        shell.setResult(JPanel(BorderLayout()).apply {
+            isOpaque = false
+            border = JBUI.Borders.empty(4, 6, 6, 6)
+            add(JBLabel(message("playground.scripts.touches")).apply {
+                font = JBUI.Fonts.smallFont()
+                foreground = UIUtil.getContextHelpForeground()
+                border = JBUI.Borders.empty(0, 2, 3, 0)
+            }, BorderLayout.NORTH)
+            add(touched, BorderLayout.CENTER)
+        })
+        add(shell, BorderLayout.CENTER)
+        provided.onChange = ::updateSummary
         applyContextStamp()
+        updateSummary()
         diagnostics.scheduleRevalidate()
     }
 
     val focusComponent: JComponent get() = this.field
+
+    private fun scriptText(): String = this.field.text
 
     override fun dispose() {}   // everything disposable hangs off Disposer chains
 
@@ -121,6 +118,9 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         group.add(ScriptContextComboBoxAction(this))
         group.addSeparator()
         group.add(LoadScriptFromModelAction(this))
+        group.add(LoadExampleScriptAction(this))
+        group.addSeparator()
+        group.add(PlaygroundSettingsGroup(project, StackPanelsToggle({ stacked }, { stacked = it }), expressionSettings = false))
         return group
     }
 
@@ -131,6 +131,7 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         scriptContext = newContext
         state.context = newContext
         applyContextStamp()
+        updateSummary()
         diagnostics.scheduleRevalidate()
     }
 
@@ -143,10 +144,9 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         IdeFocusManager.getInstance(project).requestFocus(field, true)
     }
 
-    /** Swap language + file type on the ONE editor field — no field re-creation; the field re-runs
-     *  the settings provider itself, which re-wires undo and diagnostics (same idiom as the
-     *  expression playground's dialect switch). Accepts raw formats like "js" — validation keeps
-     *  the verbatim string, the combo displays its family. */
+    /** Swap language + file type on the ONE editor field — the field re-runs the settings provider itself,
+     *  which re-wires undo and diagnostics. Accepts raw formats like "js" — validation keeps the verbatim
+     *  string, the combo displays its family. */
     private fun setFormat(newFormat: String) {
         if (newFormat == scriptFormat) return
         scriptFormat = newFormat
@@ -155,7 +155,19 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
             field.text, language.ideLanguage(), project, LanguageTextField.SimpleDocumentCreator())
         field.setNewDocumentAndFileType(language.fileType(), document)
         applyContextStamp()   // new document = new PsiFile — re-stamp the completion context
+        updateSummary()
         diagnostics.scheduleRevalidate()
+    }
+
+    /**
+     * `5 bindings · 34 beans` — what the folded chips hold. It used to repeat the two combos right above
+     * it (*Script task (BPMN) · Groovy*), which said nothing the toolbar did not.
+     */
+    private fun updateSummary() {
+        context.setSummary(
+            if (provided.bindingCount + provided.beanCount == 0) message("playground.scripts.summary.none")
+            else message("playground.scripts.summary", provided.bindingCount, provided.beanCount),
+        )
     }
 
     /** A chip click drops the picked name into the script at the caret (undoable command). */
@@ -170,8 +182,7 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
     }
 
     /** Tell the bindings completion which context to offer (see [ScriptScope.CONTEXT_KEY]) and mark
-     *  the scratch file for whole-project import resolution — the script twin of the expression
-     *  playground's `applyScope()`. */
+     *  the scratch file for whole-project import resolution. */
     private fun applyContextStamp() {
         val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(field.document) ?: return
         psiFile.putUserData(ScriptScope.CONTEXT_KEY, scriptContext)

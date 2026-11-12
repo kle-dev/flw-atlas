@@ -1,0 +1,264 @@
+package com.flowable.atlas.preview
+
+import com.github.weisj.jsvg.SVGDocument
+import com.github.weisj.jsvg.view.ViewBox
+import com.intellij.openapi.util.SystemInfo
+import com.intellij.ui.JBColor
+import com.intellij.util.ui.JBUI
+import java.awt.BasicStroke
+import java.awt.Cursor
+import java.awt.Dimension
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.Point
+import java.awt.Rectangle
+import java.awt.RenderingHints
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
+import java.awt.event.MouseWheelEvent
+import java.awt.geom.Point2D
+import java.awt.geom.Rectangle2D
+import javax.swing.JComponent
+import javax.swing.JViewport
+import javax.swing.Scrollable
+import javax.swing.SwingConstants
+import javax.swing.SwingUtilities
+import kotlin.math.roundToInt
+
+/**
+ * Paints an SVG document with plain Swing, through JSVG, the SVG library the platform itself draws its
+ * icons with. The IDE's own SVG viewer is a JCEF browser; under Remote Development every resource it
+ * loads is one more round trip to the client. A painted component reaches the client as pixels like
+ * any other Swing component.
+ *
+ * Fits the width of the view by default (never enlarging past 100 %). [zoomBy] switches to a fixed
+ * zoom, [actualSize] to 100 %, and [fitWidth] switches back. Ctrl/⌘ + wheel zooms about the pointer, a
+ * drag pans, a plain wheel scrolls; a click that is not a drag reports the point in the drawing's own
+ * coordinates to [onClick] — a double click, or ⌘-click on macOS and Ctrl-click elsewhere (a macOS
+ * Ctrl-click is the context click), to [onOpen], when there is one.
+ *
+ * The drawing is white whatever the IDE's theme, as in the explorer and in Design, so it is shown as a
+ * sheet: framed, on the panel's background, instead of a white block with no edge in a dark IDE. An
+ * element under the pointer ([hitTest]) is outlined and turns the pointer into a hand — the picture says
+ * what can be clicked before anyone clicks. A click takes the focus, so the zoom keys reach the picture.
+ */
+internal class SvgCanvas : JComponent(), Scrollable {
+
+    var document: SVGDocument? = null
+        set(value) {
+            field = value
+            revalidate()
+            repaint()
+        }
+
+    /** Told where a click (not a drag) landed, in the document's coordinates. */
+    var onClick: ((Point2D.Double) -> Unit)? = null
+
+    /** Told where a double click or a Ctrl/⌘-click landed, in the document's coordinates. */
+    var onOpen: ((Point2D.Double) -> Unit)? = null
+
+    /** The element under a point of the document, if any: its box and what hovering it should say. */
+    var hitTest: ((Point2D.Double) -> Hover?)? = null
+
+    /** Told the zoom in percent whenever it changes — fitting the width changes it with the view's width. */
+    var onZoom: ((Int) -> Unit)? = null
+
+    /** What the canvas says when the pointer is over no element. */
+    var hint: String? = null
+        set(value) {
+            field = value
+            if (hover == null) toolTipText = value
+        }
+
+    data class Hover(val bounds: Rectangle2D.Double, val tooltip: String)
+
+    private var fixedZoom: Double? = null
+    private var hover: Hover? = null
+    private var reportedZoom = -1
+
+    init {
+        isFocusable = true
+        val mouse = object : MouseAdapter() {
+            private var pressedAt: Point? = null
+            private var dragged = false
+
+            override fun mousePressed(e: MouseEvent) {
+                requestFocusInWindow()
+                if (!SwingUtilities.isLeftMouseButton(e)) return
+                pressedAt = e.locationOnScreen
+                dragged = false
+            }
+
+            override fun mouseDragged(e: MouseEvent) {
+                val from = pressedAt ?: return
+                val viewport = parent as? JViewport ?: return
+                val now = e.locationOnScreen
+                val dx = from.x - now.x
+                val dy = from.y - now.y
+                if (!dragged && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+                dragged = true
+                cursor = Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR)
+                val view = viewport.viewPosition
+                val maxX = maxOf(0, width - viewport.width)
+                val maxY = maxOf(0, height - viewport.height)
+                viewport.viewPosition = Point((view.x + dx).coerceIn(0, maxX), (view.y + dy).coerceIn(0, maxY))
+                pressedAt = now
+            }
+
+            override fun mouseReleased(e: MouseEvent) {
+                if (pressedAt != null && !dragged) toDocument(e.point)?.let { p ->
+                    val modifier = if (SystemInfo.isMac) e.isMetaDown else e.isControlDown
+                    val open = onOpen?.takeIf { e.clickCount >= 2 || modifier }
+                    (open ?: onClick)?.invoke(p)
+                }
+                pressedAt = null
+                dragged = false
+                updateHover(e.point)
+            }
+
+            override fun mouseMoved(e: MouseEvent) = updateHover(e.point)
+
+            override fun mouseExited(e: MouseEvent) = setHover(null)
+
+            override fun mouseWheelMoved(e: MouseWheelEvent) {
+                if (e.isControlDown || e.isMetaDown) {
+                    zoomBy(if (e.preciseWheelRotation < 0) 1.1 else 1 / 1.1, e.point)
+                    e.consume()
+                } else {
+                    // A listener here takes the wheel from the scroll pane: hand a plain scroll back to it.
+                    parent?.dispatchEvent(SwingUtilities.convertMouseEvent(this@SvgCanvas, e, parent))
+                }
+            }
+        }
+        addMouseListener(mouse)
+        addMouseMotionListener(mouse)
+        addMouseWheelListener(mouse)
+    }
+
+    private fun updateHover(p: Point) = setHover(toDocument(p)?.let { hitTest?.invoke(it) })
+
+    private fun setHover(h: Hover?) {
+        if (h == hover) return
+        hover = h
+        cursor = if (h != null) Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) else Cursor.getDefaultCursor()
+        toolTipText = h?.tooltip ?: hint
+        repaint()
+    }
+
+    /** The zoom in percent, as the toolbar reads it. */
+    fun zoomPercent(): Int = (zoom() * 100).roundToInt()
+
+    fun actualSize() {
+        fixedZoom = 1.0
+        revalidate()
+        repaint()
+    }
+
+    fun zoomBy(factor: Double) = zoomBy(factor, null)
+
+    /** Zoom by [factor], keeping the drawing under [anchor] (a point of this component) where it is. */
+    private fun zoomBy(factor: Double, anchor: Point?) {
+        val before = zoom()
+        val docPoint = anchor?.let { toDocument(it) }
+        fixedZoom = (before * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        revalidate()
+        repaint()
+        val viewport = parent as? JViewport ?: return
+        if (anchor == null || docPoint == null) return
+        // Once the new size is laid out, scroll so the same drawing point sits under the pointer again.
+        SwingUtilities.invokeLater {
+            val z = zoom()
+            val now = Point((originX(z) + docPoint.x * z).toInt(), (MARGIN + docPoint.y * z).toInt())
+            val inView = Point(anchor.x - viewport.viewPosition.x, anchor.y - viewport.viewPosition.y)
+            viewport.viewPosition = Point(maxOf(0, now.x - inView.x), maxOf(0, now.y - inView.y))
+        }
+    }
+
+    fun fitWidth() {
+        fixedZoom = null
+        revalidate()
+        repaint()
+    }
+
+    /** [p], a point of this component, in the document's coordinates — null off the drawing. */
+    internal fun toDocument(p: Point): Point2D.Double? {
+        val doc = document ?: return null
+        val z = zoom()
+        val size = doc.size()
+        val x = (p.x - originX(z)) / z
+        val y = (p.y - MARGIN) / z
+        if (x < 0 || y < 0 || x > size.width || y > size.height) return null
+        return Point2D.Double(x, y)
+    }
+
+    private fun originX(z: Double): Double {
+        val w = document?.size()?.width ?: 0f
+        // Centred when the drawing is narrower than the view.
+        return maxOf(MARGIN.toDouble(), (width - w * z) / 2)
+    }
+
+    private fun zoom(): Double {
+        fixedZoom?.let { return it }
+        val doc = document ?: return 1.0
+        val available = (parent?.width ?: width).toDouble()
+        val w = doc.size().width.toDouble()
+        return if (w <= 0 || available <= 0) 1.0 else minOf(1.0, (available - 2 * MARGIN) / w).coerceAtLeast(MIN_ZOOM)
+    }
+
+    override fun getPreferredSize(): Dimension {
+        val doc = document ?: return Dimension(0, 0)
+        val z = zoom()
+        val size = doc.size()
+        return Dimension((size.width * z).toInt() + 2 * MARGIN, (size.height * z).toInt() + 2 * MARGIN)
+    }
+
+    override fun paintComponent(g: Graphics) {
+        val doc = document ?: return
+        val g2 = g.create() as Graphics2D
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
+            val z = zoom()
+            val size = doc.size()
+            g2.translate(originX(z), MARGIN.toDouble())
+            g2.scale(z, z)
+            doc.render(this, g2, ViewBox(0f, 0f, size.width, size.height))
+            // The sheet's edge, one device pixel whatever the zoom.
+            g2.stroke = BasicStroke((1 / z).toFloat())
+            g2.color = JBColor.border()
+            g2.draw(Rectangle2D.Double(0.0, 0.0, size.width.toDouble(), size.height.toDouble()))
+            hover?.let { h ->
+                g2.stroke = BasicStroke((2 / z).toFloat())
+                g2.color = JBUI.CurrentTheme.Focus.focusColor()
+                g2.draw(h.bounds)
+            }
+        } finally {
+            g2.dispose()
+        }
+        val percent = zoomPercent()
+        if (percent != reportedZoom) {
+            reportedZoom = percent
+            onZoom?.invoke(percent)
+        }
+    }
+
+    override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+
+    override fun getScrollableUnitIncrement(visibleRect: Rectangle, orientation: Int, direction: Int): Int = 16
+
+    override fun getScrollableBlockIncrement(visibleRect: Rectangle, orientation: Int, direction: Int): Int =
+        if (orientation == SwingConstants.VERTICAL) visibleRect.height - 16 else visibleRect.width - 16
+
+    /** Fitting the width means following the view's width; a fixed zoom scrolls sideways instead. */
+    override fun getScrollableTracksViewportWidth(): Boolean = fixedZoom == null
+
+    override fun getScrollableTracksViewportHeight(): Boolean = false
+
+    private companion object {
+        const val MARGIN = 16
+        const val MIN_ZOOM = 0.1
+        const val MAX_ZOOM = 4.0
+        const val DRAG_THRESHOLD = 4
+    }
+}

@@ -62,6 +62,21 @@ class CustomFunctionExtractorTest {
         assertTrue("bareFn" in cat.topLevel)
     }
 
+    @Test fun aLiteralValueIsAConstantNotAFunction() {
+        // a literal decides it; an identifier may name a function declared elsewhere, so it stays one
+        write("src/custom.ts",
+            "function fmtImpl(x) { return x; }\n" +
+                "export default {\n" +
+                "  additionalData: {\n" +
+                "    \$flag: true, minified: !0, label: 'x', count: -1, list: [1], none: null, tpl: `a`,\n" +
+                "    fmt: fmtImpl, call: () => 1, method(a) { return a; }, trueish: trueImpl,\n" +
+                "  },\n" +
+                "};\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals(setOf("\$flag", "minified", "label", "count", "list", "none", "tpl"), cat.constants)
+        assertEquals(setOf("fmt", "call", "method", "trueish"), cat.topLevel)
+    }
+
     @Test fun directExternalsAssignment() {
         write("ext/custom.js",
             "flowable.externals = flowable.externals || {};\n" +
@@ -146,6 +161,59 @@ class CustomFunctionExtractorTest {
         val cat = CustomFunctionExtractor.extract(tmp.root)!!
         assertEquals("allItems, path, identifierPath?", cat.signatures["flowdemo.findCommonAttribute"])
         assertEquals("str, toUpperCase", cat.signatures["flowdemo.camelCaseToDashCase"])
+    }
+
+    // ---- the function's own code ----
+
+    @Test fun capturesTheCodeOfAnInlineFunctionWithItsLine() {
+        write("src/custom.js",
+            "export default {\n" +
+                "  additionalData: {\n" +
+                "    acme: {\n" +
+                "      double: (n) => n * 2,\n" +
+                "      greet(name) {\n" +
+                "        return 'hi ' + name;\n" +
+                "      },\n" +
+                "    },\n" +
+                "  },\n" +
+                "};\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals(FunctionCode("src/custom.js", 4, "double: (n) => n * 2"), cat.code["acme.double"])
+        val greet = cat.code.getValue("acme.greet")
+        assertEquals(5, greet.line)
+        assertEquals("greet(name) {\n  return 'hi ' + name;\n}", greet.text)
+    }
+
+    @Test fun followsTheImportToTheDeclaration() {
+        write("fe/additionaldata/index.ts",
+            "import {findCommon} from \"./find-common\";\nimport {sortByDate} from \"./sort\";\n" +
+                "export default { flowdemo: { findCommon, sortByDate } };\n")
+        write("fe/additionaldata/find-common.ts",
+            "import x from 'y';\n\nexport function findCommon(items: any[], path: string) {\n    return items.find(i => i[path]);\n}\n")
+        write("fe/additionaldata/sort.ts",
+            "export const sortByDate = (items, key) =>\n    items.sort((a, b) => a[key] - b[key]);\nexport const other = 1;\n")
+        write("fe/index.tsx", "import additionalData from \"./additionaldata\";\nexport default { additionalData };\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        val find = cat.code.getValue("flowdemo.findCommon")
+        assertTrue(find.file, find.file.endsWith("find-common.ts"))
+        assertEquals(3, find.line)
+        assertEquals("export function findCommon(items: any[], path: string) {\n    return items.find(i => i[path]);\n}", find.text)
+        assertEquals("export const sortByDate = (items, key) =>\n    items.sort((a, b) => a[key] - b[key])", cat.code.getValue("flowdemo.sortByDate").text)
+        assertTrue(cat.code.getValue("flowdemo.sortByDate").inProject)
+    }
+
+    @Test fun readsABundlesFunctionsFromItsSourcemap() {
+        write("static/ext/custom.js",
+            "!function(e,t){e.flowable.externals=t()}(this,function(){\"use strict\";" +
+                "var a={flowdemo:{camelCaseToDashCase:function(e,t){return e}}};" +
+                "return{additionalData:a}});\n//# sourceMappingURL=custom.js.map\n")
+        write("static/ext/custom.js.map",
+            "{\"version\":3,\"sources\":[\"webpack://app/./src/camel.ts\"],\"sourcesContent\":[" +
+                "\"export function camelCaseToDashCase(str: string) {\\n  return str;\\n}\"]}")
+        val code = CustomFunctionExtractor.extract(tmp.root)!!.code.getValue("flowdemo.camelCaseToDashCase")
+        assertEquals("src/camel.ts", code.file)
+        assertEquals("export function camelCaseToDashCase(str: string) {\n  return str;\n}", code.text)
+        assertTrue("the map's path is not a file of this project", !code.inProject)
     }
 
     @Test fun reactFormAdditionalDataPropAloneIsNotARegistration() {

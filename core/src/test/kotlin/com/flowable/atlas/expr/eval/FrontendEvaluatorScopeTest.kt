@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * Scoped evaluation — `{{…}}` as a component inside a subform/list would see it. The reference
- * semantics come from `@flowable/forms` (`FormUtils.ts` / `Subform.tsx`): the scoped node's keys are
+ * semantics come from the `@flowable/forms` runtime: the scoped node's keys are
  * the local scope, `$item`/`$index` bind at the innermost list level, `$itemParent` chains one link
  * per container boundary, and `root`/`$payload` never move.
  */

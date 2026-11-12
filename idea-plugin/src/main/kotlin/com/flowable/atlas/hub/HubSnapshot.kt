@@ -1,0 +1,176 @@
+package com.flowable.atlas.hub
+
+import com.flowable.atlas.design.DesignPullSelection
+import com.flowable.atlas.design.DesignPullService
+import com.flowable.atlas.environment.AtlasCatalog
+import com.flowable.atlas.environment.AtlasConnection
+import com.flowable.atlas.environment.AtlasConnectionSelection
+import com.flowable.atlas.environment.AtlasConnectionSelection.Resolution
+import com.flowable.atlas.environment.AtlasDesignTarget
+import com.flowable.atlas.environment.ConnectionKind
+import com.flowable.atlas.explorer.AtlasArtifact
+import com.flowable.atlas.explorer.AtlasArtifactFiles
+import com.flowable.atlas.explorer.AtlasBrowser
+import com.flowable.atlas.explorer.AtlasExplorerFiles
+import com.flowable.atlas.explorer.AtlasExplorerStaleness
+import com.flowable.atlas.findings.AtlasFindingsService
+import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.index.ProjectModelScope
+import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.project.AtlasProjectRootService
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
+import java.nio.file.Files
+import java.nio.file.Path
+
+/** A generated explorer page: where it is, project-relative, and when it was written. */
+internal data class ExplorerArtifact(val path: Path, val relative: String, val modified: Long)
+
+/** The last analysis's counts, for the Hub's health row — null fields before there is one. */
+internal data class FindingsHealth(val running: Boolean, val defects: Int?, val advice: Int?, val stale: Boolean)
+
+/**
+ * Everything the Atlas Hub shows, read in one pass on a pooled thread and applied on the EDT.
+ *
+ * Data, not text: the old snapshot carried two ready-made HTML strings, which meant the header could not
+ * decide what to say without re-parsing what it had been given. The header and the attention line derive
+ * their words from these fields, and a test can build one without Swing.
+ *
+ * [gather] is network-free and never blocks on an index build — it reads
+ * [FlowableModelIndexService.cachedOrNull] and asks for a build when there is none, so "scanning…" resolves
+ * itself on the next `modelIndexUpdated`.
+ */
+internal data class HubSnapshot(
+    /** Detected Flowable sub-projects, root-relative — the picker's choices beside "whole project". */
+    val subProjects: List<String>,
+    /** The one in use; `""` is the whole repository. */
+    val activeSubProject: String,
+    /** How many projects were detected while nobody has said which — 0 whenever the question does not arise. */
+    val projectsAwaitingChoice: Int,
+    /** Null while the index is being built — or while it cannot be built, see [indexFailure]. */
+    val modelCount: Int?,
+    /** Why the last index build failed, or null. */
+    val indexFailure: String?,
+    val typeCounts: List<Pair<ModelType, Int>>,
+    /** Where the index looked when that is narrower than the repository. */
+    val scopeLabel: String?,
+    val builtAtMillis: Long,
+    val skippedArchives: List<String>,
+    val artifacts: List<ExplorerArtifact>,
+    /** The models opened most recently, newest first. */
+    val recentModels: List<RecentModel>,
+    val explorerStale: Boolean,
+    /** The keys of the models newer than the newest explorer page — or selected artifact — when it is stale. */
+    val changedModels: List<String>,
+    val browserAvailable: Boolean,
+    val designResolution: Resolution,
+    val workResolution: Resolution,
+    /** What each environment picker offers — read here, off the EDT, not by the sections while painting. */
+    val designConnections: List<AtlasConnection>,
+    val workConnections: List<AtlasConnection>,
+    /** False only before anything at all has been defined — the one state worth its own wording. */
+    val hasAnyEnvironment: Boolean,
+    /** What a pull would fetch right now. */
+    val pullSelection: DesignPullSelection,
+    val lastPullMillis: Long?,
+    /** Where the explorer search looked — what the empty state has to name to be believable. */
+    val searchedIn: String,
+    val findings: FindingsHealth = FindingsHealth(running = false, defects = null, advice = null, stale = false),
+    /** Whether the explorer page is among the selected artifacts — what the stale line calls the artifacts. */
+    val explorerSelected: Boolean = true,
+) {
+    val designConnection: AtlasConnection?
+        get() = (designResolution as? Resolution.Selected)?.connection
+
+    /** A Design connection resolved — enough to show (and use) the workspace and app pickers. */
+    val designServerSet: Boolean
+        get() = designConnection != null
+
+    companion object {
+        /** [onDetected] runs when a sub-project detection that was not ready yet finishes. */
+        fun gather(project: Project, onDetected: () -> Unit): HubSnapshot {
+            val settings = FlowableAtlasProjectSettings.getInstance(project)
+            val rootService = AtlasProjectRootService.getInstance(project)
+            val base = rootService.activeProjectDir()
+
+            val active = rootService.activeSubProject()
+            val detected = rootService.detectedOrNull()
+            if (detected == null) rootService.detectAsync { onDetected() }
+            val subCount = detected?.size ?: 0
+            // The one thing the picker cannot say by itself: that a choice is *outstanding*. Several
+            // projects and nobody has picked means Atlas is indexing the whole repository by default,
+            // which is a decision the user never made.
+            val awaiting = if (subCount >= 2 && !rootService.hasChosenProject() && active.isBlank()) subCount else 0
+
+            val indexService = project.service<FlowableModelIndexService>()
+            val index = indexService.cachedOrNull()
+            val failure = indexService.lastFailureOrNull()
+            // a failed build is shown, not retried on every refresh — Rebuild or a model change retries
+            if (index == null && failure == null) indexService.ensureBuilding()
+            val typeCounts = index?.let { idx ->
+                val byType = idx.allDistinct().groupBy { it.type }
+                ModelType.entries.mapNotNull { t -> byType[t]?.let { t to it.size } }
+            }.orEmpty()
+
+            val artifacts = base?.let { b ->
+                AtlasExplorerFiles.findCached(b, settings.atlasOutputDir).map { p ->
+                    val rel = runCatching { b.relativize(p).parent?.toString() ?: "" }.getOrDefault("")
+                    val modified = runCatching { Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L)
+                    ExplorerArtifact(p, rel, modified)
+                }
+            }.orEmpty()
+
+            val selected = settings.atlasArtifacts
+            val setTimes = base?.let { b -> AtlasArtifactFiles.present(b, settings.atlasOutputDir, selected) }.orEmpty()
+                .map { p -> runCatching { Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L) }
+            val referenceTimes = staleReference(artifacts.map { it.modified }, setTimes, AtlasArtifact.EXPLORER_HTML in selected)
+
+            val designResolution = AtlasConnectionSelection.resolution(project, ConnectionKind.DESIGN)
+            val workResolution = AtlasConnectionSelection.resolution(project, ConnectionKind.WORK)
+            val designConnection = (designResolution as? Resolution.Selected)?.connection
+            val pullSelection = designConnection?.let { AtlasDesignTarget.selection(project, it) }
+                ?: DesignPullSelection.EMPTY
+
+            return HubSnapshot(
+                subProjects = detected?.map { it.relPath }.orEmpty(),
+                activeSubProject = active,
+                projectsAwaitingChoice = awaiting,
+                modelCount = index?.distinctCount(),
+                indexFailure = failure?.let { it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName },
+                typeCounts = typeCounts,
+                scopeLabel = ProjectModelScope.label(project),
+                builtAtMillis = index?.builtAtMillis ?: 0L,
+                skippedArchives = index?.skippedArchives?.toList().orEmpty(),
+                artifacts = artifacts,
+                recentModels = RecentModelsService.getInstance(project).recent(index),
+                // Stale when a model in scope is newer than the newest of what Regenerate refreshes.
+                explorerStale = AtlasExplorerStaleness.isStale(referenceTimes, AtlasExplorerStaleness.latestModelChange(project)),
+                changedModels = referenceTimes.maxOrNull()?.let { newest -> index?.let { AtlasExplorerStaleness.changedSince(it, newest) } }.orEmpty(),
+                browserAvailable = AtlasBrowser.canOpenFiles(),
+                designResolution = designResolution,
+                workResolution = workResolution,
+                designConnections = AtlasCatalog.connections(project, ConnectionKind.DESIGN),
+                workConnections = AtlasCatalog.connections(project, ConnectionKind.WORK),
+                hasAnyEnvironment = AtlasCatalog.environments(project).isNotEmpty(),
+                pullSelection = pullSelection,
+                lastPullMillis = DesignPullService.lastPullMillis(project),
+                searchedIn = listOfNotNull(active.ifBlank { null }, settings.atlasOutputDir).joinToString("/") + "/",
+                findings = AtlasFindingsService.getInstance(project).let { f ->
+                    val last = f.last
+                    FindingsHealth(f.running, last?.defects, last?.advice, f.stale)
+                },
+                explorerSelected = AtlasArtifact.EXPLORER_HTML in selected,
+            )
+        }
+
+        /**
+         * The modification times "stale" is judged against: what Regenerate would refresh. With the explorer
+         * selected, the pages and the other selected artifacts. Without it, the selected artifacts alone — an
+         * old page beside them is not regenerated, so counting it kept a stale line that Regenerate could never
+         * clear — unless none of them exists yet, when the page is all there is to compare.
+         */
+        internal fun staleReference(pageTimes: List<Long>, setTimes: List<Long>, explorerSelected: Boolean): List<Long> =
+            if (explorerSelected || setTimes.isEmpty()) pageTimes + setTimes else setTimes
+    }
+}

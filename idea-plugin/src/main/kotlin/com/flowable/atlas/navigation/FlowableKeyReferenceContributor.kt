@@ -6,6 +6,8 @@ import com.flowable.atlas.completion.OperationSite
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.completion.ValueSite
+import com.flowable.atlas.completion.Vocabulary
+import com.flowable.atlas.completion.VocabularyScope
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.components.service
@@ -13,10 +15,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiElementResolveResult
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
-import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiReference
@@ -33,7 +33,9 @@ import com.intellij.util.ProcessingContext
  *
  * Operation-name (`.operation("…")`) and value-field (`.value("…", …)`) literals navigate too — to
  * the backing service model that declares the operation catalog (a data object via its backing
- * service), resolved exactly as completion resolves the offered operations.
+ * service), resolved exactly as completion resolves the offered operations. So do the names completion
+ * offers beside keys — a message, a signal, a task key, an activity id, a form outcome — to where a model
+ * declares them, narrowed to the model the chain names ([VocabularyScope]).
  */
 class FlowableKeyReferenceContributor : PsiReferenceContributor() {
 
@@ -47,6 +49,8 @@ class FlowableKeyReferenceContributor : PsiReferenceContributor() {
                     SiteMatching.keySiteForLiteral(literal)?.let { return arrayOf(FlowableKeyReference(literal, it)) }
                     // An operation-name / value-field literal → the backing service model file.
                     operationModelReference(literal)?.let { return arrayOf(it) }
+                    // A message, signal, task key, activity id or outcome → where a model declares it.
+                    vocabularyReference(literal)?.let { return arrayOf(it) }
                     // Value-based (opt-in): any literal whose value equals a known model key navigates too,
                     // even with no call site. cachedOrNull() only — a reference provider must not build.
                     valueKeyReference(literal)?.let { return arrayOf(it) }
@@ -117,8 +121,13 @@ private class FlowableOperationModelReference(
         val chain = FluentChain.collectCalls(call)
         val keyCall = FluentChain.findCall(chain, keyMethod) ?: return ResolveResult.EMPTY_ARRAY
         val siblingKey = FluentChain.constantStringArg(keyCall, 0, project) ?: return ResolveResult.EMPTY_ARRAY
+        val service = project.service<FlowableModelIndexService>()
+        // A reference resolves under the read lock — the cached index only, never a build here.
+        if (service.cachedOrRequest() == null) return ResolveResult.EMPTY_ARRAY
+        // The cached variant: the index can be dropped between the gate above and this call, and the
+        // plain one would then build the whole index inline, under the read lock.
         val serviceKey = if (keyIsService) siblingKey
-            else project.service<FlowableModelIndexService>().backingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
+            else service.cachedBackingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
         return resolveKeyToModelFiles(project, serviceKey, listOf(ModelType.SERVICE))
     }
 
@@ -161,25 +170,55 @@ private class FlowableValueKeyReference(
     override fun getVariants(): Array<Any> = emptyArray()
 }
 
+/**
+ * A message, signal, task-key, activity-id or outcome literal → the declaration in each model that has the
+ * name: `<signal name="…">`, `<userTask id="…">`. Soft: a name no model declares is the unknown-name
+ * inspection's to report, with the reasons it may still be fine (a computed name, a model whose elements
+ * are not read). Not for variables — a variable is whatever the running instance was given, and a model
+ * mentioning the same name is no declaration of it.
+ */
+private class FlowableVocabularyReference(
+    literal: PsiLiteralExpression,
+    private val at: VocabularyScope.At,
+) : PsiReferenceBase.Poly<PsiLiteralExpression>(literal, innerRange(literal), true) {
+
+    override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
+        val value = element.value as? String ?: return ResolveResult.EMPTY_ARRAY
+        val project = element.project
+        // The cached index only — resolve runs under the read lock.
+        val index = project.service<FlowableModelIndexService>().cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
+        val scopeKey = VocabularyScope.scopeKey(at.call, at.site, project)
+        return ModelKeyTargets.resolveElement(project, VocabularyScope.declaringModels(index, at.site, scopeKey, value), value)
+    }
+
+    override fun getVariants(): Array<Any> = emptyArray()
+}
+
+private fun vocabularyReference(literal: PsiLiteralExpression): PsiReference? {
+    val at = VocabularyScope.siteForLiteral(literal) ?: return null
+    if (at.site.vocabulary == Vocabulary.VARIABLE || (literal.value as String).isBlank()) return null
+    return FlowableVocabularyReference(literal, at)
+}
+
 /** A value-based key reference for [literal], or null if disabled, implausible, or not a known key. */
 private fun valueKeyReference(literal: PsiLiteralExpression): PsiReference? {
     if (!ValueKeyMatching.enabled()) return null
     val value = literal.value as? String ?: return null
     if (!ValueKeyMatching.plausible(value)) return null
-    val index = literal.project.service<FlowableModelIndexService>().cachedOrNull() ?: return null
+    val service = literal.project.service<FlowableModelIndexService>()
+    val index = service.cachedOrRequest() ?: return null
     if (index.find(value).isEmpty()) return null
     return FlowableValueKeyReference(literal)
 }
 
-/** The shared model-key → PsiFile mapping: the file(s) declaring [key] as one of [types]. */
+/** The shared model-key → declaration mapping: where the file(s) declaring [key] as one of [types] declare it. */
 private fun resolveKeyToModelFiles(project: Project, key: String, types: Collection<ModelType>): Array<ResolveResult> {
     val service = project.service<FlowableModelIndexService>()
-    val psiManager = PsiManager.getInstance(project)
-    return service.find(key)
-        .filter { it.type in types }
-        .mapNotNull { psiManager.findFile(it.file) }
-        .map { PsiElementResolveResult(it) }
-        .toTypedArray()
+    // Resolve runs under the read lock; `find()` would build a cold index right there and freeze the
+    // IDE for the length of a model scan on the first Ctrl+click. Ask, and resolve to nothing until it is
+    // built — the other references in this file do the same.
+    val index = service.cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
+    return ModelKeyTargets.resolve(project, index.find(key).filter { it.type in types })
 }
 
 /** The range covering the string content (excluding the surrounding quotes). */

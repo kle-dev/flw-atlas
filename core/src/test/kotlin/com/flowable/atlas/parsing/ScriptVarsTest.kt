@@ -114,6 +114,28 @@ class ScriptVarsTest {
     }
 
     @Test
+    fun aTripleQuotedStringIsOneLiteral() {
+        // An XML document built in a GString: its element names, its attribute words and the `//` of its
+        // URL are text. Only the interpolation reads a variable.
+        val d = "${'$'}"
+        val doc = analyze("def x = \"\"\"<a href=\"http://example.com/p\"><b>${d}{name}</b> id</a>\"\"\"\nreturn x + tail")
+        assertEquals(setOf("name", "tail"), doc.reads)
+        // the single-quoted form interpolates nothing
+        assertTrue(analyze("def y = '''<b>word</b> ${d}{kept}'''\nreturn y").reads.isEmpty())
+    }
+
+    @Test
+    fun anImportNamesNoVariable() {
+        assertEquals(setOf("foo"), analyze("import com.example.util.Helper\nimport static com.example.util.Helper.run\nfoo + 1").reads)
+        assertEquals(setOf("bar"), analyze("package com.example\nbar").reads)
+    }
+
+    @Test
+    fun anEngineConfigurationBeanIsNoVariable() {
+        assertTrue(analyze("def em = springProcessEngineConfiguration.getExpressionManager()").reads.isEmpty())
+    }
+
+    @Test
     fun anExpressionLanguageGetsNoBareIdentifierGuessing() {
         // JUEL is an expression, not a script: its identifiers are already harvested by the expression
         // pass, and guessing here would double-report them as script reads.

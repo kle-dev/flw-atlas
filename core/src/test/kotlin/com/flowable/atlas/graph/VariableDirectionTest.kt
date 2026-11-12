@@ -26,11 +26,13 @@ class VariableDirectionTest {
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun variable(name: String): Map<String, Any?> {
+    private fun variableOrNull(name: String): Map<String, Any?>? {
         val graph = result["graph"] as Map<String, Any?>
         val nodes = graph["nodes"] as List<Map<String, Any?>>
-        return nodes.first { it["id"] == "variable:$name" }["data"] as Map<String, Any?>
+        return nodes.firstOrNull { it["id"] == "variable:$name" }?.get("data") as Map<String, Any?>?
     }
+
+    private fun variable(name: String): Map<String, Any?> = variableOrNull(name) ?: error("no variable $name")
 
     /** `"via@scope"` per site, sorted — the shape of the evidence without its element bookkeeping. */
     @Suppress("UNCHECKED_CAST")
@@ -118,13 +120,11 @@ class VariableDirectionTest {
     }
 
     @Test
-    fun anActionsPayloadIsReadOnTheWayInAndWrittenOnTheWayOut() {
-        // `flw.getInput('customerEmail')` reads what the caller supplied…
-        assertEquals(listOf("flwPayload", "scriptApi"), sites("customerEmail", "reads"))
-        assertNull(variable("customerEmail")["writes"])
-        // …and `flw.setOutput('sent', …)` writes a value the *caller* consumes, which Atlas cannot follow.
-        assertEquals(listOf("flwPayload", "scriptApi"), sites("sent", "writes"))
-        assertEquals(0, variable("sent")["readCount"])
+    fun anActionsPayloadIsItsContractNotAVariable() {
+        // `flw.getInput('customerEmail')` / `flw.setOutput('sent', …)` in a bot script name what the
+        // action's button sends and gets back; the action's contract says so, and no variable does.
+        assertNull(variableOrNull("customerEmail"))
+        assertNull(variableOrNull("sent"))
 
         // `signalVariableNames`: to pass a variable into the signalled instance the action reads it, so
         // the process's own `setVariable('notified', …)` is not left looking unconsumed.
@@ -145,10 +145,13 @@ class VariableDirectionTest {
         // An app variable and a data object's columns are read by the Work UI, a query or a REST client —
         // none of which Atlas parses. They stay in `usages` (so they remain findable) but contribute no
         // direction, which is what keeps them out of a "nothing reads this" verdict.
-        for (name in listOf("appVar", "color", "level")) {
+        for (name in listOf("appVar")) {
             assertEquals("$name should have no proven write", 0 to 0, counts(name))
             assertNull(variable(name)["writes"])
             assertNull(variable(name)["reads"])
         }
+        // A master-data list's columns are not project variables at all any more (0.24.0): they were the
+        // other example here, and would now fail to be found rather than fail to have a direction.
+        for (name in listOf("color", "level")) assertTrue("$name is a reference-table column, not a variable", variableOrNull(name) == null)
     }
 }

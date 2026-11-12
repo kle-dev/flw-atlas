@@ -30,21 +30,98 @@ class JavaParserTest {
 
     @Test
     @Suppress("UNCHECKED_CAST")
+    fun factoryMethodsDeclareBeansNamedAfterTheMethodOrTheAnnotation() {
+        val src = """package com.x;
+            @Configuration
+            public class Delegates {
+                @Bean
+                public JavaDelegate approveOrder() { return e -> {}; }
+
+                @Bean("legacyNotifier")
+                @Primary
+                public JavaDelegate notifier() { return e -> {}; }
+
+                @Bean(name = "auditHook")
+                JavaDelegate audit() { return e -> {}; }
+            }"""
+        val jc = JavaParser.parseJava(src, "Delegates.java")
+        val beans = jc["beanNames"] as Set<String>
+        // the configuration class is a bean itself, named after it
+        assertEquals(setOf("delegates", "approveOrder", "legacyNotifier", "auditHook"), beans)
+        val lines = jc["beanMethods"] as Map<String, Int>
+        assertEquals(4, lines["approveOrder"])
+        assertEquals(7, lines["legacyNotifier"])
+        assertTrue("configuration" in (jc["roles"] as Set<String>))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun kotlinSourcesAreReadWithTheSamePass() {
+        val src = """package com.x.kt
+
+            import org.springframework.stereotype.Component
+
+            const val SCORE_PROCESS = "scoreProcess"
+
+            @Component
+            class ScoreService(private val repo: ScoreRepo) : JavaDelegate, ExecutionListener {
+                override fun execute(execution: DelegateExecution) {
+                    execution.setVariable("score", repo.compute())
+                    runtimeService.startProcessInstanceByKey("scoreProcess")
+                    cmmnRuntimeService.createCaseInstanceBuilder().caseDefinitionKey(ModelConstants.SCORE_CASE).start()
+                    dmnDecisionService.createExecuteDecisionBuilder().decisionKey(SCORE_RULES).execute()
+                }
+                fun helper(a: Int, b: String) = a
+            }"""
+        val jc = JavaParser.parseJava(src, "ScoreService.kt")
+        assertEquals("ScoreService", jc["primary"])
+        assertEquals("com.x.kt.ScoreService", jc["fqn"])
+        assertTrue("scoreService" in (jc["beanNames"] as Set<String>))
+        assertEquals(listOf("JavaDelegate", "ExecutionListener"), jc["interfaces"])
+        assertTrue("delegate" in (jc["roles"] as Set<String>))
+        assertTrue((jc["isGlue"] as Boolean))
+        assertEquals(listOf("execute", "helper"), (jc["methods"] as List<Map<String, Any?>>).map { it["name"] })
+        assertTrue("ScoreRepo" in (jc["deps"] as Set<String>))
+        assertTrue("score" in (jc["varWrites"] as List<String>))
+        assertTrue("scoreProcess" in (jc["keyedStrings"] as Set<String>))
+        // constants at the same positions are kept by simple name for the resolver
+        // as written: the qualifier says whose constant it is
+        assertEquals(setOf("ModelConstants.SCORE_CASE", "SCORE_RULES"), jc["keyedIdents"] as Set<String>)
+        assertEquals(mapOf("SCORE_PROCESS" to "scoreProcess"), JavaParser.stringConstants(src))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun kotlinObjectsAndEnumClassesAreTypes() {
+        val src = """package com.x
+            enum class Status { OPEN, CLOSED }
+            object Keys { const val A: String = "a" }"""
+        val jc = JavaParser.parseJava(src, "Status.kt")
+        assertEquals(listOf("Status", "Keys"), jc["types"] as List<String>)
+        assertEquals("Status", jc["primary"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
     fun variableAccessesAreSplitByVerb() {
         val src = """package com.x;
             public class MyBean {
+                @Value("${'$'}{mail.from:noreply@example.com}") String from;
+                @Value("${'$'}{flamingo.mail.enabled}") boolean enabled;
                 public void go(DelegateExecution execution) {
                     execution.setVariable("written", 1);
                     Object r = execution.getVariableLocal("read");
                     if (execution.hasVariable("maybe")) execution.removeVariable("gone");
+                    String el = "${'$'}{vars:get(flagReturn)}";
                 }
             }"""
         val jc = JavaParser.parseJava(src, "MyBean.java")
         assertEquals(listOf("written"), jc["varWrites"])
-        assertEquals(listOf("read"), jc["varReads"])
+        // a Spring placeholder is configuration — `mail` and `flamingo` are no variables; an EL string is
+        assertEquals(listOf("flagReturn", "read"), jc["varReads"])
         assertEquals(listOf("gone", "maybe"), jc["varsUndecided"])
         // `vars` stays the union of all three, so nothing that already read it changes behaviour.
-        assertEquals(listOf("gone", "maybe", "read", "written"), jc["vars"])
+        assertEquals(listOf("flagReturn", "gone", "maybe", "read", "written"), jc["vars"])
         assertEquals(false, jc["readsAllVariables"])
     }
 
@@ -73,6 +150,58 @@ class JavaParserTest {
         assertEquals(true, jc["isController"])
         val eps = (jc["endpoints"] as List<Map<String, Any?>>).map { it["http"] to it["path"] }
         assertEquals(listOf("GET" to "/api/things"), eps)
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aCommentOpenerInsideAStringDoesNotSwallowTheCodeAfterIt() {
+        val src = """package com.x;
+            @RestController
+            public class Files {
+                private static final String BASE = "http://svc/x"; String k = "orderProcess";
+                @GetMapping("/files/**")
+                public String all() { return ""; }
+                /** Lists one file. */
+                @GetMapping("/file/{id}")
+                public String one() { return ""; }
+            }"""
+        val jc = JavaParser.parseJava(src, "Files.java")
+        val eps = (jc["endpoints"] as List<Map<String, Any?>>).map { it["path"] }
+        assertEquals(listOf("/files/**", "/file/{id}"), eps)
+        assertTrue((jc["strings"] as Collection<*>).contains("orderProcess"))
+    }
+
+    @Test
+    fun blankCommentsKeepsLiteralsAndLineBreaks() {
+        val src = "a = \"/*\"; // x\nb = '\\''; /* y\n z */ c = \"\"\"//\"\"\""
+        val out = JavaParser.blankComments(src)
+        assertEquals(src.length, out.length)
+        assertEquals(src.count { it == '\n' }, out.count { it == '\n' })
+        assertTrue(out.contains("\"/*\""))
+        assertFalse(out.contains("x") || out.contains("y") || out.contains("z"))
+        assertTrue(out.contains("c = \"\"\"//\"\"\""))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aMapHandedToTheEngineWritesTheNamesPutIntoIt() {
+        val src = """package com.x;
+            public class Starter {
+                void start(String key) {
+                    Map<String, Object> vars = new HashMap<>();
+                    vars.put("assigneeName", name);
+                    vars.put("assigneeId", id);
+                    runtimeService.startProcessInstanceByKey("DEMO-P001", vars);
+                    Map<String, Object> other = new HashMap<>();
+                    other.put("notAVariable", 1);
+                    log.info(other);
+                    Map<String, Object> done = Map.of();
+                    done.put("outcome", "ok");
+                    taskService.complete(taskId, done);
+                }
+            }"""
+        val writes = JavaParser.parseJava(src, "Starter.java")["varWrites"] as List<String>
+        assertEquals(listOf("assigneeId", "assigneeName", "outcome"), writes)
     }
 
     @Test
@@ -107,13 +236,16 @@ class JavaParserTest {
                     q.definitionKey("do-item").operation("findById");
                     builder.definitionKey("do-item").operation();
                     String op = "findAll"; q2.operation("findAll");
+                    q3.definitionKey("do-item").operation(Ops.FIND_OPEN);
                 }
             }"""
+        // both kept as written — a quoted literal or a constant — for the resolver
         val calls = JavaParser.dataObjectOpCalls(src).map { it["def"] to it["op"] }
-        assertTrue("Keys.ORDER_DO" to "findByStatus" in calls)
-        assertTrue("\"do-item\"" to "findById" in calls)
+        assertTrue("Keys.ORDER_DO" to "\"findByStatus\"" in calls)
+        assertTrue("\"do-item\"" to "\"findById\"" in calls)
+        assertTrue("\"do-item\"" to "Ops.FIND_OPEN" in calls)
         // the trailing `.operation("findAll")` has no definitionKey before it in its statement
-        assertFalse(calls.any { it.second == "findAll" })
+        assertFalse(calls.any { it.second == "\"findAll\"" })
     }
 
     @Test
@@ -123,18 +255,352 @@ class JavaParserTest {
                 "handler" to "list", "file" to "Ctl.java", "line" to 3),
         )
         assertTrue(JavaParser.matchRest("/api/things", eps).isNotEmpty())
-        assertTrue(JavaParser.matchRest("http://host:8080/api/things?x=1", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("http://localhost:8080/api/things?x=1", eps).isNotEmpty())
         assertTrue(JavaParser.matchRest("/api/other", eps).isEmpty())
     }
 
+    /** Only a call on the application's own base can be one a missing controller should have served. */
     @Test
-    fun matchRestVariableMultiSegmentBase() {
-        // The endpoint carries a multi-segment base; the model expresses that base as a single variable
-        // segment, so the model path is shorter — the leading wildcard must absorb the extra base segs.
+    fun callTargetTellsTheApplicationFromFlowableAndOtherSystems() {
+        val project = JavaParser.CallTarget.PROJECT
+        assertEquals(project, JavaParser.callTarget("api/x"))
+        assertEquals(project, JavaParser.callTarget("/api/x"))
+        assertEquals(project, JavaParser.callTarget("{{endpoints.baseUrl}}/api/x"))
+        assertEquals(project, JavaParser.callTarget("http://localhost:8080/api/x"))
+        val flowable = JavaParser.CallTarget.FLOWABLE_API
+        assertEquals(flowable, JavaParser.callTarget("{{endpoints.idm}}/users/{{\$id}}"))
+        assertEquals(flowable, JavaParser.callTarget("dataobject-api/dataobject-runtime/masterdata-instances?x=1"))
+        val elsewhere = JavaParser.CallTarget.ELSEWHERE
+        assertEquals(elsewhere, JavaParser.callTarget("https://crm.example.com/api/x"))
+        assertEquals(elsewhere, JavaParser.callTarget("{{endpoints.custom}}/api/x"))
+        assertEquals(elsewhere, JavaParser.callTarget("#/{{\$route.currentAppId}}/case/{{id}}"))
+        assertEquals(elsewhere, JavaParser.callTarget(null))
+    }
+
+    /** The URL shapes that linked models to endpoints they never call, on real projects. */
+    @Test
+    fun matchRestClaimsNoEndpointWithoutEvidence() {
+        val eps = listOf(
+            mapOf<String, Any?>("http" to "GET", "path" to "/calculate", "handler" to "one"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/customers/{id}", "handler" to "customer"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/teams/{teamId}/users", "handler" to "teamUsers"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/audit-trail", "handler" to "audit"),
+        )
+        fun handlers(url: String) = JavaParser.matchRest(url, eps, "GET").map { it["handler"] }
+        // a client-side route is navigation, whatever its last segment
+        assertEquals(emptyList<Any?>(), handlers("#/{{\$route.currentAppId}}/case/{{\$item.id}}"))
+        assertEquals(emptyList<Any?>(), handlers("https://portal.example.com/#/customers/{{id}}"))
+        // nothing but placeholders is no evidence for any endpoint
+        assertEquals(emptyList<Any?>(), handlers("{{selected.url}}"))
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.api}}/{{\$temp.resource}}"))
+        assertEquals(emptyList<Any?>(), handlers("\${environment.getProperty('crm.url')}/v1/{{x}}"))
+        // a placeholder is not the literal an endpoint spells out
+        assertEquals(emptyList<Any?>(), handlers("api/customers/{{id}}/{{what}}"))
+        // Flowable's own REST API is not the project's
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.idm}}/users/{{\$id}}"))
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.platform}}/audit-trail?scopeId={{id}}"))
+        assertEquals(emptyList<Any?>(), handlers("platform-api/audit-trail"))
+        // another host is another server, however similar its path
+        assertEquals(emptyList<Any?>(), handlers("https://api.example.com/api/customers/42"))
+        // a relative URL is resolved against the application: no context path goes in front of it
+        assertEquals(emptyList<Any?>(), handlers("other/api/customers/42"))
+        // the real calls still land
+        assertEquals(listOf<Any?>("customer"), handlers("api/customers/{{\$id}}"))
+        assertEquals(listOf<Any?>("customer"), handlers("{{endpoints.baseUrl}}api/customers/{{id}}"))
+        assertEquals(listOf<Any?>("customer"), handlers("http://localhost:8080/work/api/customers/\${id}"))
+        // a base nothing names may be any server: on the real projects every one was another system
+        assertEquals(emptyList<Any?>(), handlers("\${serverUrl}/api/customers/\${id}"))
+        assertEquals(emptyList<Any?>(), handlers("https://{{host}}/api/customers/1"))
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.custom}}/api/customers/{{id}}"))
+        // a `?` inside a placeholder is no query string
+        assertEquals(listOf<Any?>("teamUsers"), handlers("api/teams/{{a ? 'x' : 'y'}}/users"))
+        assertEquals(listOf<Any?>("teamUsers"), handlers("api/teams/{{team}}/users"))
+    }
+
+    @Test
+    fun matchRestIsMethodAware() {
+        val eps = listOf(
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/orders/{orderNumber}", "handler" to "byNumber"),
+            mapOf<String, Any?>("http" to "POST", "path" to "/api/orders/archive", "handler" to "archive"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/orders", "handler" to "orders"),
+        )
+        fun hits(url: String, method: String?) = JavaParser.matchRest(url, eps, method)
+        fun clean(url: String, method: String?) = hits(url, method).filter { it["loose"] != true }.map { it["handler"] }
+        // a GET with a path variable is not answered by the POST handler the variable would also take
+        assertEquals(listOf("byNumber"), clean("/api/orders/{orderNumber}", "GET"))
+        // a POST to the literal path is the POST handler, not the GET one whose variable takes "archive"
+        assertEquals(listOf("archive"), clean("/api/orders/archive", "POST"))
+        assertFalse("the loose GET list is not a POST's match", hits("/api/orders/archive", "POST").any { it["handler"] == "orders" })
+        // a literal segment beats a variable even when the verb is unknown — Spring routes it that way
+        assertEquals(listOf("archive"), clean("/api/orders/archive", null))
+        // an unknown verb matches by path: null, blank, "?", an expression — and a placeholder takes the
+        // handler's variable, not the literal `archive` another handler spells out
+        for (unknown in listOf(null, "", "?", "\${method}", "{{verb}}")) {
+            assertEquals("verb '$unknown'", listOf("byNumber"), clean("/api/orders/{{n}}", unknown))
+            assertEquals("verb '$unknown'", listOf("archive"), clean("/api/orders/archive", unknown))
+        }
+        // no handler for the verb: the path hit is kept, demoted to loose and marked
+        val put = hits("/api/orders/archive", "PUT").single { it["handler"] == "archive" }
+        assertEquals(true, put["loose"])
+        assertEquals(true, put["methodMismatch"])
+        // a handler mapped to every verb takes every verb
+        val any = listOf(mapOf<String, Any?>("http" to "ANY", "path" to "/api/ping", "handler" to "ping"))
+        assertEquals(listOf("ping"), JavaParser.matchRest("/api/ping", any, "DELETE").filter { it["loose"] != true }.map { it["handler"] })
+    }
+
+    @Test
+    fun matchRestLocalContextPath() {
+        // An absolute URL on the local host may carry the application's context path before the endpoint's
+        // own path; a relative one is resolved against the application and may not.
         val eps = listOf(mapOf<String, Any?>("path" to "/app-api/v1/customers/{id}"))
-        assertTrue(JavaParser.matchRest("{{endpoints.baseUrl}}/customers/{id}", eps).isNotEmpty())
-        assertTrue(JavaParser.matchRest("{{base}}/customers/99", eps).isNotEmpty())
-        // a different trailing resource must still not match
-        assertTrue(JavaParser.matchRest("{{base}}/orders/{id}", eps).isEmpty())
+        assertTrue(JavaParser.matchRest("http://localhost:8080/work/app-api/v1/customers/99", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("/work/app-api/v1/customers/99", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("work/app-api/v1/customers/99", eps).isEmpty())
+        assertTrue(JavaParser.matchRest("http://localhost:8080/customers/99", eps).isEmpty())
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anEndpointIsWhatTheControllerTypeServes() {
+        val src = """
+            package com.example
+            import org.springframework.web.bind.annotation.*
+            data class InvoiceDto(val id: String)
+            object ApiPaths { const val BASE = "/api/invoices" }
+            @RestController
+            @RequestMapping(ApiPaths.BASE)
+            class InvoiceController {
+                @GetMapping(produces = ["application/json"])
+                fun list(): List<InvoiceDto> = emptyList()
+                @PreAuthorize("hasRole('ADMIN')")
+                @PostMapping(ApiPaths.BASE + "/{id}/archive")
+                fun archive(@PathVariable id: String) {}
+                @GetMapping(value = ["/{id}", "/by-id/{id}"])
+                fun one(@PathVariable id: String): InvoiceDto = InvoiceDto(id)
+            }
+        """.trimIndent()
+        val eps = JavaParser.parseJava(src, "src/main/kotlin/com/example/InvoiceController.kt")["endpoints"] as List<Map<String, Any?>>
+        assertEquals(setOf(
+            Triple("GET", "/api/invoices", "list"),
+            Triple("POST", "/api/invoices/api/invoices/{id}/archive", "archive"),
+            Triple("GET", "/api/invoices/{id}", "one"),
+            Triple("GET", "/api/invoices/by-id/{id}", "one"),
+        ), eps.map { Triple(it["http"], it["path"], it["handler"]) }.toSet())
+        assertTrue(eps.all { it["controller"] == "InvoiceController" })
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anEndpointNamesWhatItsHandlerTakesAndWhereEachValueComesFrom() {
+        val src = """package com.example;
+            @RestController
+            @RequestMapping("/api/{tenant}/orders")
+            public class OrderController {
+                private static final String TRACE = "X-Trace";
+                @GetMapping("/{id}")
+                @PreAuthorize("hasRole('A') or hasRole('B')")
+                @Operation(summary = "x", responses = {@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = OrderDto.class)))})
+                public ResponseEntity<Map<String, Object>> one(@PathVariable("tenant") String tenant,
+                        @PathVariable Long id,
+                        @RequestParam(name = "q", required = false) String q,
+                        @RequestParam(defaultValue = "10") int size,
+                        @RequestHeader(TRACE) String trace,
+                        @Valid @RequestBody OrderDto body,
+                        @RequestParam Map<String, List<String>> all,
+                        @RequestParam Optional<String> maybe,
+                        HttpServletRequest request,
+                        @AuthenticationPrincipal UserDetails user,
+                        final String filter) {
+                    return null;
+                }
+            }"""
+        val ep = (JavaParser.parseJava(src, "OrderController.java")["endpoints"] as List<Map<String, Any?>>).single()
+        // the nested annotation arguments neither hide the handler nor its parameters
+        assertEquals("one", ep["handler"])
+        assertEquals(listOf(
+            mapOf("name" to "tenant", "in" to "path", "type" to "String", "required" to true),
+            mapOf("name" to "id", "in" to "path", "type" to "Long", "required" to true),
+            mapOf("name" to "q", "in" to "query", "type" to "String"),
+            mapOf("name" to "size", "in" to "query", "type" to "int", "default" to "10"),
+            // a constant of the same file names the header
+            mapOf("name" to "X-Trace", "in" to "header", "type" to "String", "required" to true),
+            mapOf("name" to "body", "in" to "body", "type" to "OrderDto", "required" to true),
+            mapOf("name" to "all", "in" to "query", "type" to "Map<String, List<String>>"),
+            mapOf("name" to "maybe", "in" to "query", "type" to "Optional<String>"),
+            // the servlet request and the principal are the server's; an unannotated value is Spring's default binding
+            mapOf("name" to "filter", "in" to "query", "type" to "String", "implicit" to true),
+        ), ep["params"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aKotlinHandlerSaysWhatItTakesTheSameWay() {
+        val src = """
+            package com.example
+            @RestController
+            class InvoiceController {
+                @PostMapping("/api/invoices/{id}")
+                fun update(@PathVariable id: String, @RequestParam q: String?, @RequestParam size: Int = 20,
+                           @RequestParam(defaultValue = "a@b") mail: String, @RequestBody body: HttpEntity<InvoiceDto>): InvoiceDto = TODO()
+            }
+        """.trimIndent()
+        val ep = (JavaParser.parseJava(src, "InvoiceController.kt")["endpoints"] as List<Map<String, Any?>>).single()
+        assertEquals(listOf(
+            mapOf("name" to "id", "in" to "path", "type" to "String", "required" to true),
+            mapOf("name" to "q", "in" to "query", "type" to "String?"),
+            mapOf("name" to "size", "in" to "query", "type" to "Int", "default" to "20"),
+            mapOf("name" to "mail", "in" to "query", "type" to "String", "default" to "a@b"),
+            mapOf("name" to "body", "in" to "body", "type" to "HttpEntity<InvoiceDto>", "required" to true),
+        ), ep["params"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anEndpointsParametersAreHeldAgainstItsPath() {
+        val src = """package com.example;
+            @RestController
+            public class Ctl {
+                @GetMapping("/a/{id}/b/{part:[0-9]+}")
+                public String typed(@PathVariable String other, @PathVariable("part") int part) { return ""; }
+                @GetMapping({"/c", "/c/{id}"})
+                public String either(@PathVariable(required = false) String id) { return ""; }
+                @PostMapping("/archive")
+                public String archive() { return ""; }
+                @GetMapping("/forms")
+                public String form(HttpEntity<FormDto> entity) { return ""; }
+            }"""
+        val eps = (JavaParser.parseJava(src, "Ctl.java")["endpoints"] as List<Map<String, Any?>>).associateBy { it["path"] }
+        assertEquals(listOf(
+            // the path's own variables first, in its order — the one no parameter takes still has to be sent
+            mapOf("name" to "id", "in" to "path", "required" to true),
+            mapOf("name" to "part", "in" to "path", "type" to "int", "required" to true),
+            // a required path variable the path does not name: Spring fails the request
+            mapOf("name" to "other", "in" to "path", "type" to "String", "required" to true, "notInPath" to true),
+        ), eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"])
+        // an optional path variable belongs to the path that names it
+        assertEquals(emptyList<Any>(), eps.getValue("/c")["params"])
+        assertEquals(listOf(mapOf("name" to "id", "in" to "path", "type" to "String", "required" to true)), eps.getValue("/c/{id}")["params"])
+        // a handler that takes nothing says so — an empty list, not a missing one
+        assertEquals(emptyList<Any>(), eps.getValue("/archive")["params"])
+        assertEquals(listOf(mapOf("name" to "entity", "in" to "body", "type" to "FormDto")), eps.getValue("/forms")["params"])
+        // idempotent: the resolver runs it again once a constant in the path is resolved
+        val again = JavaParser.withPathVariables("/a/{id}/b/{part:[0-9]+}", eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"] as List<Map<String, Any?>>)
+        assertEquals(eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"], again)
+    }
+
+    /**
+     * A file is one record named after its own type: the one named like the file, not whichever comes
+     * first. A Kotlin `data class` above the `@Component` the file is about made the DTO the bean's class.
+     */
+    @Test
+    fun theFilesOwnTypeIsThePrimaryOneAndTheOthersAreKept() {
+        val src = """package com.example
+
+            data class OrderDto(val id: String, val total: Int)
+
+            @Component("orderDelegate")
+            class OrderDelegate : JavaDelegate {
+                override fun execute(execution: DelegateExecution) {}
+            }"""
+        val jc = JavaParser.parseJava(src, "src/main/kotlin/com/example/OrderDelegate.kt")
+        assertEquals("OrderDelegate", jc["primary"])
+        assertEquals("com.example.OrderDelegate", jc["fqn"])
+        assertEquals(6, jc["line"])
+        assertEquals(mapOf("OrderDto" to 3, "OrderDelegate" to 6), jc["typeLines"])
+        assertEquals("a bodyless data class nests nothing", null, jc["nestedIn"])
+        assertEquals("the owner is the primary type", null, jc["beanOwners"])
+    }
+
+    @Test
+    fun aNestedComponentIsOwnedByItsOwnType() {
+        val src = """package com.example;
+
+            @Configuration
+            public class WorkflowConfig {
+                @Component("approveDelegate")
+                public static class ApproveDelegate implements JavaDelegate {
+                    public void execute(DelegateExecution execution) {}
+                }
+            }"""
+        val jc = JavaParser.parseJava(src, "WorkflowConfig.java")
+        assertEquals("WorkflowConfig", jc["primary"])
+        assertEquals(mapOf("WorkflowConfig" to 4, "ApproveDelegate" to 6), jc["typeLines"])
+        assertEquals(mapOf("ApproveDelegate" to "WorkflowConfig"), jc["nestedIn"])
+        assertEquals(mapOf("approveDelegate" to "ApproveDelegate"), jc["beanOwners"])
+    }
+
+    @Test
+    fun aTypeAfterABodylessClassOrInsideAFunctionIsNotNestedInIt() {
+        val src = """package com.example
+            data class Row(val a: Int = 1, val f: () -> Unit = { })
+            fun helper() { class Local }
+            class Outer { inner class Mid { class Deep } }"""
+        val jc = JavaParser.parseJava(src, "Rows.kt")
+        assertEquals(mapOf("Mid" to "Outer", "Deep" to "Outer\$Mid"), jc["nestedIn"])
+        // a class local to a function is no type anything outside can name
+        assertEquals(listOf("Row", "Outer", "Mid", "Deep"), (jc["typeLines"] as Map<*, *>).keys.toList())
+        // no type is named like the file and none carries a stereotype: the first is the primary
+        assertEquals("Row", jc["primary"])
+    }
+
+    /**
+     * Only a declaration is a type: not `class Position {` in a string (every OpenAPI-generated model's
+     * `toString` has one, which made the model nested in itself), not a class local to a method, and not
+     * `object instanceof Foo`.
+     */
+    @Test
+    fun aClassInAStringOrAMethodBodyIsNoMemberType() {
+        val src = """package com.example;
+
+            public class Position {
+                public static class Lot { }
+                public boolean equals(Object object) {
+                    if (object instanceof Position) { return true; }
+                    class Helper { }
+                    return false;
+                }
+                public String toString() {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("class Position {\n");
+                    char brace = '{';
+                    return sb.toString();
+                }
+                static class After { }
+            }"""
+        val jc = JavaParser.parseJava(src, "Position.java")
+        assertEquals("Position", jc["primary"])
+        assertEquals(mapOf("Position" to 3, "Lot" to 4, "After" to 16), jc["typeLines"])
+        assertEquals(mapOf("Lot" to "Position", "After" to "Position"), jc["nestedIn"])
+    }
+
+    /**
+     * In Kotlin `"…${x}…"` is the compiler's string template, never a Flowable expression: it read Kotlin
+     * locals as process variables. A literal expression is `\${…}` in a string, `${'$'}{…}` in a raw one.
+     */
+    @Test
+    fun aKotlinStringTemplateIsNoExpression() {
+        fun reads(src: String) = JavaParser.parseJava("package com.x\n$src", "N.kt").let { it["varReads"] to it["vars"] }
+        assertEquals(emptyList<String>() to emptyList<String>(),
+            reads("class N { fun f(total: Int) = println(\"Order \${total} for \${customer.name}\") }"))
+        assertEquals(listOf("flagReturn") to listOf("flagReturn"),
+            reads("class N { val el = \"\\\${vars:get(flagReturn)}\" }"))
+        assertEquals(listOf("flag2") to listOf("flag2"),
+            reads("class N { val el = \"\"\"\${'\$'}{vars:get(flag2)}\"\"\" }"))
+        // an escaped backslash before the `$` leaves the template a template
+        assertEquals(emptyList<String>() to emptyList<String>(),
+            reads("class N { fun f(total: Int) = \"a\\\\\${total}\" }"))
+        // Java has no string templates: the same text there is an expression, as before
+        assertEquals(listOf("total"), JavaParser.parseJava(
+            "package com.x;\nclass N { String el = \"Order \${total}\"; }", "N.java")["varReads"])
+    }
+
+    /** The overview reads the record as a list; a Set read as a list was empty — `implements []`. */
+    @Test
+    fun interfacesAreAListInDeclarationOrder() {
+        val jc = JavaParser.parseJava(
+            "package com.x;\npublic class D implements JavaDelegate, Serializable { }", "D.java",
+        )
+        assertTrue(jc["interfaces"] is List<*>)
+        assertEquals(listOf("JavaDelegate", "Serializable"), jc["interfaces"])
     }
 }

@@ -25,6 +25,8 @@ class FlowableScriptPlaygroundState : PersistentStateComponent<FlowableScriptPla
         var format: String = "groovy"
         /** [com.flowable.atlas.script.ScriptContext] name — decides which bindings validate. */
         var context: String = ScriptContext.BPMN_SCRIPT_TASK.name
+        /** Whether the context panel's chips are unfolded, as the Expressions tab remembers its own. */
+        var contextExpanded: Boolean = true
     }
 
     private var state = State()
@@ -42,6 +44,10 @@ class FlowableScriptPlaygroundState : PersistentStateComponent<FlowableScriptPla
     var context: ScriptContext
         get() = runCatching { ScriptContext.valueOf(state.context) }.getOrDefault(ScriptContext.BPMN_SCRIPT_TASK)
         set(value) { state.context = value.name }
+
+    var contextExpanded: Boolean
+        get() = state.contextExpanded
+        set(value) { state.contextExpanded = value }
 
     companion object {
         fun getInstance(project: Project): FlowableScriptPlaygroundState = project.service()

@@ -16,6 +16,16 @@ data class ExprFunction(
     val name: String,
     val aliases: List<String> = emptyList(),
     val doc: String? = null,
+    /**
+     * The Java method's parameter count, the variable container included, where the engine binds the
+     * call by count — the `variables:` family. `AbstractFlowableVariableExpressionFunction.createFunction`
+     * inserts the container only when the call has fewer arguments than the method has parameters (or the
+     * method is varargs); otherwise the call is passed through as written and `Tree.bind` rejects a count
+     * that does not match. Null where nothing is known.
+     */
+    val engineParams: Int? = null,
+    /** The method's last parameter is `Object...`: any number of values after the name. */
+    val varargs: Boolean = false,
 ) {
     /** The way the user writes the call head for [dialect] — `date:now`, `listOf`, or `flw.sum`. */
     fun label(dialect: ExpressionDialect): String = when {
@@ -36,9 +46,9 @@ data class ExprRoot(val name: String, val doc: String? = null)
  * objects — the expression counterpart of the plugin's `FlowableApiCatalog`.
  *
  * Transcribed (and empirically verified) from the Flowable engine + platform sources: the
- * `FlowableFunctionDelegate` implementations (community `flowable-engine`/`-cmmn`/`-dmn` + commercial
- * `flowable-platform`), the `VariableScopeELResolver` family, and the frontend `@flowable/forms`
- * `flw.*` namespace (`Expression/functions/index.ts`). Adding support for new Flowable versions means
+ * `FlowableFunctionDelegate` implementations (community `flowable-engine`/`-cmmn`/`-dmn` + the commercial
+ * platform), the `VariableScopeELResolver` family, and the frontend `@flowable/forms`
+ * `flw.*` namespace. Adding support for new Flowable versions means
  * appending here — nothing else changes.
  */
 object FlowableExpressionCatalog {
@@ -61,26 +71,29 @@ object FlowableExpressionCatalog {
 
     /** Canonical prefix → its functions. `resolvePrefix` maps aliases (`vars`,`var`) to canonical. */
     private val backendByPrefix: Map<String, List<ExprFunction>> = linkedMapOf(
+        // The second argument is the Java method's parameter count *including* the variable container the
+        // engine inserts in front (AbstractFlowableVariableExpressionFunction.createFunction). It is the
+        // engine's binding rule, not a style choice — see ExprFunction.engineParams.
         "variables" to listOf(
-            fn("variables", "get", doc = "value of a variable"),
-            fn("variables", "getOrDefault", doc = "value, or a default if unset"),
-            fn("variables", "contains", doc = "collection variable contains all values"),
-            fn("variables", "containsAny", doc = "collection variable contains any value"),
-            fn("variables", "containsAll", doc = "collection contains all (Platform)"),
-            fn("variables", "notContains", doc = "collection does not contain (Platform)"),
-            fn("variables", "notContainsAny", doc = "collection contains none (Platform)"),
-            fn("variables", "notContainsAll", doc = "collection missing at least one (Platform)"),
-            fn("variables", "equals", "eq", doc = "variable equals value"),
-            fn("variables", "notEquals", "ne", doc = "variable does not equal value"),
-            fn("variables", "exists", "exist", doc = "variable is set"),
-            fn("variables", "isEmpty", "empty", doc = "variable is null/empty"),
-            fn("variables", "isNotEmpty", "notEmpty", doc = "variable is set and not empty"),
-            fn("variables", "lowerThan", "lessThan", "lt", doc = "variable < value"),
-            fn("variables", "lowerThanOrEquals", "lessThanOrEquals", "lte", doc = "variable <= value"),
-            fn("variables", "greaterThan", "gt", doc = "variable > value"),
-            fn("variables", "greaterThanOrEquals", "gte", doc = "variable >= value"),
-            fn("variables", "base64", doc = "variable value as base64"),
-            fn("variables", "makeTransient", doc = "mark a variable transient (Platform)"),
+            vfn("get", 2, doc = "value of a variable"),
+            vfn("getOrDefault", 3, doc = "value, or a default if unset"),
+            vfn("contains", 3, varargs = true, doc = "collection variable contains all values"),
+            vfn("containsAny", 3, varargs = true, doc = "collection variable contains any value"),
+            vfn("containsAll", 3, varargs = true, doc = "collection contains all (Platform)"),
+            vfn("notContains", 3, varargs = true, doc = "collection does not contain (Platform)"),
+            vfn("notContainsAny", 3, varargs = true, doc = "collection contains none (Platform)"),
+            vfn("notContainsAll", 3, varargs = true, doc = "collection missing at least one (Platform)"),
+            vfn("equals", 3, "eq", doc = "variable equals value"),
+            vfn("notEquals", 3, "ne", doc = "variable does not equal value"),
+            vfn("exists", 2, "exist", doc = "variable is set"),
+            vfn("isEmpty", 2, "empty", doc = "variable is null/empty"),
+            vfn("isNotEmpty", 2, "notEmpty", doc = "variable is set and not empty"),
+            vfn("lowerThan", 3, "lessThan", "lt", doc = "variable < value"),
+            vfn("lowerThanOrEquals", 3, "lessThanOrEquals", "lte", doc = "variable <= value"),
+            vfn("greaterThan", 3, "gt", doc = "variable > value"),
+            vfn("greaterThanOrEquals", 3, "gte", doc = "variable >= value"),
+            vfn("base64", 2, doc = "variable value as base64"),
+            vfn("makeTransient", 2, doc = "mark a variable transient (Platform)"),
         ),
         "date" to listOf(
             fn("date", "format", doc = "format a date value"),
@@ -205,13 +218,13 @@ object FlowableExpressionCatalog {
         fn(null, "JSON", doc = "flw.JSON.parse / stringify"),
         fn(null, "numberFormat"), fn(null, "sanitizeHtml"), fn(null, "escapeHtml"),
         fn(null, "exists"), fn(null, "notExists"),
-        // Work/platform-injected members — NOT part of the base `@flowable/forms` FunctionsFactory.
-        // The Work runtime merges these onto `flw` at eval time via `additionalData.flw`
-        // (`useGlobalResolver` in flowable-shared) and `Form.tsx`. They call the backend / drive the
+        // Work/platform-injected members — NOT part of the base `@flowable/forms` function set.
+        // The Work runtime merges these onto `flw` at eval time via `additionalData.flw`. They call
+        // the backend / drive the
         // running form, so they cannot be evaluated in the payload preview (see [FlwLibrary]).
         // A project can inject *further* custom functions we can't enumerate — onto `flw` (via
         // `flowable.externals.additionalData.flw`) or as top-level identifiers (any other
-        // `externals.additionalData` key, spread into the scope by `hookEvalExpression`). The validator
+        // `externals.additionalData` key, spread into the scope by the Work runtime). The validator
         // stays lenient about them (a no-near-match `flw.<x>` isn't flagged; top-level calls never are)
         // and the preview reports them as "not available" rather than invalid.
         fn(null, "getUser", doc = "Work: user object for a userId (async, cached)"),
@@ -290,6 +303,10 @@ object FlowableExpressionCatalog {
 
     fun backendNoPrefixFunctions(): List<ExprFunction> = backendNoPrefix
 
+    /** The backend function `prefix:name` answers to (aliases of both accepted), or null. */
+    fun backendFunction(prefix: String, name: String): ExprFunction? =
+        backendFunctionsForPrefix(prefix).firstOrNull { name in it.allNames }
+
     /** True if `prefix:name` (or no-prefix `name`) is a known backend function (aliases accepted). */
     fun isBackendFunction(prefix: String?, name: String): Boolean =
         if (prefix == null) backendNoPrefix.any { name in it.allNames }
@@ -319,6 +336,9 @@ object FlowableExpressionCatalog {
 
     private fun fn(prefix: String?, name: String, vararg aliases: String, doc: String? = null) =
         ExprFunction(prefix, name, aliases.toList(), doc)
+
+    private fun vfn(name: String, engineParams: Int, vararg aliases: String, varargs: Boolean = false, doc: String? = null) =
+        ExprFunction("variables", name, aliases.toList(), doc, engineParams, varargs)
 
     private fun root(name: String, doc: String? = null) = ExprRoot(name, doc)
 }

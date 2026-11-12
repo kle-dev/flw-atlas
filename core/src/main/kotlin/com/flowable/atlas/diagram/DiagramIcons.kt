@@ -19,9 +19,8 @@ package com.flowable.atlas.diagram
  * Anything unrecognised resolves to `null`, and the painter draws the plain silhouette it drew before —
  * an unfamiliar element never disappears and never gets a wrong icon.
  *
- * The labels are Design's own, taken from its palette bundles (`stencil_translations_bpmn.properties`,
- * `stencil_translations_cmmn.properties` and the platform palette's `platform-translation.properties`),
- * so a diagram tooltip says exactly what the modeller sees in the Design palette.
+ * The labels are Design's own, taken from its palette translation bundles, so a diagram tooltip says
+ * exactly what the modeller sees in the Design palette.
  */
 object DiagramIcons {
 
@@ -112,6 +111,9 @@ object DiagramIcons {
         put("caseplanmodel", r(null, "Case plan model"))
         put("stage", r(null, "Stage"))
         put("milestone", r(null, "Milestone"))
+        // `<eventListener flowable:eventType="variable|signal">` in XML (see XmlDiExtractor), a stencil in Design
+        put("variableeventlistener", r(null, "Variable listener"))
+        put("signaleventlistener", r(DiaIcon.SIGNAL, "Signal listener"))
     }
 
     /** `flowable:type` on a `<serviceTask>` → glyph + Design name (deployment XML without Design ext). */
@@ -161,6 +163,13 @@ object DiagramIcons {
         "caseplanmodel" to r(null, "Case plan model"),
         "entrycriterion" to r(null, "Entry criterion"),
         "exitcriterion" to r(null, "Exit criterion"),
+        // CMMN event listeners — the toolbar buttons and timers of a case in Work; the words are the ones
+        // DesignTerms (and so the rest of Atlas) uses. A workspace model's stencil ids are the same names;
+        // the variable and signal listeners, which XML spells as a typed <eventListener>, are in STENCILS.
+        "usereventlistener" to r(DiaIcon.USER, "User event listener"),
+        "timereventlistener" to r(DiaIcon.TIMER, "Timer"),
+        "eventlistener" to r(null, "Event listener"),
+        "genericeventlistener" to r(null, "Event listener"),
         "startevent" to r(null, "Start event"),
         "endevent" to r(null, "End event"),
         "boundaryevent" to r(null, "Boundary event"),

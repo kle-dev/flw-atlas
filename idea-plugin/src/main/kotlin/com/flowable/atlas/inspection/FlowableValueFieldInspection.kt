@@ -5,6 +5,7 @@ import com.flowable.atlas.completion.FluentChain
 import com.flowable.atlas.completion.FlowableApiCatalog
 import com.flowable.atlas.completion.ValueSite
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelPaths
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
@@ -40,6 +41,8 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                 val argList = literal.parent as? PsiExpressionList ?: return
                 if (argList.expressions.indexOf(literal) != 0) return
                 val call = argList.parent as? PsiMethodCallExpression ?: return
+                // a test's deliberately wrong field name is not a finding (same line as the key inspection)
+                if (literal.containingFile?.virtualFile?.path?.let(ModelPaths::isTestSource) == true) return
 
                 val method = call.resolveMethod() ?: return
                 val declaring = method.containingClass ?: return
@@ -56,14 +59,18 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                     ?.let { FluentChain.constantStringArg(it, 0, project) } ?: return
 
                 val service = project.service<FlowableModelIndexService>()
-                val operations = if (site.keyIsService) service.operationsOfService(modelKey) else service.operationsOf(modelKey)
+                // no index, no verdict — and no build under the daemon's read lock
+                if (service.cachedOrRequest() == null) return
+                // the cached variants: the cache can be dropped between the gate above and this call, and
+                // the plain ones would then build the whole index inline, under the daemon's read lock
+                val operations = if (site.keyIsService) service.cachedOperationsOfService(modelKey) else service.cachedOperationsOf(modelKey)
                 val operation = operations.firstOrNull { it.key == operationKey } ?: return
 
                 val validFields = operation.inputParameters.map { it.name }
                 if (fieldName !in validFields) {
                     val hint = if (validFields.isEmpty()) "it has no input values" else "expected one of: ${validFields.joinToString(", ")}"
                     val suggestion = Suggestions.closest(fieldName, validFields)
-                    val fixes = suggestion?.let { arrayOf<LocalQuickFix>(ReplaceFieldFix(it)) } ?: LocalQuickFix.EMPTY_ARRAY
+                    val fixes = suggestion?.let { arrayOf<LocalQuickFix>(ReplaceStringLiteralFix(it, ReplaceStringLiteralFix.KNOWN_INPUT_VALUE)) } ?: LocalQuickFix.EMPTY_ARRAY
                     holder.registerProblem(
                         literal,
                         "'$fieldName' is not an input value of operation '$operationKey' on data object '$modelKey' ($hint)",
@@ -75,14 +82,4 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
         }
     }
 
-    /** Replaces the flagged value field with a valid input value of the operation. */
-    private class ReplaceFieldFix(private val replacement: String) : LocalQuickFix {
-        override fun getFamilyName(): String = "Replace with '$replacement'"
-
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val literal = descriptor.psiElement as? PsiLiteralExpression ?: return
-            val factory = JavaPsiFacade.getElementFactory(project)
-            literal.replace(factory.createExpressionFromText("\"$replacement\"", literal))
-        }
-    }
 }

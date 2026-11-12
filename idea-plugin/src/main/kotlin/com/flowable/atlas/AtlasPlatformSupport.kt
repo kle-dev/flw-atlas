@@ -13,13 +13,18 @@ import com.intellij.openapi.application.ApplicationInfo
  * colleague's IDE the day they upgrade, until a new release is cut and installed. Staying loadable is
  * the right trade-off for that distribution model.
  *
- * The honest part is here instead: the verified range is stated as a fact, and the Atlas Hub shows when
- * the running IDE is outside it, so "it works" is never confused with "it was tested".
+ * The honest part is here instead: the verified range is stated as a fact where the claim is actually
+ * load-bearing — the docs, and every bug report Atlas submits ([AtlasErrorReportSubmitter]) — so "it
+ * works" is never confused with "it was tested". The Atlas Hub used to carry the same line in its footer
+ * and no longer does: a permanent "verified on 2026.2 — 2026.3 is untested" is our release process on
+ * display in a panel people keep open all day, and nothing they can act on.
  *
  * ## When bumping to a new platform branch
  * 1. `./gradlew :idea-plugin:verifyPlugin -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` against
  *    an install of the new version, and `runIdeLocal` for a JCEF/tool-window smoke test.
- * 2. Raise [VERIFIED_THROUGH_BRANCH] to that branch.
+ * 2. Raise [VERIFIED_THROUGH_BRANCH] to that branch — and [VERIFIED_SINCE_BRANCH] too when the *floor*
+ *    moves with it (SDK + `sinceBuild` in `idea-plugin/build.gradle.kts`), since that drops every older
+ *    IDE and the version claims in the READMEs and on the getting-started page have to move as well.
  * 3. Note it in `CHANGELOG.md` (and the `plugin.xml` change-notes).
  */
 object AtlasPlatformSupport {
@@ -27,10 +32,10 @@ object AtlasPlatformSupport {
     /**
      * Oldest platform branch `verifyPlugin` actually checks.
      *
-     * NOT the same as the oldest branch the plugin *installs* on: `since-build` is 261 and the SDK is
-     * still 2026.1, so Atlas remains loadable on 2026.1 — it is simply no longer verified there. The
-     * supported range is therefore wider than the verified range, which is exactly the gap
-     * [isUnverifiedPlatform] exists to make visible rather than paper over.
+     * Since the 2026.2 move this is also the oldest branch the plugin *installs* on — the SDK,
+     * `since-build` and the verified floor are all 262, so an older IDE refuses the plugin outright
+     * instead of loading something untested. The gap [isUnverifiedPlatform] reports is therefore
+     * one-sided now: only an IDE *newer* than the verified range can still be in it.
      */
     const val VERIFIED_SINCE_BRANCH = 262
 
@@ -46,9 +51,10 @@ object AtlasPlatformSupport {
     /**
      * True when the running IDE lies outside the verified range — in **either** direction.
      *
-     * Older counts too, now that verification starts above `since-build`: a 2026.1 install is a perfectly
-     * ordinary thing to have and is no more tested than a future 2026.3 would be. Only flagging newer
-     * builds would have quietly presented 2026.1 as covered.
+     * The lower bound cannot normally trigger any more (`since-build` is the verified floor, so an older
+     * IDE never loads the plugin), and it stays in the condition on purpose: the day the two drift apart
+     * again — a floor lowered for one colleague's IDE, a verification list narrowed — the older side is
+     * reported instead of silently passing as covered.
      */
     val isUnverifiedPlatform: Boolean
         get() = runningBranch < VERIFIED_SINCE_BRANCH || runningBranch > VERIFIED_THROUGH_BRANCH
@@ -62,8 +68,8 @@ object AtlasPlatformSupport {
         else "${branchName(VERIFIED_SINCE_BRANCH)}–${branchName(VERIFIED_THROUGH_BRANCH)}"
 
     /**
-     * The compatibility line for the Atlas Hub footer: normally just what was verified, but on a newer
-     * IDE it says so plainly, because that is the case where a bug report is worth filing.
+     * The compatibility line for a submitted bug report: normally just what was verified, but on an
+     * unverified IDE it says so plainly — which is exactly the context in which a report needs it.
      */
     fun compatibilityNote(): String =
         if (isUnverifiedPlatform) "verified on ${verifiedRange()} — ${branchName(runningBranch)} is untested"

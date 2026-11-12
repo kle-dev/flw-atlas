@@ -51,36 +51,81 @@ object ModelJsonReader {
     }
 
     /**
-     * A **variable-binding** form field carries `id` + `type` + `label` (the same predicate as the
+     * A **form field** worth listing carries `id` + `type` + `label` (the same predicate as the
      * original `flowable_atlas` `parse_form`) — plain containers have no label, and their ids must not
-     * leak into the variables vocabulary.
+     * leak into the field list.
      *
-     * Deliberately narrower than [isFormComponent]: this one gates the completion vocabulary, where a
-     * button id like `rest-button2` would be noise.
+     * Deliberately narrower than [isFormComponent]: this one gates the form-field list, where a button id
+     * like `rest-button2` would be noise. Which *variable* a field binds is [FormBindings]' to say.
      */
     fun isFormField(node: Map<*, *>): Boolean =
         node["id"] is String && node.containsKey("type") && node.containsKey("label")
 
     /**
-     * A form/page **component** worth listing and searching: `id` + `type` and something to call it by.
+     * Every button flavour of the Design palettes, by the `type` a deployed `.form` / `.page` carries
+     * (the authoritative list is the platform's form component type enumeration). A button is the one
+     * component that acts on its own — it calls an action, a service, a URL — so [isFormComponent]
+     * accepts it on its `type` alone, without insisting on a caption.
+     */
+    val BUTTON_TYPES: Set<String> = setOf(
+        "workAction", "restButton", "scriptButton", "outcomeButton", "linkButton",
+        "workAgentButton", "workInvokeService", "createInstanceButton", "workUserEventListenerButton",
+        // legacy / hand-written models call a plain button just that
+        "button",
+    )
+
+    /**
+     * A form/page **component** worth listing and searching: `id` + `type` and something to call it by
+     * — or a button, which counts on its `type` alone.
      *
-     * Buttons are the reason this is wider than [isFormField]. Every button flavour in the Design
-     * palettes (`base-rest-button`, `base-script-button`, `work-action`, `work-invoke-service`, …) keeps
-     * its caption in `extraSettings.text` and has **no** `label` at all, so the `label`-only predicate
-     * dropped them silently — id, caption and, for a REST button, the endpoint URL never reached the
-     * model data and were therefore unfindable. Containers still have neither, so they stay out.
+     * Buttons are the reason this is wider than [isFormField]. Their caption lives in
+     * `extraSettings.text`, not `label`, so a `label`-only predicate dropped them silently. And plenty
+     * carry neither: measured over one real project, half the REST buttons (50 of 87) and every link
+     * button are icon-only or captioned by `value`, so *they* were dropped in turn — id, endpoint and
+     * the action they invoke never reached the model data. Containers still need a caption, so they
+     * stay out.
      */
     fun isFormComponent(node: Map<*, *>): Boolean =
         node["id"] is String && node.containsKey("type") &&
-            (node.containsKey("label") || (node["extraSettings"] as? Map<*, *>)?.get("text") != null)
+            (node.containsKey("label") || (node["extraSettings"] as? Map<*, *>)?.get("text") != null ||
+                node["type"] in BUTTON_TYPES || isUnlabeledInput(node))
 
-    /** Form field ids + outcomes of a `.form` model (used to build member vocabularies). */
+    /**
+     * The palette types a user types, picks or uploads a value into. Display components (`htmlComponent`,
+     * output, images) carry a `value` too, but only to show it — which is why a value alone admits nothing.
+     */
+    val INPUT_TYPES: Set<String> = setOf(
+        "text", "textarea", "password", "number", "date", "dateRange", "time", "select", "radio", "boolean",
+        "checkboxGroup", "switcher", "slider", "upload", "attachment", "richText", "stringList", "color",
+        "dataObjectSelect",
+    )
+
+    /**
+     * An input without a caption is still an input. Design lets a modeller leave `label` out (the caption
+     * sits in a neighbouring text, or the field is the only one on the form), and such a field was never
+     * recorded — a required number field that is a task form's only input made the form read as "nothing
+     * required". Admitted when it is required (literally or by expression), or when it is an input type
+     * bound to a value; a container or display component without a caption still stays out.
+     */
+    private fun isUnlabeledInput(node: Map<*, *>): Boolean {
+        val type = node["type"] as? String ?: return false
+        val required = node["isRequired"]
+        if (required == true) return true
+        if (required is String && (required.trim().equals("true", ignoreCase = true) || required.contains("{{"))) return true
+        return type in INPUT_TYPES && (node["value"] as? String)?.contains("{{") == true
+    }
+
+    /**
+     * Field ids, outcomes and the variables a `.form` / `.page` binds (used to build member vocabularies).
+     * The ids are what navigation lands on; the variables come from [FormBindings], the rule the CLI's graph
+     * applies — a component's id is its variable only when the component binds no `{{…}}` value of its own.
+     */
     fun readForm(bytes: ByteArray): FormInfo {
         val root = parseMap(bytes) ?: return FormInfo(emptyList(), emptyList())
         val fields = LinkedHashSet<String>()
         val outcomes = LinkedHashSet<String>()
         collectForm(root, fields, outcomes)
-        return FormInfo(fields.toList(), outcomes.toList())
+        return FormInfo(fields.toList(), outcomes.toList(), FormBindings.variablesOf(root))
     }
 
     private fun collectForm(node: Any?, fields: MutableSet<String>, outcomes: MutableSet<String>) {
@@ -108,15 +153,19 @@ object ModelJsonReader {
 
     /**
      * The physical-table mapping of a `.service` model (Service Registry). Shape:
-     * `{ "key", "type", "tableName", "referenceKey", "referencedLiquibaseModelKey",
-     *    "columnMappings": [ { "name", "columnName", "type" } ] }`.
+     * `{ "key", "type", "tableName", "referenceKey", "referencedLiquibaseModelKey", "lookupId",
+     *    "columnMappings": [ { "name", "columnName", "type",
+     *                         "relation": { "joinTableName", "owningColumnName", "referenceColumnName" } } ] }`.
      */
     fun readServiceTable(bytes: ByteArray): ServiceTable? {
         val root = parseMap(bytes) ?: return null
         val key = str(root, "key") ?: return null
         val columns = (root["columnMappings"] as? List<*>).orEmpty().mapNotNull { cAny ->
             val c = cAny as? Map<*, *> ?: return@mapNotNull null
-            ColumnMapping(c["name"] as? String, c["columnName"] as? String, c["type"] as? String)
+            val relation = (c["relation"] as? Map<*, *>)?.let { r ->
+                ColumnRelation(str(r, "joinTableName"), str(r, "owningColumnName"), str(r, "referenceColumnName"))
+            }
+            ColumnMapping(c["name"] as? String, c["columnName"] as? String, c["type"] as? String, relation)
         }
         return ServiceTable(
             key = key,
@@ -125,6 +174,7 @@ object ModelJsonReader {
             referenceKey = str(root, "referenceKey"),
             referencedLiquibaseModelKey = str(root, "referencedLiquibaseModelKey"),
             columns = columns,
+            lookupId = str(root, "lookupId"),
         )
     }
 

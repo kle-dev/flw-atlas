@@ -1,6 +1,14 @@
 package com.flowable.atlas.graph
 
 import com.flowable.atlas.parsing.Constants
+import com.flowable.atlas.parsing.ModelKinds
+import com.flowable.atlas.parsing.SecretScan
+
+/**
+ * The model an element's in/out mappings are handed to — a process, case, service, agent, data object,
+ * event, bot, or a URL (`rest`) — and, for a service, agent or data object, the operation they feed.
+ */
+data class Callee(val kind: String, val key: String, val op: String? = null)
 
 /**
  * The mutable extraction context threaded through every parser — a port of the `ctx` dict in
@@ -12,6 +20,9 @@ class Ctx {
     val refs = ArrayList<MutableMap<String, Any?>>()
     val dynamicRefs = ArrayList<MutableMap<String, Any?>>()
     val restCalls = ArrayList<MutableMap<String, Any?>>()
+    /** Where a form's links and a data table's row click go — navigation, which the browser follows, not a
+     *  call the form makes. Kept apart from [restCalls] so no report lists a link as a call. */
+    val links = ArrayList<MutableMap<String, Any?>>()
     val expr = LinkedHashSet<String>()
     val mustache = LinkedHashSet<String>()
     val delegateClasses = LinkedHashSet<String>()
@@ -58,6 +69,21 @@ class Ctx {
      *  writes, so indexing it is what connects a form to the process/case variables it touches. */
     val formFieldUse = LinkedHashMap<String, MutableSet<String>>()
     val queryMeta = LinkedHashMap<String, MutableMap<String, Any?>>()
+    /** Names a Freemarker model binds itself — `<#list … as x>`, `<#assign x …>`, a macro's parameters —
+     *  by model id. Its `${x}` reads that local, not a variable of the scope it renders against. */
+    val freemarkerLocals = LinkedHashMap<String, MutableSet<String>>()
+    /**
+     * Decision service key → (element id of a decision in its DRD → key of the decision table that
+     * decision is a copy of). Filled from a DRD's `flowable:decisionKey` and from the service's Design
+     * JSON twin, which may come before or after the DRD in an archive — so it is applied only once every
+     * model is read ([DecisionServiceCopies]). Per service, never global: every DRD Design exports
+     * numbers its decisions from 1.
+     */
+    val decisionCopies = LinkedHashMap<String, LinkedHashMap<String, String>>()
+
+    fun addDecisionCopy(service: String, elementId: String, tableKey: String) {
+        decisionCopies.getOrPut(service) { LinkedHashMap() }.putIfAbsent(elementId, tableKey)
+    }
 
     /** Discovery counts for `result["stats"]` (Python `len(models)/len(archives)/len(javas)`),
      *  set by [com.flowable.atlas.graph.Atlas.extract] just before the graph is built. */
@@ -65,21 +91,84 @@ class Ctx {
     var archiveFileCount = 0
     var javaFileCount = 0
 
-    /** Record a static model→X reference; dynamic (`${…}`/`{{…}}`) values go to [dynamicRefs] instead.
-     *  [suspect] marks a reference the producer already knows is uncertain (e.g. a ref-by-id where a
-     *  key is expected) — it survives resolution and flags the resulting edge. */
+    /**
+     * The node type of the model being parsed right now (`process`, `form`, …), set by the extractor
+     * around each parser call. Every record a parser writes about *its own* model — a variable it
+     * declares, an operation it calls, a script that touches a name — used to carry the bare key, and
+     * the graph resolved that key through a first-wins map. Two models of different types with one key
+     * (a case and its start form, a data object and its generated service) then shared one attribution:
+     * the form's 34 bindings landed on the case, and the form's page was empty. With the type known here,
+     * the record can say `form:DRA-C001` and no map has to guess.
+     */
+    var currentModel: String? = null
+
+    /** [key] as a node id — `type:key` while a model is being parsed, the key itself otherwise (a Java
+     *  class, or a caller that already spelled the type). */
+    fun modelId(key: Any?): String? {
+        val k = key?.toString() ?: return null
+        val t = currentModel ?: return k
+        return if (':' in k) k else "$t:$k"
+    }
+
+    /** A model of a known kind as a node id, or the bare key when the kind is not a model type (a URL). */
+    private fun typed(kind: String?, key: String?): String? {
+        if (key == null) return null
+        val t = kind?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it } ?: return key
+        return "$t:$key"
+    }
+
+    /** Record a static model→X reference; dynamic (`${…}`, `#{…}`, `{{…}}`) values go to [dynamicRefs]
+     *  instead. [suspect] marks a reference the producer already knows is uncertain (e.g. a ref-by-id
+     *  where a key is expected) — it survives resolution and flags the resulting edge. [ifResolved] marks
+     *  one the producer cannot tell from another kind of value: it counts only if it resolves, and is
+     *  never reported missing. */
     fun addRef(frm: Any?, ftype: String, ffile: String, rel: String, kind: String, value: Any?,
-               suspect: Boolean = false) {
+               suspect: Boolean = false, ifResolved: Boolean = false) {
         if (value == null) return
+        // Newer Design writes a reference as `{"id": "FORM_MODEL-…", "key": "X"}` where older exports
+        // wrote `"X"`. Unwrapped here, at the one door every reference comes through, so a parser that
+        // passes the raw JSON value cannot turn the map's toString into a *missing model* — which is
+        // exactly what a `.document`'s `forms` map did (two error findings on one real project). A map
+        // with no `key` is not a reference and is dropped.
+        if (value is Map<*, *>) {
+            val k = value["key"] ?: return
+            addRef(frm, ftype, ffile, rel, kind, k, suspect, ifResolved)
+            return
+        }
         val v = value.toString().trim()
         if (v.isEmpty()) return
-        val target = if (v.contains("\${") || v.contains("{{")) dynamicRefs else refs
+        val target = if (isDynamic(v)) dynamicRefs else refs
         val entry = linkedMapOf<String, Any?>(
             "from" to frm, "fromType" to ftype, "fromFile" to ffile,
             "rel" to rel, "kind" to kind, "value" to v,
         )
         if (suspect) entry["suspect"] = true
+        if (ifResolved) entry["ifResolved"] = true
         target.add(entry)
+    }
+
+    /** A value an expression decides at run time: JUEL `${…}` / `#{…}` or a form binding `{{…}}`. */
+    private fun isDynamic(v: String) = v.contains("\${") || v.contains("#{") || v.contains("{{")
+
+    /**
+     * Record an outbound REST call of the model being parsed. `source` stays the bare key the JSON has
+     * always carried; `sourceId` is the node the call belongs to. Resolving the bare key instead handed a
+     * service's operation calls to a form with the same key — the form's page then listed endpoints the
+     * form never calls, while the service's own page had none.
+     */
+    fun addRestCall(source: Any?, sourceFile: String, where: Any?, method: Any?, url: Any?, kind: String) {
+        // The one door every REST call comes through, and what GraphBuilder turns into `external:<url>` node
+        // ids, labels and edges: a credential in the URL is masked here or it is in every artifact.
+        restCalls.add(linkedMapOf(
+            "source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile, "where" to where,
+            "method" to method, "url" to SecretScan.redactAnyUrl(url), "kind" to kind,
+        ))
+    }
+
+    /** Record a link of the model being parsed — see [links]. */
+    fun addLink(source: Any?, sourceFile: String, where: Any?, url: String) {
+        links.add(linkedMapOf("source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile,
+            "where" to where, "url" to SecretScan.redactUrl(url)))
     }
 
     /** Record that [consumer] invokes operation [opKey] on a service ([targetKind] = "service") or a
@@ -91,8 +180,8 @@ class Ctx {
         val tk = targetKey.toString().trim()
         val ok = opKey.toString().trim()
         if (c.isEmpty() || tk.isEmpty() || ok.isEmpty()) return
-        if (listOf(tk, ok).any { it.contains("\${") || it.contains("{{") }) return
-        opUse.add(linkedMapOf("consumer" to c, "targetKind" to targetKind, "targetKey" to tk, "op" to ok))
+        if (listOf(tk, ok).any(::isDynamic)) return
+        opUse.add(linkedMapOf("consumer" to modelId(c), "targetKind" to targetKind, "targetKey" to tk, "op" to ok))
     }
 
     /** Record a "who can do what" entry; literal group names feed the index. */
@@ -124,7 +213,7 @@ class Ctx {
         elementType: String,
         params: List<Map<String, Any?>>,
         elementSubType: String? = null,
-        callee: Pair<String, String>? = null,
+        callee: Callee? = null,
     ) {
         for (p in params) {
             val rec = linkedMapOf<String, Any?>(
@@ -136,18 +225,25 @@ class Ctx {
             // which model the values travel to/from; `p` may carry its own (a form button resolves it from
             // extraSettings), so the explicit argument only fills a gap
             if (callee != null && p["refKey"] == null) {
-                rec["refKind"] = callee.first
-                rec["refKey"] = callee.second
+                rec["refKind"] = callee.kind
+                rec["refKey"] = callee.key
+                // the operation the values feed — what joins a mapping to the operation's declared parameters
+                callee.op?.let { rec["refOp"] = it }
             }
             rec.putAll(p)
             rollup.add(rec)
+            // A response mapping stored under the button's own binding writes a property of that
+            // binding's value, not a variable of the scope — the binding's root is the write (recorded
+            // by the form parser), and a `$temp` root is form-local and no variable at all.
+            if (p["storedUnder"] != null) continue
             val dir = p["dir"] as? String ?: continue
             val kind = p["kind"] as? String
             // The callee this mapping feeds: `p` may carry its own (a form button resolves it from
             // extraSettings), else the element-level one. It is what makes an `in` target checkable —
             // the variable it declares belongs to that model, not to this one.
-            val calleeKind = p["refKind"] as? String ?: callee?.first
-            val calleeKey = p["refKey"] as? String ?: callee?.second
+            val calleeKind = p["refKind"] as? String ?: callee?.kind
+            val calleeKey = p["refKey"] as? String ?: callee?.key
+            val calleeOp = p["refOp"] as? String ?: callee?.op
             // An Init-Variables mapping's `value` is bare EL — `root.chaserList.add(chaserInfo)`, with no
             // `${…}` wrapper for the expression harvester to find. Every name in it is read at runtime,
             // and Atlas has no parser for this position, so they are recorded as names whose readers it
@@ -164,12 +260,17 @@ class Ctx {
             // is identical, so only the side and the name it carries appear at the call.
             fun bind(side: String, variable: Any?) = addParamFlow(
                 model, variable, dir, kind, side, elementId, elementName, elementType,
-                p["source"], p["target"], calleeKind, calleeKey,
+                p["source"], p["target"], calleeKind, calleeKey, calleeOp,
             )
-            if ((kind in SOURCE_BINDS_VARIABLE || kind in SOURCE_ONLY_BINDS_VARIABLE) && p["expression"] != true) {
+            // Into a service, agent, data object, event or URL, an `in` names the callee's *parameter* and an
+            // `out` reads its *result field* — neither is a variable of any scope. Recording them as writes
+            // into the callee's scope made every such call an unread input, since those models read nothing.
+            val contract = calleeKind in CONTRACT_CALLEES
+            if ((kind in SOURCE_BINDS_VARIABLE || kind in SOURCE_ONLY_BINDS_VARIABLE) && p["expression"] != true &&
+                !(contract && kind == "out")) {
                 bind("source", p["source"])
             }
-            if (kind !in TARGET_IS_CONTRACT) bind("target", p["target"])
+            if (kind !in TARGET_IS_CONTRACT && !(contract && kind == "in")) bind("target", p["target"])
         }
     }
 
@@ -179,18 +280,19 @@ class Ctx {
     private fun addParamFlow(
         model: Any?, variable: Any?, dir: String, kind: String?, side: String,
         element: Any?, elementName: Any?, elementType: String?,
-        source: Any?, target: Any?, calleeKind: String?, calleeKey: String?,
+        source: Any?, target: Any?, calleeKind: String?, calleeKey: String?, calleeOp: String? = null,
     ) {
         if (model == null) return
         val v = varName(variable) ?: return
         val flow = linkedMapOf<String, Any?>(
-            "model" to model.toString(), "variable" to v, "dir" to dir,
+            "model" to modelId(model), "variable" to v, "dir" to dir,
             "element" to element, "source" to source, "target" to target,
         )
         if (kind != null) flow["kind"] = kind
         flow["side"] = side
         if (calleeKind != null) flow["calleeKind"] = calleeKind
         if (calleeKey != null) flow["calleeKey"] = calleeKey
+        if (calleeOp != null) flow["calleeOp"] = calleeOp
         paramFlows.add(flow)
 
         val role = roleOf(kind, dir, side) ?: return
@@ -203,7 +305,7 @@ class Ctx {
         addVarSite(
             model = model, name = v, dir = role.dir, via = viaOf(kind, side),
             element = element, elementName = elementName, elementType = elementType,
-            scope = if (role.inCallee) calleeKey else null,
+            scope = if (role.inCallee) typed(calleeKind, calleeKey) else null,
         )
     }
 
@@ -218,7 +320,7 @@ class Ctx {
         if (model == null) return
         val n = varName(name) ?: return
         scriptVarSites.add(linkedMapOf(
-            "model" to model.toString(), "variable" to n, "api" to api,
+            "model" to modelId(model), "variable" to n, "api" to api,
             "element" to elementId, "elementName" to elementName, "elementType" to elementType,
         ))
     }
@@ -241,7 +343,7 @@ class Ctx {
         if (model == null) return
         val n = varName(name) ?: return
         val rec = linkedMapOf<String, Any?>(
-            "model" to model.toString(), "variable" to n, "dir" to dir, "via" to via,
+            "model" to modelId(model), "variable" to n, "dir" to dir, "via" to via,
             "element" to element, "elementName" to elementName, "elementType" to elementType,
         )
         scope?.toString()?.trim()?.ifEmpty { null }?.let { rec["scope"] = it }
@@ -265,21 +367,17 @@ class Ctx {
             "mustache_use" -> mustacheUse
             else -> varUse
         }
-        target.getOrPut(n) { LinkedHashSet() }.add(modelKey.toString())
+        target.getOrPut(n) { LinkedHashSet() }.add(modelId(modelKey)!!)
     }
 
     companion object {
-        private val IDENT = Regex("^[A-Za-z_]\\w*$")
         private val SPLIT = Regex("[,;]")
 
         /** [name] as a project variable, or null when it is not one. A variable is a plain identifier
          *  that is neither one of the engine's own context roots nor a Java literal — everything that
          *  records variable evidence has to agree on that, so the rule lives in one place. */
-        private fun varName(name: Any?): String? {
-            val n = name?.toString()?.trim() ?: return null
-            val known = n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS
-            return if (IDENT.matches(n) && !known) n else null
-        }
+        private fun varName(name: Any?): String? =
+            name?.toString()?.trim()?.takeIf(Constants::isVariableName)
 
         /** Root identifiers of a bare-EL mapping value — the receiver of `a.b(c)` and each argument. A
          *  name reached through a `.` is a field of something else, not a variable; a method name is not
@@ -292,6 +390,10 @@ class Ctx {
 
         const val READ = "read"
         const val WRITE = "write"
+
+        /** The [varSites] field that marks a site of a decision inside a DRD with that DRD's file — see
+         *  [decisionCopies]. Only [DecisionServiceCopies] reads it. */
+        const val DRD_FILE = "drdFile"
 
         /** What one side of a mapping proves: the direction, whose scope the name lives in, and whether
          *  the value's readers are outside anything Atlas parses. */
@@ -317,11 +419,10 @@ class Ctx {
             // `flowable:signalVariableNames`: to pass a variable into the signalled instance the action
             // must first read it out of the current scope. A read, therefore — never a write.
             kind == "signalVariable" -> ParamRole(READ, inCallee = false)
-            // `flw.getInput('x')` reads the action's own payload contract. `flw.setOutput('x')` writes a
-            // value whose consumer is a form button's `{{$response…}}`, the Work UI or a REST client —
-            // none of which Atlas can follow, so it must not call the value unread.
-            kind == "flwScript" && side == "target" && dir == "in" -> ParamRole(READ, inCallee = false)
-            kind == "flwScript" && side == "target" -> ParamRole(WRITE, inCallee = false, readsUnknown = true)
+            // `flw.getInput('x')` / `flw.setOutput('x')` name the action's payload contract — what its
+            // button sends and what it hands back — never a variable of a scope; the contract is checked
+            // as such (the action's ioParameters against its callers).
+            kind == "flwScript" -> null
             side == "target" && kind in WRITES_THE_TARGET -> ParamRole(WRITE, inCallee = false)
             else -> null
         }
@@ -368,6 +469,9 @@ class Ctx {
          */
         private val SOURCE_BINDS_VARIABLE = setOf("in", "out")
 
+        /** Callee kinds with a declared contract (parameters, payload fields) rather than a variable scope. */
+        private val CONTRACT_CALLEES = setOf("service", "agent", "dataObject", "event", "rest")
+
         /**
          * Mapping kinds whose *target* is a callee-side contract name — a service input parameter, an
          * event payload field, a bot config key, an HTTP header — rather than a variable anyone can read
@@ -378,9 +482,8 @@ class Ctx {
          * `{{…}}` binding the expression pass already indexes.
          */
         private val TARGET_IS_CONTRACT = setOf(
-            "inputParameter", "eventInParameter", "config",
-            "sendPayloadMapping", "dataObjectDataTableCreatePayloadMapping", "header",
-        )
+            "inputParameter", "eventInParameter", "config", "flwScript",
+            "sendPayloadMapping", "dataObjectDataTableCreatePayloadMapping", "header", "eventCorrelationParameter")
 
         /** Split a comma/semicolon-separated group/user string into individual ids. */
         fun splitIds(s: Any?): List<String> {

@@ -1,10 +1,12 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.environment.auth.AuthContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.URI
 import java.util.Base64
 
 class DesignClientTest {
@@ -49,21 +51,24 @@ class DesignClientTest {
     }
 
     @Test fun unauthorizedMessageIsModeSpecific() {
-        val basic = DesignClient.unauthorizedMessage(DesignClient.Auth.Basic("u", "p"))
+        val basic = DesignClient.unauthorizedMessage(AuthContext.basic("u", "p"))
         assertTrue(basic.contains("username/password"))
-        val token = DesignClient.unauthorizedMessage(DesignClient.Auth.Token("t"))
+        val token = DesignClient.unauthorizedMessage(AuthContext.token("t"))
         assertTrue(token.contains("access token"))
         assertTrue(token.contains("expired"))
         assertFalse(token.contains("username"))
+        // A rejected cookie is neither: the fix is to sign in again, not to hunt for a password.
+        val session = DesignClient.unauthorizedMessage(AuthContext.session(mapOf("Cookie" to "S=1")))
+        assertTrue(session.contains("browser session"))
     }
 
     @Test fun authorizationHeaderPerScheme() {
         assertEquals(
             "Basic " + Base64.getEncoder().encodeToString("u:p".toByteArray()),
-            DesignClient.authorizationHeader(DesignClient.Auth.Basic("u", "p")),
+            AuthContext.basic("u", "p").authorizationHeader(),
         )
         // A pasted "Bearer …" must not double up.
-        assertEquals("Bearer T0K", DesignClient.authorizationHeader(DesignClient.Auth.Token("Bearer T0K")))
+        assertEquals("Bearer T0K", AuthContext.token("Bearer T0K").authorizationHeader())
     }
 
     @Test fun parsesNewToken() {
@@ -132,7 +137,7 @@ class DesignClientTest {
 
     /** A blank token must fail before a socket is opened — the URL here is never reachable. */
     @Test fun listWorkspacesRejectsBlankAccessToken() {
-        val out = DesignClient.listWorkspaces(DesignClient.Connection("https://host", DesignClient.Auth.Token("  ")))
+        val out = DesignClient.listWorkspaces(DesignClient.Connection("https://host", AuthContext.token("  ")))
         assertTrue(out is DesignClient.Result.Failed)
         assertTrue((out as DesignClient.Result.Failed).message.contains("access token"))
     }
@@ -151,5 +156,21 @@ class DesignClientTest {
         // A non-UTF charset in the extended form is honored.
         val eAcute = String(byteArrayOf(0xE9.toByte()), Charsets.ISO_8859_1)
         assertEquals("$eAcute.zip", f("attachment; filename*=ISO-8859-1''%E9.zip"))
+    }
+
+    @Test
+    fun `a host name is retried against every address it resolves to`() {
+        // Same trap as the Inspect client: the JDK connects to the first resolved address and never
+        // falls back, so a Design server bound to IPv6 only is unreachable from Java while a browser
+        // reaches it.
+        val candidates = DesignClient.addressCandidates(URI.create("http://localhost:10014/design-api/workspaces"))
+        assertTrue(candidates.size > 1)
+        assertTrue(candidates.all { it.path == "/design-api/workspaces" })
+        assertTrue(candidates.all { it.port == 10014 })
+    }
+
+    @Test
+    fun `an address literal has nothing to fall back to`() {
+        assertEquals(1, DesignClient.addressCandidates(URI.create("http://127.0.0.1:10014/x")).size)
     }
 }

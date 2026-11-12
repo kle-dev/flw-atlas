@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Starts on the event the onboarding review publishes and waits for the signal it throws: the event's
+     and the signal's pages show publisher and consumer side by side. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/demo"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
+  <signal id="sigDone" name="customerOnboarded"/>
+  <process id="customerWelcomeProcess" name="Customer Welcome">
+    <documentation>Welcomes a customer the moment onboarding announces it.</documentation>
+    <startEvent id="wStart" name="Customer created">
+      <extensionElements>
+        <flowable:eventType>customerCreated</flowable:eventType>
+        <flowable:eventOutParameter source="customerId" target="customerId"/>
+        <flowable:eventOutParameter source="companyName" target="welcomeName"/>
+      </extensionElements>
+    </startEvent>
+    <sequenceFlow id="w1" sourceRef="wStart" targetRef="greet"/>
+    <scriptTask id="greet" name="Write the welcome" scriptFormat="groovy">
+      <script>
+        def to = execution.getVariable('welcomeName')
+        def id = execution.getVariable('customerId')
+        execution.setVariable('welcomeNote', 'Welcome ' + to + ' (' + id + ')')
+      </script>
+    </scriptTask>
+    <sequenceFlow id="w2" sourceRef="greet" targetRef="waitDone"/>
+    <intermediateCatchEvent id="waitDone" name="Onboarding done"><signalEventDefinition signalRef="sigDone"/></intermediateCatchEvent>
+    <sequenceFlow id="w3" sourceRef="waitDone" targetRef="wEnd"/>
+    <endEvent id="wEnd"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="dia_customerWelcomeProcess">
+    <bpmndi:BPMNPlane id="plane_customerWelcomeProcess" bpmnElement="customerWelcomeProcess">
+      <bpmndi:BPMNShape id="s_wStart" bpmnElement="wStart">
+        <omgdc:Bounds x="100" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_greet" bpmnElement="greet">
+        <omgdc:Bounds x="180" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_waitDone" bpmnElement="waitDone">
+        <omgdc:Bounds x="330" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_wEnd" bpmnElement="wEnd">
+        <omgdc:Bounds x="410" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_w1" bpmnElement="w1">
+        <omgdi:waypoint x="130" y="130"/>
+        <omgdi:waypoint x="180" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_w2" bpmnElement="w2">
+        <omgdi:waypoint x="280" y="130"/>
+        <omgdi:waypoint x="330" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_w3" bpmnElement="w3">
+        <omgdi:waypoint x="360" y="130"/>
+        <omgdi:waypoint x="410" y="130"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

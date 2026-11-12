@@ -24,6 +24,13 @@ class LegacyDesignExportTest {
     private fun wrapper(key: String, name: String, editorJson: String): String =
         """{"id": "MODEL-$key", "key": "$key", "name": "$name", "tenantId": "", "editorJson": $editorJson}"""
 
+    /** The same wrapper with `editorJson` as an escaped JSON **string** — how Design actually persists
+     *  it (`MODEL_EDITOR_JSON` is a CLOB), and the shape that lost every form component. */
+    private fun stringWrapper(key: String, name: String, editorJson: String): String {
+        val escaped = editorJson.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
+        return """{"id": "MODEL-$key", "key": "$key", "name": "$name", "editorJson": "$escaped"}"""
+    }
+
     private val serviceJson = wrapper(
         "legacySvc", "Legacy Service",
         """{"type": "REST", "config": {"baseUrl": "https://api.example.com"},
@@ -41,6 +48,13 @@ class LegacyDesignExportTest {
         """{"botKey": "bpmn-start-process-instance-bot", "signalName": "someProcess",
             "form": "legacyForm", "permissionGroups": ["sales"]}""",
     )
+    /** A modern form body: `rows` of `cols` of components, exactly what Design writes today. */
+    private val modernFormBody =
+        """{"rows": [{"cols": [{"id": "text1", "type": "text", "label": "One Field",
+                               "value": "{{oneField}}"}]}],
+            "metadata": {"key": "modernForm", "name": "Modern Form",
+                         "description": "Captures the one field.", "modelType": "form"}}"""
+
     // Oryx (old form editor) shape — only registration + binding harvest are possible
     private val formJson = wrapper(
         "legacyForm", "Legacy Form",
@@ -112,4 +126,148 @@ class LegacyDesignExportTest {
         assertTrue("app contains the legacy service", contains.contains("service:legacySvc"))
         assertTrue("app contains the legacy form", contains.contains("form:legacyForm"))
     }
+
+    /**
+     * A **modern** form body inside a workspace wrapper — the case the two tests above never covered,
+     * because their form is Oryx-shaped and has no components a parser can read anyway.
+     *
+     * `editorJson` is an escaped JSON *string* in a real export, and a form's components are reached by
+     * walking maps, so every field of every form came out empty: no ids, no labels, no descriptions,
+     * and nothing for ⌘K to find. Both spellings of the wrapper are checked, because an export that
+     * nests `editorJson` as an object used to be the only one that worked.
+     */
+    @Test
+    fun aModernFormInAWorkspaceExportKeepsItsFields() {
+        for ((shape, json) in listOf(
+            "editorJson as a string" to stringWrapper("modernForm", "Modern Form", modernFormBody),
+            "editorJson as an object" to wrapper("modernForm", "Modern Form", modernFormBody),
+        )) {
+            val root = tmp.newFolder("ws-" + shape.filter { it.isLetter() })
+            File(root, "form-models").mkdirs()
+            File(root, "form-models/modernForm.json").writeText(json)
+            val forms = Atlas.extract(root)["forms"] as List<*>
+            val form = forms.firstOrNull { (it as Map<*, *>)["key"] == "modernForm" } as Map<*, *>?
+            assertTrue("$shape: the form is missing entirely", form != null)
+            @Suppress("UNCHECKED_CAST")
+            val fields = form!!["fields"] as List<Map<String, Any?>>
+            assertEquals("$shape: field ids", listOf("text1"), fields.map { it["id"] })
+            assertEquals("$shape: the label the modeller typed", listOf("One Field"), fields.map { it["label"] })
+            assertEquals("$shape: the model description", "Captures the one field.", form["description"])
+        }
+    }
+
+    private fun zip(file: File, entries: List<Pair<String, String>>) {
+        ZipOutputStream(file.outputStream()).use { zs ->
+            for ((entry, content) in entries) {
+                zs.putNextEntry(ZipEntry(entry))
+                zs.write(content.toByteArray())
+                zs.closeEntry()
+            }
+        }
+    }
+
+    /** How Design's editor writes a template: `variationParameters` + `templateText` per variation, or the
+     *  id of an attached document. */
+    private val templateBody = """{"templateType": "text",
+        "variationParameters": [{"name": "channel", "defaultValue": "email"}],
+        "templateVariations": [
+          {"variationParameters": {"channel": "email"}, "templateText": "Dear ${'$'}{customerName}", "templateResourceType": "text"},
+          {"templateFileResourceId": "DEMO-file-1", "templateResourceType": "file"}]}"""
+    private val queryBody = """{"type": "case", "subType": "instance", "sourceIndex": "DEMO-index",
+        "parameters": {"customerId": {"type": "string", "label": "Customer", "required": true}, "status": {"type": "string"}},
+        "templateFilter": "{\"bool\": {\"must\": []}}"}"""
+    private val extractorBody = """{"sourceIndex": "case-instances", "fullTextVariables": [],
+        "variableExtractors": [{"filter": {"name": "customerName", "scopeDefinitionKey": "DEMO-case"},
+                                "path": "customerName", "to": "customerNameIdx", "type": "string"}]}"""
+
+    private fun designExport(wrap: (String, String, String) -> String) = listOf(
+        "template-models/DEMO-t.json" to wrap("DEMO-t", "DEMO T", templateBody),
+        // a query and an extractor keep their own extension inside a Design export, so the extension
+        // routes them to their parser with the wrapper still around the body
+        "query-models/DEMO-q.query" to wrap("DEMO-q", "DEMO Q", queryBody),
+        "variable-extractor-models/DEMO-v.extractor" to wrap("DEMO-v", "DEMO V", extractorBody),
+    )
+
+    @Suppress("UNCHECKED_CAST")
+    private fun only(result: Map<String, Any?>, modelType: String): Map<String, Any?> =
+        (result["others"] as List<Map<String, Any?>>).single { it["modelType"] == modelType }
+
+    /**
+     * A template, a query and a variable extractor in a Design workspace export: every one of them came
+     * out as its key and name only — no variations, no parameters, no extracted variables — because the
+     * body sat inside `editorJson` where its parser never looked.
+     */
+    @Test
+    fun aDesignExportKeepsTemplateVariationsQueryParametersAndExtractors() {
+        for ((shape, wrap) in listOf<Pair<String, (String, String, String) -> String>>(
+            "editorJson as an object" to ::wrapper,
+            "editorJson as a string" to ::stringWrapper,
+        )) {
+            val root = tmp.newFolder("export-" + shape.filter { it.isLetter() })
+            zip(File(root, "DEMO.zip"), designExport(wrap))
+            val result = Atlas.extract(root)
+
+            val template = only(result, "template")
+            assertEquals("$shape: template variations", listOf(
+                mapOf("parameters" to mapOf("channel" to "email"), "text" to "Dear \${customerName}"),
+                mapOf("resource" to "DEMO-file-1"),
+            ), template["variations"])
+            assertEquals("$shape: template type", "text", template["templateType"])
+
+            val query = only(result, "query")
+            assertEquals("$shape: query type", "case", query["type"])
+            assertEquals("$shape: query subType", "instance", query["subType"])
+            assertEquals("$shape: query parameters", listOf("customerId", "status"),
+                (query["parameters"] as List<*>).map { (it as Map<*, *>)["name"] })
+            assertTrue("$shape: query templateFilter", query["templateFilter"] != null)
+
+            val extractor = only(result, "variableExtractor")
+            assertEquals("$shape: extractors", 1, (extractor["extractors"] as List<*>).size)
+            @Suppress("UNCHECKED_CAST")
+            val nodes = (result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+            @Suppress("UNCHECKED_CAST")
+            val variable = nodes.single { it["id"] == "variable:customerNameIdx" }["data"] as Map<String, Any?>
+            assertEquals("$shape: the extracted variable is a variableExtractor write", listOf("variableExtractor"),
+                (variable["writes"] as List<*>).map { (it as Map<*, *>)["via"] })
+        }
+    }
+
+    /**
+     * An older export names a subform by its Design model id and keeps the key in `form-id`: read as the
+     * reference, the id was a missing model and the subform it embeds an unused form.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aSubformNamedByItsDesignModelIdResolvesToTheSubform() {
+        val root = tmp.newFolder("subform-by-id")
+        val main = """{"id": "FORM_MODEL-00000000-0000-0000-0000-000000000001", "key": "DEMO-F001", "name": "Request",
+            "editorJson": {"stencil": {"id": "XForm"}, "childShapes": [
+              {"stencil": {"id": "Container"}, "properties": {"id": "approvers", "stencilid": "cloud-sub-form",
+               "value": "{{approvers}}", "form-ref": "FORM_MODEL-00000000-0000-0000-0000-000000000002", "form-id": "DEMO-F002"}}]}}"""
+        val sub = """{"id": "FORM_MODEL-00000000-0000-0000-0000-000000000002", "key": "DEMO-F002", "name": "Approver",
+            "editorJson": {"stencil": {"id": "XForm"}, "childShapes": [
+              {"stencil": {"id": "Text"}, "properties": {"id": "approverName", "stencilid": "cloud-text", "value": "{{approverName}}"}}]}}"""
+        zip(File(root, "DEMO App.zip"), listOf("form-models/DEMO-F001.json" to main, "form-models/DEMO-F002.json" to sub))
+        val result = Atlas.extract(root)
+        val findings = result["findings"] as List<Map<String, Any?>>
+        assertEquals("no missing model", emptyList<Any?>(), findings.filter { it["check"] == "missingRefs" })
+        assertTrue("the subform is used", findings.none { it["check"] == "unusedForms" && it["node"] == "form:DEMO-F002" })
+        val edges = (result["graph"] as Map<String, Any?>)["edges"] as List<Map<String, Any?>>
+        assertTrue(edges.toString(), edges.any { it["s"] == "form:DEMO-F001" && it["t"] == "form:DEMO-F002" && it["rel"] == "subform" })
+    }
+
+    /** The same models deployed beside their Design export are one model each, not two that disagree. */
+    @Test
+    fun aDesignExportBesideItsBarIsNoCopyConflict() {
+        val root = tmp.newFolder("export-and-bar")
+        zip(File(root, "DEMO.zip"), designExport(::wrapper))
+        zip(File(root, "DEMO-bar.zip"), listOf(
+            "DEMO-q.query" to queryBody.replaceFirst("{", """{"key": "DEMO-q", "name": "DEMO Q", """),
+            "variable-extractor-DEMO-v.extractor" to extractorBody.replaceFirst("{", """{"key": "DEMO-v", "name": "DEMO V", """),
+        ))
+        val result = Atlas.extract(root)
+        val copies = (result["diagnostics"] as List<*>).map { it as Map<*, *> }.filter { it["kind"] == "copy" }
+        assertEquals("no copy conflict between identical bodies", emptyList<Any?>(), copies)
+    }
+
 }

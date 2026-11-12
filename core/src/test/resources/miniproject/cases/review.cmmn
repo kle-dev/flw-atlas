@@ -4,6 +4,9 @@
              targetNamespace="http://flowable.org/test">
   <case id="reviewCase" name="Review Case" flowable:candidateStarterGroups="auditors">
     <casePlanModel id="planModel" name="Review plan">
+      <extensionElements>
+        <flowable:security-policy-model><![CDATA[orderPolicy]]></flowable:security-policy-model>
+      </extensionElements>
       <planItem id="pi_review" definitionRef="reviewTask"/>
       <planItem id="pi_order" definitionRef="startOrder"/>
       <planItem id="pi_lookup" definitionRef="lookupTask"/>

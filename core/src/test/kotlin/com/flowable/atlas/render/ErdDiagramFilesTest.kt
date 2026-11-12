@@ -1,0 +1,67 @@
+package com.flowable.atlas.render
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
+
+/**
+ * The project's ER diagrams reach the page that carries the designer: found where people keep them, not
+ * in build output, each passed through as JSON or as the reason it could not be — so the page can say why
+ * a diagram is missing rather than just not listing it.
+ */
+class ErdDiagramFilesTest {
+
+    // A rule, not deleteOnExit: that deletes only an empty directory, and these never are.
+    @get:Rule val tmp = TemporaryFolder()
+
+    private fun project(): File = tmp.newFolder()
+
+    @Test
+    fun findsDiagramsAndSkipsBuildOutput() {
+        val root = project()
+        File(root, "docs").mkdirs()
+        File(root, "docs/orders.atlas-erd.json").writeText("""{"format":"atlas-erd","version":1,"name":"Orders","tables":[]}""")
+        File(root, "build/tmp").mkdirs()
+        File(root, "build/tmp/copy.atlas-erd.json").writeText("""{"format":"atlas-erd","version":1}""")
+        File(root, "node_modules/x").mkdirs()
+        File(root, "node_modules/x/y.atlas-erd.json").writeText("{}")
+        File(root, "docs/broken.atlas-erd.json").writeText("""{"format":"atlas-erd",""")
+        File(root, "docs/other.json").writeText("{}")
+
+        val found = ErdDiagramFiles.find(root)
+        assertEquals(listOf("docs/broken.atlas-erd.json", "docs/orders.atlas-erd.json"), found.map { it["file"] })
+        val broken = found[0]
+        assertTrue("a file that is not JSON travels as its error: $broken", (broken["error"] as String).startsWith("not valid JSON"))
+        @Suppress("UNCHECKED_CAST")
+        val doc = found[1]["doc"] as Map<String, Any?>
+        assertEquals("Orders", doc["name"])
+    }
+
+    @Test
+    fun anOversizedFileIsNotEmbedded() {
+        val root = project()
+        File(root, "big.atlas-erd.json").writeText(" ".repeat((ErdDiagramFiles.MAX_BYTES + 1).toInt()))
+        val found = ErdDiagramFiles.find(root)
+        assertEquals(1, found.size)
+        assertTrue(found[0]["error"].toString().contains("not embedded"))
+        assertEquals(null, found[0]["doc"])
+    }
+
+    @Test
+    fun aSingleFileOrArchiveHasNoProjectDiagrams() {
+        val f = tmp.newFile("model.bpmn")
+        assertEquals(emptyList<Any>(), ErdDiagramFiles.find(f))
+    }
+
+    /** The diagrams ride along with the ER page, which reads them — not with the explorer, which has no use for them. */
+    @Test
+    fun theErPageEmbedsThemAndTheExplorerDoesNot() {
+        val root = File(javaClass.classLoader.getResource("miniproject")!!.toURI())
+        val result = com.flowable.atlas.graph.Atlas.extract(root)
+        assertTrue(!ExplorerHtmlRenderer.render(result, root).contains("atlas-erd"))
+        assertTrue(ErdHtmlRenderer.render(result, root).contains("\"diagrams\":["))
+    }
+}

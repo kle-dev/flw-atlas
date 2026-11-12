@@ -1,3 +1,5 @@
+import java.io.ByteArrayOutputStream
+
 // :cli — the standalone command-line front-end over :core (successor to flowable_atlas.py).
 // Produces a self-contained fat-jar via the Shadow plugin; the repo-root `atlas` script runs it with
 // `java -jar`.
@@ -32,6 +34,16 @@ tasks.shadowJar {
 
 tasks.test {
     useJUnit()
+    // LauncherTest runs the repository-root `atlas` script, which is outside this module's sources: without
+    // it declared, an edit to the launcher alone would leave `test` UP-TO-DATE and the gate green on a
+    // script nothing ran.
+    inputs.file(rootProject.file("atlas")).withPropertyName("launcher")
+    // CliTest runs the CLI over :core's miniproject fixture and compares what it writes with :core's
+    // goldens byte for byte. Both live in :core's *test* resources, which this module does not depend on,
+    // so Gradle cannot infer them: a fixture change re-baselined in :core left this test UP-TO-DATE, and
+    // the build passed without ever checking that the CLI writes the new golden.
+    inputs.dir(rootProject.file("core/src/test/resources/miniproject")).withPropertyName("miniproject")
+    inputs.dir(rootProject.file("core/src/test/resources/golden")).withPropertyName("goldens")
 }
 
 // ---- explorer search behaviour test ----
@@ -158,7 +170,169 @@ val diagramUiTest by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest) }
+// The Remote Development stub (frontend/remote-stub.html): the stand-in page the plugin loads instead of the
+// report under Remote Dev, which pulls the report through the JS bridge and caches it in the client's
+// localStorage. Its contract with RemoteExplorerPage.kt (placeholders, the part protocol) and the
+// document.write hand-over are runtime behaviour only a browser can prove; the stub is a :core asset, so
+// its test runs here with the other frontend tests, against the miniproject report.
+val remoteStubUiTest by tasks.registering(Exec::class) {
+    description = "Drives the Remote-Dev explorer stub in headless Chrome (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(searchSelfTestReport)
+    val script = rootProject.file("scripts/remote-stub-uitest.mjs")
+    val stub = rootProject.file("core/src/main/resources/frontend/remote-stub.html")
+    inputs.file(script)
+    inputs.file(stub)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf { nodePresentOrFail("remoteStubUiTest") }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        searchSelfTestDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+        "--stub", stub.absolutePath,
+    )
+}
+
+// The ER diagram designer (<project>.erd.html): its pure core in node, its page in Chrome — on the demo
+// project, which has tables, a relation the models state and a diagram file of its own — and the explorer
+// (the miniproject report above), which must carry none of it since the designer moved out of it.
+val erdSelfTest by tasks.registering(Exec::class) {
+    description = "Runs the ER diagram designer's core self-test (skipped when node is unavailable)."
+    group = "verification"
+    val script = rootProject.file("scripts/erd-selftest.mjs")
+    inputs.file(script)
+    inputs.file(rootProject.file("core/src/main/resources/frontend/erd.js"))
+    onlyIf { nodePresentOrFail("erdSelfTest") }
+    commandLine(nodeExecutable ?: "node", script.absolutePath)
+}
+
+val erdUiTestDir = layout.buildDirectory.dir("erd-uitest")
+
+val erdUiTestReport by tasks.registering(JavaExec::class) {
+    description = "Generates the demo project's ER diagram page for its UI test."
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.flowable.atlas.cli.MainKt")
+    args(
+        rootProject.file("site/flowable-demo").absolutePath,
+        "--erd", "--quiet",
+        "-o", erdUiTestDir.get().asFile.resolve("flowable-demo.erd.html").absolutePath,
+    )
+    inputs.dir(rootProject.file("site/flowable-demo"))
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    outputs.dir(erdUiTestDir)
+}
+
+val erdUiTest by tasks.registering(Exec::class) {
+    description = "Drives the ER diagram designer in headless Chrome (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(erdUiTestReport, searchSelfTestReport)
+    val script = rootProject.file("scripts/erd-uitest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf { nodePresentOrFail("erdUiTest") }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        erdUiTestDir.get().asFile.resolve("flowable-demo.erd.html").absolutePath,
+        "--plain", searchSelfTestDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+}
+
+// A large project's data island is embedded deflated (ExplorerHtmlRenderer.islandTag) and inflated by the
+// page's own code before it boots. The inflater is held to zlib in node; then every explorer check runs
+// again on a deflated page — miniproject is far below the 1 MB where deflating starts, so this report is
+// written with the threshold at 0.
+val islandSelfTest by tasks.registering(Exec::class) {
+    description = "Runs the explorer's data-island inflater against zlib (skipped when node is unavailable)."
+    group = "verification"
+    val script = rootProject.file("scripts/island-selftest.mjs")
+    inputs.file(script)
+    inputs.file(rootProject.file("core/src/main/resources/frontend/explorer.js"))
+    onlyIf { nodePresentOrFail("islandSelfTest") }
+    commandLine(nodeExecutable ?: "node", script.absolutePath)
+}
+
+val explorerUiTestDeflatedDir = layout.buildDirectory.dir("explorer-uitest-deflated")
+
+val explorerUiTestDeflatedReport by tasks.registering(JavaExec::class) {
+    description = "Generates the miniproject explorer with its data island deflated."
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.flowable.atlas.cli.MainKt")
+    systemProperty("atlas.explorer.compressAbove", "0")
+    args(
+        rootProject.file("core/src/test/resources/miniproject").absolutePath,
+        "--html", "--quiet",
+        "-o", explorerUiTestDeflatedDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+    inputs.dir(rootProject.file("core/src/test/resources/miniproject"))
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    outputs.dir(explorerUiTestDeflatedDir)
+}
+
+val explorerUiTestDeflated by tasks.registering(Exec::class) {
+    description = "Drives the explorer in headless Chrome with its data island deflated (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(explorerUiTestDeflatedReport, islandSelfTest)
+    val script = rootProject.file("scripts/explorer-uitest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf { nodePresentOrFail("explorerUiTestDeflated") }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        explorerUiTestDeflatedDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+}
+
+// ---- the ./atlas launcher ----
+// The launcher is bash, it runs every user's first `./atlas <project>`, and nothing ever ran it: its name rule
+// turned `.` into an empty name, so every project analysed from inside itself shared atlas-output/ — one
+// waivers.json for all of them — and the Done line pointed at `atlas-output//.explorer.html`. This runs it the
+// way a user does, from inside a project as `.`, against the fat-jar, and checks where the explorer landed and
+// what the last line names. bash is the launcher's own requirement, so without it (Windows) there is nothing
+// to test.
+val launcherSmokeDir = layout.buildDirectory.dir("launcher-smoke")
+val bashExecutable: String? = listOf("/bin/bash", "/usr/bin/bash").firstOrNull { File(it).canExecute() }
+
+val launcherSmoke by tasks.registering(Exec::class) {
+    description = "Runs the ./atlas launcher from inside a project as '.' (skipped without bash)."
+    group = "verification"
+    dependsOn(tasks.shadowJar)
+    val script = rootProject.file("atlas")
+    val fixture = rootProject.file("core/src/test/resources/miniproject")
+    inputs.file(script)
+    inputs.dir(fixture)
+    inputs.files(tasks.shadowJar)
+    val dir = launcherSmokeDir.get().asFile
+    val project = dir.resolve("DEMO-proj")
+    onlyIf { bashExecutable != null }
+    val stdout = ByteArrayOutputStream()
+    standardOutput = stdout
+    workingDir = project
+    commandLine(bashExecutable ?: "bash", dir.resolve("atlas").absolutePath, ".", "--no-open", "-q")
+    environment("ATLAS_NO_BUILD", "1")
+    val java21 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+    doFirst {
+        dir.deleteRecursively()
+        fixture.copyRecursively(project)
+        script.copyTo(dir.resolve("atlas"))
+        environment("ATLAS_JAR", tasks.shadowJar.get().archiveFile.get().asFile.absolutePath)
+        environment("JAVA", java21.get().executablePath.asFile.absolutePath)
+    }
+    doLast {
+        val explorer = dir.resolve("atlas-output/DEMO-proj/DEMO-proj.explorer.html")
+        check(explorer.isFile) { "launcherSmoke: $explorer was not written" }
+        val last = stdout.toString(Charsets.UTF_8).trim().lines().last()
+        check(last.endsWith("/atlas-output/DEMO-proj/DEMO-proj.explorer.html")) { "launcherSmoke: the last line names another file: $last" }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest, erdSelfTest, erdUiTest, islandSelfTest, explorerUiTestDeflated,
+        launcherSmoke)
+}
 
 // ---- documentation site (site/ -> build/site) ----
 // The site lives here rather than in the root build because everything it needs is already wired up

@@ -16,8 +16,15 @@ object MiniJson {
 
     class JsonException(message: String) : RuntimeException(message)
 
+    /** Python's `json` gives up at its recursion limit (about a thousand levels); no model comes near it. */
+    private const val MAX_DEPTH = 1000
+
+    // A UTF-8 byte-order mark is not whitespace to `isWhitespace()`, so a BOM'd model — an export edited
+    // on Windows, say — parsed as "Expecting value at char 0" and vanished from the report.
+    private fun P(text: String, dropBom: Boolean) = P(if (dropBom) text.removePrefix("\uFEFF") else text)
+
     fun parse(text: String): Any? {
-        val p = P(text)
+        val p = P(text, dropBom = true)
         p.skipWs()
         val v = p.readValue()
         p.skipWs()
@@ -27,7 +34,7 @@ object MiniJson {
 
     fun parseOrNull(text: String): Any? =
         try {
-            val p = P(text)
+            val p = P(text, dropBom = true)
             p.skipWs()
             p.readValue()
         } catch (e: Exception) {
@@ -35,7 +42,7 @@ object MiniJson {
         }
 
     /** Compact JSON rendering of an evaluated value (for showing results). */
-    fun stringify(value: Any?): String = buildString { write(value, this) }
+    fun stringify(value: Any?): String = buildString { write(value, this, false) }
 
     /**
      * Pretty JSON rendering, matching Python's
@@ -49,9 +56,23 @@ object MiniJson {
      *    (integral values keep one decimal, e.g. `1.0`).
      */
     fun stringify(value: Any?, indent: Int): String =
-        buildString { writeIndented(value, this, indent, 0) }
+        buildString { writeIndented(value, this, indent, 0, false) }
 
-    private fun writeIndented(v: Any?, sb: StringBuilder, unit: Int, level: Int) {
+    /**
+     * [stringify] without the members of an object whose value is null: `{"a": 1, "b": null}` is written
+     * `{"a":1}`. A null in a list keeps its place, where its position is the fact. [indent] null is the
+     * compact form.
+     *
+     * For a document that is queried rather than held. `.b` answers null whether the member is there or
+     * not, so the member costs bytes in the file and tokens in every answer cut from it and says nothing.
+     * Left out while serializing, not by copying the value first: the graph is the largest thing a run
+     * holds, and a second copy of it is what a large project does not have the memory for.
+     */
+    fun stringifyWithoutNulls(value: Any?, indent: Int? = null): String = buildString {
+        if (indent == null) write(value, this, true) else writeIndented(value, this, indent, 0, true)
+    }
+
+    private fun writeIndented(v: Any?, sb: StringBuilder, unit: Int, level: Int, skipNulls: Boolean) {
         when (v) {
             null -> sb.append("null")
             is String -> writeJsonString(v, sb)
@@ -60,14 +81,16 @@ object MiniJson {
             is Float -> sb.append(v.toDouble().toString())
             is Number -> sb.append(v.toString())           // Int/Long/Short/Byte/BigInteger -> no decimal
             is Map<*, *> -> {
-                if (v.isEmpty()) { sb.append("{}"); return }
+                // Counted after the nulls are gone: an object of nothing but nulls is an empty one.
+                if (v.isEmpty() || (skipNulls && v.values.all { it == null })) { sb.append("{}"); return }
                 sb.append("{\n")
                 val childPad = " ".repeat(unit * (level + 1))
                 var first = true
                 for ((k, value) in v) {
+                    if (skipNulls && value == null) continue
                     if (!first) sb.append(",\n"); first = false
                     sb.append(childPad); writeJsonString(k.toString(), sb); sb.append(": ")
-                    writeIndented(value, sb, unit, level + 1)
+                    writeIndented(value, sb, unit, level + 1, skipNulls)
                 }
                 sb.append('\n').append(" ".repeat(unit * level)).append('}')
             }
@@ -78,12 +101,103 @@ object MiniJson {
                 var first = true
                 for (e in v) {
                     if (!first) sb.append(",\n"); first = false
-                    sb.append(childPad); writeIndented(e, sb, unit, level + 1)
+                    sb.append(childPad); writeIndented(e, sb, unit, level + 1, skipNulls)
                 }
                 sb.append('\n').append(" ".repeat(unit * level)).append(']')
             }
             else -> writeJsonString(v.toString(), sb)
         }
+    }
+
+    /**
+     * Re-indent JSON **without reading its values** — one token per line, [indent] spaces per level,
+     * `": "` between a key and its value, empty objects and arrays left inline.
+     *
+     * Token-level on purpose. `stringify(parseOrNull(text), indent)` is the one-line alternative, but it
+     * round-trips every value through [Double] (see [writeIndented]), so `"version": 1` comes back as
+     * `1.0` and a long integer in scientific notation. Here every string, number and keyword is copied
+     * through character for character and only the whitespace *between* them changes — which is what a
+     * side-by-side comparison needs: both sides laid out the same way, neither showing a value its file
+     * does not contain.
+     *
+     * Null when [text] is not a `{`/`[`-rooted, correctly paired document (an unterminated string, a
+     * missing bracket): the caller then shows the bytes as they are rather than a guess at them.
+     */
+    fun reindent(text: String, indent: Int = 2): String? {
+        val s = text.removePrefix("\uFEFF")
+        var i = 0
+        while (i < s.length && s[i].isWhitespace()) i++
+        if (i >= s.length || (s[i] != '{' && s[i] != '[')) return null
+
+        val sb = StringBuilder(s.length + s.length / 3)
+        val open = ArrayDeque<Char>()          // the closers still expected, innermost last
+        var rootClosed = false                 // anything but whitespace after this is trailing junk
+        fun newline() {
+            sb.append('\n')
+            repeat(open.size * indent) { sb.append(' ') }
+        }
+        while (i < s.length) {
+            when (val c = s[i]) {
+                '"' -> {
+                    val end = copyString(s, i, sb) ?: return null
+                    i = end
+                }
+                '{', '[' -> {
+                    val closer = if (c == '{') '}' else ']'
+                    var next = i + 1
+                    while (next < s.length && s[next].isWhitespace()) next++
+                    if (next < s.length && s[next] == closer) {
+                        sb.append(c).append(closer)         // {} / [] stay on one line
+                        i = next + 1
+                        rootClosed = open.isEmpty()
+                    } else {
+                        sb.append(c)
+                        open.addLast(closer)
+                        newline()
+                        i++
+                    }
+                }
+                '}', ']' -> {
+                    if (open.removeLastOrNull() != c) return null
+                    newline()
+                    sb.append(c)
+                    i++
+                    rootClosed = open.isEmpty()
+                }
+                ',' -> { sb.append(c); newline(); i++ }
+                ':' -> { sb.append(": "); i++ }
+                else -> {
+                    if (!c.isWhitespace()) sb.append(c)     // a number/keyword character; whitespace goes
+                    i++
+                }
+            }
+            if (rootClosed) {
+                while (i < s.length && s[i].isWhitespace()) i++
+                return if (i >= s.length) sb.toString() else null
+            }
+        }
+        return null                            // ran out of input with brackets still open
+    }
+
+    /** Copies the string literal starting at the quote at [from] verbatim; returns the index after its
+     *  closing quote, or null when it is never closed. */
+    private fun copyString(s: String, from: Int, sb: StringBuilder): Int? {
+        sb.append('"')
+        var i = from + 1
+        while (i < s.length) {
+            val c = s[i]
+            sb.append(c)
+            when (c) {
+                '\\' -> {
+                    if (i + 1 >= s.length) return null
+                    sb.append(s[i + 1])
+                    i += 2
+                }
+                '"' -> return i + 1
+                else -> i++
+            }
+        }
+        return null
     }
 
     /** JSON string escaping matching Python's `json.dumps(..., ensure_ascii=False)`: escape the
@@ -104,7 +218,7 @@ object MiniJson {
         sb.append('"')
     }
 
-    private fun write(v: Any?, sb: StringBuilder) {
+    private fun write(v: Any?, sb: StringBuilder, skipNulls: Boolean) {
         when (v) {
             null -> sb.append("null")
             is String -> writeString(v, sb)
@@ -115,33 +229,26 @@ object MiniJson {
                 sb.append('{')
                 var first = true
                 for ((k, value) in v) {
+                    if (skipNulls && value == null) continue
                     if (!first) sb.append(','); first = false
-                    writeString(k.toString(), sb); sb.append(':'); write(value, sb)
+                    writeString(k.toString(), sb); sb.append(':'); write(value, sb, skipNulls)
                 }
                 sb.append('}')
             }
             is Iterable<*> -> {
                 sb.append('[')
                 var first = true
-                for (e in v) { if (!first) sb.append(','); first = false; write(e, sb) }
+                for (e in v) { if (!first) sb.append(','); first = false; write(e, sb, skipNulls) }
                 sb.append(']')
             }
             else -> writeString(v.toString(), sb)
         }
     }
 
-    private fun writeString(s: String, sb: StringBuilder) {
-        sb.append('"')
-        for (c in s) when (c) {
-            '"' -> sb.append("\\\"")
-            '\\' -> sb.append("\\\\")
-            '\n' -> sb.append("\\n")
-            '\r' -> sb.append("\\r")
-            '\t' -> sb.append("\\t")
-            else -> sb.append(c)
-        }
-        sb.append('"')
-    }
+    // The compact writer escapes exactly what the indented one does: a raw control character (a
+    // vertical tab pasted from Word into a description) is invalid inside a JSON string, and the
+    // explorer's JSON.parse refused the whole page over it.
+    private fun writeString(s: String, sb: StringBuilder) = writeJsonString(s, sb)
 
     private class P(val s: String) {
         var pos = 0
@@ -173,11 +280,18 @@ object MiniJson {
             }
         }
 
+        /** Open containers. The parser recurses per level, and a StackOverflowError is an Error that gets
+         *  past every `catch (e: Exception)` above it — so nesting past Python's own limit fails as JSON. */
+        private var depth = 0
+
+        private fun enter() { if (++depth > MAX_DEPTH) fail("Nesting deeper than $MAX_DEPTH levels", pos) }
+
         private fun readObject(): Map<String, Any?> {
+            enter()
             val map = LinkedHashMap<String, Any?>()
             pos++ // {
             skipWs()
-            if (peek() == '}') { pos++; return map }
+            if (peek() == '}') { pos++; depth--; return map }
             while (true) {
                 skipWs()
                 if (peek() != '"') fail("Expecting property name enclosed in double quotes", pos)
@@ -189,23 +303,24 @@ object MiniJson {
                 skipWs()
                 when (peek()) {
                     ',' -> { pos++; continue }
-                    '}' -> { pos++; return map }
+                    '}' -> { pos++; depth--; return map }
                     else -> fail("Expecting ',' delimiter", pos)
                 }
             }
         }
 
         private fun readArray(): List<Any?> {
+            enter()
             val list = ArrayList<Any?>()
             pos++ // [
             skipWs()
-            if (peek() == ']') { pos++; return list }
+            if (peek() == ']') { pos++; depth--; return list }
             while (true) {
                 list += readValue()
                 skipWs()
                 when (peek()) {
                     ',' -> { pos++; continue }
-                    ']' -> { pos++; return list }
+                    ']' -> { pos++; depth--; return list }
                     else -> fail("Expecting ',' delimiter", pos)
                 }
             }
@@ -231,7 +346,10 @@ object MiniJson {
                             'b' -> sb.append('\b')
                             'f' -> sb.append('\u000C')
                             'u' -> {
-                                if (pos + 4 > s.length) fail("Invalid \\uXXXX escape", pos - 2)
+                                // Four hex digits, checked here: `toInt(16)` threw a NumberFormatException the
+                                // callers (the playground's "Invalid payload JSON") do not catch, and took "+1f".
+                                if (pos + 4 > s.length || (pos until pos + 4).any { Character.digit(s[it], 16) < 0 })
+                                    fail("Invalid \\uXXXX escape", pos - 2)
                                 sb.append(s.substring(pos, pos + 4).toInt(16).toChar()); pos += 4
                             }
                             else -> fail("Invalid \\escape", pos - 2)

@@ -5,7 +5,9 @@
   "tableName": "cust_customer",
   "columnMappings": [
     {"name": "id", "columnName": "id_", "type": "string"},
-    {"name": "customerName", "columnName": "name_", "type": "string"}
+    {"name": "customerName", "columnName": "name_", "type": "string"},
+    {"name": "deliveryCity", "columnName": "delivery_zip_", "type": "string"},
+    {"name": "deliveryZip", "columnName": "delivery_city_", "type": "string"}
   ],
   "operations": [
     {"key": "findAll", "name": "Find all", "config": {"method": "GET", "url": "/api/customers"}}

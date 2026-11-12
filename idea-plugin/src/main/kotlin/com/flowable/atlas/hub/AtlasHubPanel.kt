@@ -1,477 +1,237 @@
 package com.flowable.atlas.hub
 
-import com.flowable.atlas.AtlasBuildInfo
-import com.flowable.atlas.AtlasPlatformSupport
+import com.intellij.openapi.components.service
+import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.AtlasNotifications
+import com.intellij.notification.NotificationType
+import com.intellij.ide.projectView.ProjectView
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
-import com.flowable.atlas.action.GenerateModelConstantsAction
-import com.flowable.atlas.action.RebuildModelIndexAction
-import com.flowable.atlas.design.DesignAppListUi
-import com.flowable.atlas.design.DesignClient
-import com.flowable.atlas.design.DesignCredentials
-import com.flowable.atlas.design.DesignPullSelection
-import com.flowable.atlas.design.DesignPullService
+import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
-import com.flowable.atlas.explorer.AtlasBrowser
-import com.flowable.atlas.explorer.AtlasExplorerFiles
-import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.AtlasGenerationRunner
-import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.model.ModelType
-import com.flowable.atlas.project.AtlasProjectRootService
-import com.flowable.atlas.settings.FlowableAtlasConfigurable
-import com.flowable.atlas.settings.FlowableAtlasProjectSettings
-import com.intellij.icons.AllIcons
+import com.flowable.atlas.hub.sections.DesignPullSection
+import com.flowable.atlas.hub.sections.ExplorerSection
+import com.flowable.atlas.hub.sections.HubHost
+import com.flowable.atlas.hub.sections.PlaygroundSection
+import com.flowable.atlas.hub.sections.RecentModelsSection
 import com.intellij.ide.DataManager
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.ActionUiKind
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
-import com.intellij.openapi.components.service
-import com.intellij.openapi.extensions.PluginId
-import com.intellij.openapi.options.ShowSettingsUtil
-import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.wm.ToolWindowManager
-import com.intellij.ui.CollectionListModel
-import com.intellij.ui.ColoredListCellRenderer
-import com.intellij.ui.SimpleTextAttributes
-import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
-import com.intellij.ui.CheckBoxList
-import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.RowsRange
+import com.intellij.ui.dsl.builder.TopGap
 import com.intellij.util.ui.JBUI
-import java.awt.Dimension
 import com.intellij.ui.dsl.builder.panel
-import com.intellij.ui.jcef.JBCefApp
 import com.intellij.util.SingleAlarm
-import com.intellij.util.text.DateFormatUtil
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 import java.nio.file.Path
-import javax.swing.JList
+import javax.swing.JComponent
 
 /**
- * Content of the Atlas Hub tool window: model-index status (with Rebuild), the generated
- * `*.explorer.html` pages (double-click opens the embedded viewer), and the Flowable Design sync
- * state — all refreshed via [AtlasEvents] with a debounce. Data is gathered on a pooled thread and
- * only applied on the EDT; the panel never triggers a blocking index build itself (it displays
- * [FlowableModelIndexService.cachedOrNull] only).
+ * Content of the Atlas Hub tool window: a status header (which Flowable project, how many models, how
+ * fresh, and one attention line when something needs a hand) over four foldable blocks — the generated
+ * explorer, the models opened last, the Flowable Design pull, the playground's runtime — each with its
+ * actions beside its state. The panel is as wide as its stripe and every row fits 280 px ([HubLayout]);
+ * a folded block stays folded, per project.
+ *
+ * Data is gathered on a pooled thread ([HubSnapshot.gather]) and applied on the EDT; the panel never
+ * triggers a blocking index build itself. It refreshes via [AtlasEvents] with a debounce, so it reflects
+ * work started anywhere in the IDE without polling.
  */
-class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, true), Disposable {
+class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true, true), Disposable, HubHost {
 
-    private data class ExplorerArtifact(val path: Path, val relative: String, val modified: Long)
+    private val header = HubHeader(this, ::runAttention)
+    private val explorer = ExplorerSection(this)
+    private val recent = RecentModelsSection(this)
+    private val design = DesignPullSection(this)
+    private val playground = PlaygroundSection(this)
+    private val sections = listOf(explorer, recent, design, playground)
 
-    private data class Snapshot(
-        val projectText: String,
-        val showChangeLink: Boolean,
-        val indexText: String,
-        val artifacts: List<ExplorerArtifact>,
-        val designText: String,
-        val designArtifactsStale: Boolean,
-        val browserAvailable: Boolean,
-        val designConfigured: Boolean,
-        /** What a pull would fetch right now — the personal override, else the configured default. */
-        val pullSelection: DesignPullSelection.Selection,
-        val pullSelectionIsOverride: Boolean,
-    )
-
-    private val projectStatus = JBLabel()
-    private var changeProjectLink: javax.swing.JComponent? = null
-    private val indexStatus = JBLabel()
-    private val designStatus = JBLabel()
-    private var designStaleRow: com.intellij.ui.dsl.builder.Row? = null
-    private var openInBrowserLink: javax.swing.JComponent? = null
-    private val artifactsModel = CollectionListModel<ExplorerArtifact>()
-    private val artifactsList = JBList(artifactsModel).apply {
-        visibleRowCount = 8
-        setEmptyText("No explorer generated yet")
-        cellRenderer = object : ColoredListCellRenderer<ExplorerArtifact>() {
-            override fun customizeCellRenderer(
-                list: JList<out ExplorerArtifact>, value: ExplorerArtifact,
-                index: Int, selected: Boolean, hasFocus: Boolean,
-            ) {
-                icon = AllIcons.Nodes.PpWeb
-                append(value.path.fileName.toString(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
-                append("  ${value.relative}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                if (value.modified > 0) {
-                    append("  ·  ${DateFormatUtil.formatPrettyDateTime(value.modified)}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                }
-            }
-        }
-        addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent) {
-                if (e.clickCount == 2) selectedArtifact()?.let(::openArtifact)
-            }
-        })
-    }
-
-    // -- Design pull selection (personal override of the configured default) ----------------------
-
-    private val appList = CheckBoxList<DesignClient.App>().apply {
-        setCheckBoxListListener { _, _ -> if (!populatingApps) onSelectionEdited() }
-    }
-    private var designAppsRow: com.intellij.ui.dsl.builder.Row? = null
-    private var designAppsListRow: com.intellij.ui.dsl.builder.Row? = null
-    private var resetSelectionLink: javax.swing.JComponent? = null
-    /** Guards the checkbox listener while the list is repopulated programmatically. */
-    private var populatingApps = false
-    /** The live app list is fetched once per workspace, on demand — `gather()` stays network-free. */
-    private var fetchedAppsWorkspace: String? = null
-
+    private val folds = LinkedHashMap<String, FoldHeader>()
     private val refreshAlarm = SingleAlarm(::refreshNow, 300, this)
+    private var last: HubSnapshot? = null
+
+    override val anchor: JComponent get() = this
 
     init {
         toolbar = ActionManager.getInstance()
-            .createActionToolbar("AtlasHub", buildToolbarGroup(), true)
+            .createActionToolbar("AtlasHub", HubActions.toolbar(project, ::refreshEverything), true)
             .also { it.targetComponent = this }
             .component
 
-        setContent(JBScrollPane(buildContent()))
+        setContent(HubLayout.scroll(panel {
+            header.build(this)
+            sections.forEach { section ->
+                // No indent: in a 280 px stripe the fold's chevron is all the hierarchy a block needs.
+                lateinit var rows: RowsRange
+                val header = FoldHeader(section.title, HubLayout.expanded(project, section.id)) { open ->
+                    rows.visible(open)
+                    HubLayout.rememberExpanded(project, section.id, open)
+                }
+                row { cell(header).align(AlignX.FILL) }.topGap(TopGap.MEDIUM)
+                rows = rowsRange { section.build(this) }
+                rows.visible(header.expanded)
+                folds[section.id] = header
+            }
+            // The running version, in plain sight: the one line of the old footer that people read.
+            separator()
+            row { comment(message("hub.footer.version", HubHeader.atlasVersion())) }
+        }.withBorder(JBUI.Borders.empty(4, 10, 8, 10))))
 
         project.messageBus.connect(this).subscribe(AtlasEvents.TOPIC, object : AtlasEventsListener {
             override fun modelIndexUpdated() = refreshAlarm.cancelAndRequest()
             override fun artifactsGenerated(explorerHtml: Path?, written: List<Path>) = refreshAlarm.cancelAndRequest()
             override fun designPullFinished(succeeded: Boolean) = refreshAlarm.cancelAndRequest()
             override fun activeSubProjectChanged() = refreshAlarm.cancelAndRequest()
-            override fun designSettingsChanged() = refreshAlarm.cancelAndRequest()
+            override fun recentModelsChanged() = refreshAlarm.cancelAndRequest()
+            override fun settingsApplied() = refreshAlarm.cancelAndRequest()
+            override fun environmentsChanged() = refreshEverything()
+            override fun connectionSelectionChanged(kind: ConnectionKind) = refreshEverything()
         })
+        // The findings' counts change when an analysis lands, which is not a bus event of its own.
+        com.flowable.atlas.findings.AtlasFindingsService.getInstance(project).addListener(this) { refreshAlarm.cancelAndRequest() }
         refreshAlarm.request()
     }
 
-    private fun buildToolbarGroup(): DefaultActionGroup {
-        val am = ActionManager.getInstance()
-        val group = DefaultActionGroup()
-        listOf(
-            FlowableActionIds.GENERATE_ATLAS_EXPLORER,
-            FlowableActionIds.OPEN_ATLAS_EXPLORER,
-            FlowableActionIds.PULL_FROM_DESIGN,
-        ).forEach { id -> am.getAction(id)?.let(group::add) }
-        group.addSeparator()
-        group.add(object : AnAction("Refresh", "Refresh the Atlas Hub", AllIcons.Actions.Refresh), DumbAware {
-            override fun actionPerformed(e: AnActionEvent) = refreshAlarm.cancelAndRequest()
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-        })
-        return group
+    /** A re-gather that also re-reads the Flowable Design lists — the toolbar's Refresh, and every event
+     *  after which those lists are known to be wrong. */
+    private fun refreshEverything() {
+        design.invalidate()
+        // A page the command line wrote into a folder the IDE never refreshed sends no file event.
+        com.flowable.atlas.explorer.AtlasExplorerFiles.forget()
+        refreshAlarm.cancelAndRequest()
     }
 
-    private fun buildContent() = panel {
-        group("Flowable Project") {
-            row { cell(projectStatus) }
-            row {
-                link("Change…") { chooseSubProject() }
-                    .applyToComponent { changeProjectLink = this }
-            }
-        }
-        group("Model Index") {
-            row { cell(indexStatus) }
-            row {
-                link("Search Models…") { invokeAction(FlowableActionIds.SEARCH_MODELS) }
-                link("Rebuild") { RebuildModelIndexAction.rebuild(project) }
-                link("Generate Constants…") { GenerateModelConstantsAction.generate(project) }
-            }
-        }
-        group("Atlas Explorer") {
-            row {
-                cell(JBScrollPane(artifactsList)).align(AlignX.FILL)
-            }
-            row {
-                link("Generate…") { invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER) }
-                // Selected entry, or the newest one when nothing is selected (the list is sorted
-                // most-recently-modified first) — the link must never be a silent no-op.
-                link("Open in Browser") {
-                    (selectedArtifact() ?: artifactsModel.items.firstOrNull())
-                        ?.let { AtlasBrowser.open(it.path) }
-                        ?: invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                }.applyToComponent { openInBrowserLink = this }
-            }
-        }
-        group("Flowable Design") {
-            row { cell(designStatus) }
-            // Which apps a pull fetches — starts from the configured default; ticking here is a
-            // personal override that never touches the shared settings file.
-            designAppsListRow = row {
-                cell(JBScrollPane(appList).apply { preferredSize = Dimension(JBUI.scale(320), JBUI.scale(140)) })
-                    .align(AlignX.FILL)
-            }.visible(false)
-            designAppsRow = row {
-                link("Refresh apps") { loadApps(force = true) }
-                link("Reset to configured") { resetSelection() }
-                    .applyToComponent { resetSelectionLink = this }
-            }.visible(false)
-            row {
-                // pulls exactly what is ticked above — the toolbar's Pull action resolves to the
-                // same effective selection, so the two can never disagree
-                link("Pull from Design") { pullSelected() }
-                link("Configure…") { invokeAction(FlowableActionIds.CONFIGURE_DESIGN_CONNECTION) }
-            }
-            // Shown only when models were pulled after the Atlas Explorer was last generated: the index
-            // rebuilds on pull, but the generated explorer HTML does not — offer a one-click regenerate.
-            designStaleRow = row {
-                label("Models changed since the last generation.")
-                link("Regenerate Atlas Explorer") { AtlasGenerationRunner.regenerate(project) }
-            }.visible(false)
-        }
-        separator()
-        row {
-            link("Settings") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, FlowableAtlasConfigurable::class.java)
-            }
-            link("Expression Playground") {
-                ToolWindowManager.getInstance(project).getToolWindow("Flowable Expressions")?.activate(null, true)
-            }
-        }
-        row { comment("Flowable Atlas ${atlasVersion()} · ${AtlasPlatformSupport.compatibilityNote()}") }
-    }
+    override fun requestRefresh() = refreshAlarm.cancelAndRequest()
 
-    /** The running plugin's version (what the user sees in Settings › Plugins); falls back to the baked
-     * :core build version, which is the same Gradle version, so any mismatch would itself signal drift. */
-    private fun atlasVersion(): String =
-        PluginManagerCore.getPlugin(PluginId.getId("com.flowable.atlas"))?.version ?: AtlasBuildInfo.VERSION
-
-    private fun invokeAction(id: String) {
+    override fun invokeAction(id: String) {
         val action = ActionManager.getInstance().getAction(id) ?: return
         val context = DataManager.getInstance().getDataContext(this)
         val event = AnActionEvent.createEvent(action, context, null, "AtlasHub", ActionUiKind.NONE, null)
         ActionUtil.performAction(action, event)
     }
 
-    /** Popup to switch the active Flowable sub-project (or back to the whole project). */
-    private fun chooseSubProject() {
-        val rootService = AtlasProjectRootService.getInstance(project)
-        val detected = rootService.detectedOrNull().orEmpty()
-        val labels = listOf(WHOLE_PROJECT_LABEL) + detected.map { it.relPath }
-        JBPopupFactory.getInstance()
-            .createPopupChooserBuilder(labels)
-            .setTitle("Select Flowable Project")
-            .setItemChosenCallback { label ->
-                rootService.setActiveSubProject(if (label == WHOLE_PROJECT_LABEL) "" else label)
-            }
-            .createPopup()
-            .showCenteredInCurrentWindow(project)
-    }
-
-    private fun selectedArtifact(): ExplorerArtifact? = artifactsList.selectedValue
-
-    private fun openArtifact(artifact: ExplorerArtifact) {
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(artifact.path)
-        when {
-            vf != null && JBCefApp.isSupported() -> AtlasExplorerOpener.openInIde(project, vf)
-            else -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
-        }
-    }
-
-    // ---- refresh --------------------------------------------------------------------------
-
     /** Fired by the (EDT) alarm; gathers on a pooled thread, applies on the EDT. */
     private fun refreshNow() {
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
-            val snapshot = gather()
+            val snapshot = HubSnapshot.gather(project) { refreshAlarm.cancelAndRequest() }
             ApplicationManager.getApplication().invokeLater({
                 if (!project.isDisposed) apply(snapshot)
             }, ModalityState.any())
         }
     }
 
-    private fun gather(): Snapshot {
-        val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val rootService = AtlasProjectRootService.getInstance(project)
-        val base = rootService.activeProjectDir()
-
-        val active = rootService.activeSubProject()
-        val detected = rootService.detectedOrNull()
-        if (detected == null) rootService.detectAsync { refreshAlarm.cancelAndRequest() }
-        val subCount = detected?.size ?: 0
-        val chosen = rootService.hasChosenProject()
-        val projectText = when {
-            active.isNotBlank() -> "<html>Project: <b>$active</b></html>"
-            subCount >= 2 && !chosen -> "<html>⚠ $subCount Flowable projects found — choose one</html>"
-            else -> "Whole project"
-        }
-        // Show "Change…" whenever switching could change the scope: the chooser always offers
-        // "Whole project" plus every detected sub-project, so ≥1 detected sub-project already means a
-        // real alternative — and if a sub-project is active, the user must be able to revert to whole.
-        // (A stricter ">= 2" locked the user on "Whole project" once picked in a single-sub-project repo.)
-        val showChangeLink = subCount >= 1 || active.isNotBlank()
-
-        val index = project.service<FlowableModelIndexService>().cachedOrNull()
-        val indexText = if (index == null) {
-            "Not scanned yet — Rebuild scans the project"
-        } else {
-            val byType = index.allDistinct().groupBy { it.type }
-            val counts = ModelType.entries.mapNotNull { t -> byType[t]?.let { t.display to it.size } }
-            val top = counts.sortedByDescending { it.second }.take(4)
-                .joinToString(" · ") { (name, count) -> "$count $name" }
-            val more = (counts.size - 4).takeIf { it > 0 }?.let { " · +$it more" } ?: ""
-            val scanned = index.builtAtMillis.takeIf { it > 0 }
-                ?.let { "<br>Last scanned: ${DateFormatUtil.formatPrettyDateTime(it)}" } ?: ""
-            "<html><b>${index.distinctCount()}</b> models indexed<br>$top$more$scanned</html>"
-        }
-
-        val artifacts = base?.let { b ->
-            AtlasExplorerFiles.find(b, settings.atlasOutputDir).map { p ->
-                val rel = runCatching { b.relativize(p).parent?.toString() ?: "" }.getOrDefault("")
-                val modified = runCatching { java.nio.file.Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L)
-                ExplorerArtifact(p, rel, modified)
-            }
-        }.orEmpty()
-
-        val lastPullMillis = DesignPullService.lastPullMillis(project)
-        val configured = DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList())
-        val override = DesignPullSelection.load(project)
-        val pullSelection = DesignPullSelection.effective(configured, override)
-        val isOverride = DesignPullSelection.differsFromDefault(configured, override)
-        val designText = if (settings.isDesignConfigured()) {
-            val lastPull = lastPullMillis?.let { DateFormatUtil.formatPrettyDateTime(it) } ?: "never"
-            val apps = pullSelection.appKeys
-            val appsLabel = when {
-                apps.isEmpty() -> "no apps selected"
-                apps.size == 1 -> apps.first()
-                else -> "${apps.size} apps: ${apps.joinToString(", ")}"
-            }
-            val personal = if (isOverride) " <i>(personal selection)</i>" else ""
-            "<html>${settings.designBaseUrl} · <b>$appsLabel</b>$personal<br>Last pull: $lastPull</html>"
-        } else {
-            "Not configured"
-        }
-        // Stale when the last pull happened after the newest generated explorer artifact.
-        val designArtifactsStale = settings.isDesignConfigured() &&
-            isExplorerStale(artifacts.map { it.modified }, lastPullMillis)
-
-        return Snapshot(
-            projectText, showChangeLink, indexText, artifacts, designText,
-            designArtifactsStale, AtlasBrowser.isAvailable(),
-            settings.isDesignConfigured(), pullSelection, isOverride,
-        )
+    private fun apply(snapshot: HubSnapshot) {
+        last = snapshot
+        header.apply(snapshot, HubAttention.of(snapshot))
+        sections.forEach { it.apply(snapshot) }
     }
 
-    private fun apply(snapshot: Snapshot) {
-        projectStatus.text = snapshot.projectText
-        changeProjectLink?.isVisible = snapshot.showChangeLink
-        indexStatus.text = snapshot.indexText
-        designStatus.text = snapshot.designText
-        designStaleRow?.visible(snapshot.designArtifactsStale)
-        openInBrowserLink?.isVisible = snapshot.browserAvailable
-        val selected = selectedArtifact()?.path
-        artifactsModel.replaceAll(snapshot.artifacts)
-        selected?.let { keep ->
-            snapshot.artifacts.firstOrNull { it.path == keep }
-                ?.let { artifactsList.setSelectedValue(it, false) }
-        }
-        applyPullSelection(snapshot)
-    }
-
-    // -- pull selection ---------------------------------------------------------------------------
-
-    /** Renders the app list from the effective selection. Seeds key-only placeholders so the panel
-     *  shows the selection without a network call; real names arrive with [loadApps]. */
-    private fun applyPullSelection(snapshot: Snapshot) {
-        designAppsListRow?.visible(snapshot.designConfigured)
-        designAppsRow?.visible(snapshot.designConfigured)
-        resetSelectionLink?.isVisible = snapshot.pullSelectionIsOverride
-        if (!snapshot.designConfigured) return
-        val checked = snapshot.pullSelection.appKeys.toSet()
-        val known = (0 until appList.model.size).mapNotNull { appList.getItemAt(it) }
-        // keep the fetched apps (real names/versions) when we have them; otherwise placeholders
-        val items = if (known.isNotEmpty() && fetchedAppsWorkspace == snapshot.pullSelection.workspaceKey) known
-            else DesignAppListUi.placeholders((checked + known.map { it.key }).sorted())
-        populatingApps = true
-        try {
-            DesignAppListUi.populateApps(appList, items, checked)
-        } finally {
-            populatingApps = false
-        }
-        if (fetchedAppsWorkspace != snapshot.pullSelection.workspaceKey) loadApps(force = false)
-    }
-
-    /** Fetches the workspace's apps once (or on demand) so the checkboxes show real names/versions.
-     *  Never called from [gather] — the snapshot pass stays network-free. */
-    private fun loadApps(force: Boolean) {
-        val settings = FlowableAtlasProjectSettings.getInstance(project)
-        if (!settings.isDesignConfigured()) return
-        val workspaceKey = DesignPullSelection
-            .effective(
-                DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
-                DesignPullSelection.load(project),
-            ).workspaceKey
-        if (!force && fetchedAppsWorkspace == workspaceKey) return
-        fetchedAppsWorkspace = workspaceKey
-        ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
-            val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }
-                .getOrNull() ?: return@executeOnPooledThread
-            val result = DesignClient.listApps(DesignClient.Connection(settings.designBaseUrl, auth), workspaceKey)
-            val apps = (result as? DesignClient.Result.Success)?.value ?: return@executeOnPooledThread
-            ApplicationManager.getApplication().invokeLater({
-                if (project.isDisposed || fetchedAppsWorkspace != workspaceKey) return@invokeLater
-                val checked = DesignAppListUi.checkedAppKeys(appList).toSet()
-                    .ifEmpty { currentSelection().appKeys.toSet() }
-                populatingApps = true
-                try {
-                    DesignAppListUi.populateApps(appList, apps, checked)
-                } finally {
-                    populatingApps = false
-                }
-            }, ModalityState.any())
+    /** The attention line's one action. */
+    private fun runAttention(attention: HubAttention) {
+        when (attention) {
+            is HubAttention.RemovedEnvironment -> invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
+            is HubAttention.ChooseProject -> header.projectCombo.showPopup()
+            is HubAttention.IndexFailed -> invokeAction(FlowableActionIds.REBUILD_MODEL_INDEX)
+            // A pick shows the archive in the Project view and says why it could not be read.
+            is HubAttention.UnreadableArchives -> JBPopupFactory.getInstance()
+                .createPopupChooserBuilder(attention.names)
+                .setTitle(message("hub.attention.archives.title"))
+                .setItemChosenCallback(::showUnreadableArchive)
+                .createPopup()
+                .showUnderneathOf(header.projectCombo)
+            is HubAttention.StaleExplorer -> AtlasGenerationRunner.regenerate(project)
         }
     }
 
-    /** A checkbox was toggled: store it as the personal override, or drop the override when it is
-     *  back in sync with the configured default. */
-    private fun onSelectionEdited() {
-        val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val configured = DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList())
-        val edited = DesignPullSelection.Selection(configured.workspaceKey, DesignAppListUi.checkedAppKeys(appList))
-        if (DesignPullSelection.differsFromDefault(configured, edited)) DesignPullSelection.save(project, edited)
-        else DesignPullSelection.clear(project)
-        refreshAlarm.cancelAndRequest()
-    }
-
-    private fun resetSelection() {
-        DesignPullSelection.clear(project)
-        refreshAlarm.cancelAndRequest()
-    }
-
-    /** Pull what is ticked; an unconfigured connection falls back to the action's setup flow. */
-    private fun pullSelected() {
-        if (!FlowableAtlasProjectSettings.getInstance(project).isDesignConfigured()) {
-            invokeAction(FlowableActionIds.PULL_FROM_DESIGN)
-            return
-        }
-        val selection = currentSelection()
-        project.service<DesignPullService>().pullInBackground(selection.workspaceKey, selection.appKeys)
-    }
-
-    private fun currentSelection(): DesignPullSelection.Selection {
-        val settings = FlowableAtlasProjectSettings.getInstance(project)
-        return DesignPullSelection.effective(
-            DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
-            DesignPullSelection.load(project),
-        )
+    private fun showUnreadableArchive(name: String) {
+        val skipped = project.service<FlowableModelIndexService>().cachedOrNull()?.skippedArchiveFiles?.get(name) ?: return
+        if (skipped.file.isValid) ProjectView.getInstance(project).select(null, skipped.file, true)
+        AtlasNotifications.group()
+            .createNotification(message("hub.attention.archives.why", name, skipped.reason), NotificationType.WARNING)
+            .notify(project)
     }
 
     override fun dispose() {}
 
+    // -- for tests -------------------------------------------------------------------------------
+
     /** Gather + apply synchronously — for tests, which cannot wait on the pooled refresh. */
-    internal fun refreshForTest() = apply(gather())
+    internal fun refreshForTest() = apply(HubSnapshot.gather(project) {})
 
-    companion object {
-        private const val WHOLE_PROJECT_LABEL = "Whole project (repository root)"
+    /** The refresh runs behind a 300 ms alarm no test can fast-forward, so tests assert the flag the
+     *  listener sets synchronously instead of a repaint they would have to wait for. */
+    internal val designCachesStaleForTest: Boolean get() = design.cachesStale
 
-        /** A generated explorer is stale when something was pulled after its newest artifact was written. */
-        internal fun isExplorerStale(artifactMtimes: List<Long>, lastPullMillis: Long?): Boolean =
-            lastPullMillis != null && artifactMtimes.isNotEmpty() && artifactMtimes.max() < lastPullMillis
+    /** Pick a workspace the way the popup's callback does — for tests, which have no popup. */
+    internal fun selectWorkspaceForTest(workspaceKey: String) = design.selectWorkspace(workspaceKey)
+
+    /** Pick the combo's "not set" entry the way a click does — for tests, which have no combo. */
+    internal fun chooseNoEnvironmentForTest(kind: ConnectionKind) =
+        (if (kind == ConnectionKind.DESIGN) design.environment else playground.environment).choose(null)
+
+    /** Pick a Flowable project the way the combo does — for tests, which have no combo. */
+    internal fun chooseProjectForTest(relPath: String?) = header.chooseSubProject(relPath)
+
+    /** Click the health row the way a reader does — for tests, which have no mouse. */
+    internal fun clickHealthForTest() = header.clickHealthForTest()
+
+    /** What the panel currently shows, as a reader would read it. */
+    internal fun viewForTest(): HubView = HubView(
+        projectItems = header.projectItems,
+        connectionLines = mapOf(
+            ConnectionKind.DESIGN to design.environment.line(),
+            ConnectionKind.WORK to playground.environment.line(),
+        ),
+        pullText = design.pullText,
+        workspaceKey = design.workspaceKey,
+        appKeys = design.appKeys,
+        explorerHint = explorer.hintText,
+        statusText = header.statusText,
+        recentKeys = recent.keys,
+        listRows = explorer.rows to design.appRows,
+        attention = header.attention,
+        hasEnvironments = last?.hasAnyEnvironment ?: false,
+        foldedSections = folds.filterValues { !it.expanded }.keys.toList(),
+        health = header.healthText,
+        designProblem = design.problemText,
+    )
+
+    /** Fold or unfold a block the way a click on its title does — for tests, which have no mouse. */
+    internal fun foldForTest(id: String, expanded: Boolean) {
+        folds.getValue(id).expanded = expanded
     }
 }
+
+/** The rendered Hub, for tests: strings and sizes, never components. */
+internal data class HubView(
+    val projectItems: List<String>,
+    val connectionLines: Map<ConnectionKind, String>,
+    val pullText: String,
+    val workspaceKey: String?,
+    val appKeys: List<String>,
+    val explorerHint: String,
+    /** `142 models` — the link's text; `scanning…` / `index failed` before an index exists. */
+    val statusText: String,
+    val recentKeys: List<String>,
+    /** Rows the explorer list and the app list reserve — the panel's height budget in two numbers. */
+    val listRows: Pair<Int, Int>,
+    val attention: String?,
+    val hasEnvironments: Boolean,
+    /** Ids of the blocks folded shut. */
+    val foldedSections: List<String>,
+    /** `3 defects · 41 advice`, `Analyze findings`, `analyzing…` — the health row as it reads. */
+    val health: String,
+    /** Why the Design lists could not be read, when they could not. */
+    val designProblem: String?,
+)

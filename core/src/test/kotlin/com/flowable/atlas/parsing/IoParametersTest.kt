@@ -125,6 +125,178 @@ class IoParametersTest {
         assertEquals("customerDO", tasks["lookup"]!!["dataObjectKey"])
         assertEquals("findById", tasks["lookup"]!!["dataObjectOperationKey"])
         assertTrue(ctx.refs.any { it["rel"] == "agentMapping" && it["value"] == "itAgent" })
+        // the data-object task's operation is used, through the data object (resolved to its service later)
+        assertTrue(ctx.opUse.any { it["targetKind"] == "dataObject" && it["targetKey"] == "customerDO" && it["op"] == "findById" })
+    }
+
+    @Test
+    fun fieldInjectedServiceRegistryTaskNamesItsServiceAndOperation() {
+        // the same call as a serviceMapping, configured through field injections instead
+        val (p, ctx) = bpmn(
+            """<serviceTask id="lookupOrder" name="Look up order" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:field name="serviceKey"><flowable:string>orderService</flowable:string></flowable:field>
+                   <flowable:field name="operationKey"><flowable:string>findByNumber</flowable:string></flowable:field>
+                   <flowable:in source="orderNumber" target="orderNumber"/>
+                   <flowable:out source="companyName" target="companyName"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val task = (p["serviceTasks"] as List<Map<String, Any?>>).single()
+        assertEquals("orderService", task["serviceModelKey"])
+        assertEquals("findByNumber", task["operationKey"])
+        assertTrue(ctx.refs.any { it["rel"] == "serviceMapping" && it["value"] == "orderService" })
+        assertTrue(ctx.opUse.any { it["targetKey"] == "orderService" && it["op"] == "findByNumber" })
+        assertEquals(setOf("service"), params(p).map { it["refKind"] }.toSet())
+        assertEquals(setOf("orderService"), params(p).map { it["refKey"] }.toSet())
+    }
+
+    @Test
+    fun fieldInjectedAgentTaskNamesItsAgent() {
+        val (p, ctx) = bpmn(
+            """<serviceTask id="askAssistant" flowable:type="agent">
+                 <extensionElements>
+                   <flowable:field name="agentModelKey"><flowable:string>supportAgent</flowable:string></flowable:field>
+                   <flowable:in source="companyName" target="question"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val task = (p["serviceTasks"] as List<Map<String, Any?>>).single()
+        assertEquals("supportAgent", task["agentModelKey"])
+        assertTrue(ctx.refs.any { it["rel"] == "agentMapping" && it["value"] == "supportAgent" })
+        assertEquals("agent", params(p).single()["refKind"])
+    }
+
+    @Test
+    fun aCmmnTaskConfiguredByFieldsCallsItsService() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+                         xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c" name="C">
+                <casePlanModel id="plan">
+                  <planItem id="pi1" definitionRef="lookup"/>
+                  <task id="lookup" name="Lookup" flowable:type="service-registry">
+                    <extensionElements>
+                      <flowable:field name="serviceKey"><flowable:string>custSvc</flowable:string></flowable:field>
+                      <flowable:field name="operationKey"><flowable:string>findAll</flowable:string></flowable:field>
+                      <flowable:outputParameter name="id" value="custId"/>
+                    </extensionElements>
+                  </task>
+                </casePlanModel>
+              </case>
+            </definitions>"""
+        val ctx = Ctx()
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), ctx, "c.cmmn")[0]
+        assertTrue(ctx.opUse.any { it["targetKey"] == "custSvc" && it["op"] == "findAll" })
+        assertEquals("custSvc", params(case).single()["refKey"])
+    }
+
+    @Test
+    fun aDelegateWithAnOperationKeyFieldIsNoServiceCall() {
+        // a plain Java delegate may well have a field called operationKey — its type says it is no
+        // service-registry task, so no service is named and no operation is credited
+        val (p, ctx) = bpmn(
+            """<serviceTask id="d" flowable:class="com.example.Worker">
+                 <extensionElements>
+                   <flowable:field name="serviceKey"><flowable:string>orderService</flowable:string></flowable:field>
+                   <flowable:field name="operationKey"><flowable:string>archive</flowable:string></flowable:field>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val task = (p["serviceTasks"] as List<Map<String, Any?>>).single()
+        assertEquals(null, task["serviceModelKey"])
+        assertTrue(ctx.opUse.isEmpty())
+        assertTrue(ctx.refs.none { it["rel"] == "serviceMapping" })
+    }
+
+    @Test
+    fun anInOrOutIntoAServiceOrAgentNamesAParameterNotAVariable() {
+        // `<flowable:in target="question">` into an agent names the agent's input, and `<flowable:out
+        // source="companyName">` from a service reads its result field — neither lives in any variable
+        // scope. Recorded as writes into the callee's scope they made every such call an unread input.
+        val (_, ctx) = bpmn(
+            """<serviceTask id="lookupOrder" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:serviceMapping serviceModelKey="orderService" operationKey="findByNumber"/>
+                   <flowable:in source="orderNumber" target="orderNumber"/>
+                   <flowable:out source="companyName" target="companyName"/>
+                 </extensionElements>
+               </serviceTask>
+               <serviceTask id="askAssistant" flowable:type="agent">
+                 <extensionElements>
+                   <flowable:agentMapping agentModelKey="supportAgent"/>
+                   <flowable:in source="companyName" target="question"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        assertEquals(
+            listOf(
+                "orderNumber|read|inParameterSource",
+                "companyName|write|outParameter",
+                "companyName|read|inParameterSource",
+            ),
+            ctx.varSites.map { siteSig(it) },
+        )
+        assertTrue(ctx.varSites.none { it["scope"] != null })
+    }
+
+    @Test
+    fun mappingsNameTheOperationTheyFeed() {
+        // the operation is what joins a mapping to the parameters the callee declares
+        val (p, ctx) = bpmn(
+            """<serviceTask id="svc" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:serviceMapping serviceModelKey="custSvc" operationKey="findById"/>
+                   <flowable:inputParameter name="id" value="custId"/>
+                 </extensionElements>
+               </serviceTask>
+               <serviceTask id="ai" flowable:type="agent">
+                 <extensionElements>
+                   <flowable:agentMapping agentModelKey="itAgent" operationKey="summarise"/>
+                   <flowable:inputParameter name="text" value="${'$'}{notes}"/>
+                 </extensionElements>
+               </serviceTask>
+               <serviceTask id="lookup" flowable:type="data-object">
+                 <extensionElements>
+                   <flowable:dataObjectMapping definitionKey="customerDO" operationKey="lookup" type="lookup"/>
+                   <flowable:outputParameter name="name" value="customerName"/>
+                 </extensionElements>
+               </serviceTask>
+               <callActivity id="call" calledElement="sub">
+                 <extensionElements><flowable:in source="a" target="b"/></extensionElements>
+               </callActivity>"""
+        )
+        val byEl = params(p).associateBy { it["element"] }
+        assertEquals("findById", byEl["svc"]!!["refOp"])
+        assertEquals("summarise", byEl["ai"]!!["refOp"])
+        assertEquals("lookup", byEl["lookup"]!!["refOp"])
+        assertEquals("a process has no operations", null, byEl["call"]!!["refOp"])
+        // the variable flows carry it too, so a variable page can say which operation it was handed to
+        assertTrue(ctx.paramFlows.any { it["variable"] == "customerName" && it["calleeOp"] == "lookup" })
+    }
+
+    @Test
+    fun aButtonsPayloadNamesItsOperation() {
+        val (f, _) = form(
+            """{"id":"tbl","type":"dataTable","extraSettings":{
+                 "dataObjectDefinitionKey":"orderDO","dataObjectOperationKey":"search",
+                 "dataObjectDataTableCreateOperationKey":"create",
+                 "dataObjectDataTableCreatePayloadMapping":[{"name":"orderNumber","expression":"{{nr}}"}]}},
+               {"id":"svcBtn","type":"button","extraSettings":{
+                 "serviceModel":{"serviceModelKey":"custSvc","operationKey":"findById"},
+                 "sendPayloadMapping":[{"name":"id","expression":"{{customerId}}"}]}}"""
+        )
+        val byEl = params(f).groupBy { it["element"] }
+        // a data table's create payload feeds its create operation, not the search it lists rows with
+        assertEquals(listOf("create"), byEl["tbl"]!!.map { it["refOp"] })
+        assertEquals(listOf("findById"), byEl["svcBtn"]!!.map { it["refOp"] })
+        @Suppress("UNCHECKED_CAST")
+        val fields = (f["fields"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("findById", (fields["svcBtn"]!!["callee"] as Map<String, Any?>)["op"])
     }
 
     @Test
@@ -163,6 +335,77 @@ class IoParametersTest {
             ),
             params(p).map { sig(it) },
         )
+    }
+
+    /**
+     * The engine accepts both spellings of the result attribute, each converter preferring its own:
+     * ServiceTaskXMLConverter reads `resultVariableName` and falls back to `resultVariable` (the form the
+     * BPMN user guide documents), ScriptTaskXMLConverter the other way round. Only one spelling per task
+     * was read, so the same write had a writer or none depending on how the attribute was spelled.
+     */
+    @Test
+    fun eitherSpellingOfTheResultVariableIsAWrite() {
+        val (p, _) = bpmn(
+            """<serviceTask id="calc" flowable:expression="${'$'}{demoCalc.total(execution)}" flowable:resultVariable="orderTotal"/>
+               <scriptTask id="s2" scriptFormat="groovy" flowable:resultVariableName="scriptTotal"><script>1</script></scriptTask>
+               <serviceTask id="both" flowable:expression="${'$'}{demoCalc.total(execution)}"
+                            flowable:resultVariableName="longForm" flowable:resultVariable="shortForm"/>
+               <scriptTask id="both2" scriptFormat="groovy" flowable:resultVariable="shortForm2"
+                           flowable:resultVariableName="longForm2"><script>1</script></scriptTask>"""
+        )
+        assertEquals(
+            listOf(
+                "out|resultVariable|null->orderTotal",
+                "out|resultVariable|null->longForm",
+                "out|resultVariable|null->scriptTotal",
+                "out|resultVariable|null->shortForm2",
+            ),
+            params(p).sortedBy { listOf("calc", "both", "s2", "both2").indexOf(it["element"]) }.map { sig(it) },
+        )
+        @Suppress("UNCHECKED_CAST")
+        val service = (p["serviceTasks"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        @Suppress("UNCHECKED_CAST")
+        val script = (p["scriptTasks"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        assertEquals("orderTotal", service["calc"]!!["resultVariable"])
+        assertEquals("longForm", service["both"]!!["resultVariable"])
+        assertEquals("scriptTotal", script["s2"]!!["resultVariable"])
+        assertEquals("shortForm2", script["both2"]!!["resultVariable"])
+    }
+
+    /** A CMMN Java or script task's `resultVariableName` writes the variable; on any other task type the
+     *  engine ignores the attribute, so nothing is recorded there. */
+    @Test
+    fun aCmmnJavaOrScriptTaskWritesItsResultVariable() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+                         xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c" name="C">
+                <casePlanModel id="plan">
+                  <planItem id="pi1" definitionRef="calc"/>
+                  <planItem id="pi2" definitionRef="s"/>
+                  <planItem id="pi3" definitionRef="h"/>
+                  <task id="calc" name="Calculate" flowable:type="java"
+                        flowable:expression="${'$'}{demoCalc.total(planItemInstance)}" flowable:resultVariableName="caseTotal"/>
+                  <task id="s" flowable:type="script" flowable:scriptFormat="groovy" flowable:resultVariableName="scriptOut">
+                    <extensionElements>
+                      <flowable:field name="script"><flowable:string>1</flowable:string></flowable:field>
+                    </extensionElements>
+                  </task>
+                  <task id="h" flowable:type="http" flowable:resultVariableName="ignored"/>
+                </casePlanModel>
+              </case>
+            </definitions>"""
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), Ctx(), "c.cmmn")[0]
+        assertEquals(
+            listOf("out|resultVariable|null->caseTotal", "out|resultVariable|null->scriptOut"),
+            params(case).map { sig(it) },
+        )
+        assertEquals(listOf("calc", "s"), params(case).map { it["element"] })
+        @Suppress("UNCHECKED_CAST")
+        val items = ((case["planModel"] as Map<String, Any?>)["children"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        assertEquals("caseTotal", items["calc"]!!["resultVariable"])
+        assertEquals("scriptOut", items["s"]!!["resultVariable"])
+        assertTrue("an HTTP task's resultVariableName is not read by the engine", "resultVariable" !in items["h"]!!)
     }
 
     @Test
@@ -221,12 +464,15 @@ class IoParametersTest {
 
     @Test
     fun formKeyPushedInThroughAnInMappingIsStillDetected() {
+        // `sourceExpression` is the value handed in; `source` names the variable that holds it
         val (_, ctx) = bpmn(
             """<callActivity id="callSub" calledElement="sub">
-                 <extensionElements><flowable:in source="myForm" target="formKey"/></extensionElements>
+                 <extensionElements><flowable:in sourceExpression="myForm" target="formKey"/>
+                   <flowable:in source="chosenFormKey" target="formKey"/></extensionElements>
                </callActivity>"""
         )
-        assertTrue(ctx.refs.any { it["rel"] == "task-form-mapping" && it["value"] == "myForm" })
+        val forms = ctx.refs.filter { it["rel"] == "task-form-mapping" }.map { it["value"] }
+        assertEquals(listOf("myForm"), forms)
     }
 
     @Test
@@ -250,7 +496,8 @@ class IoParametersTest {
         )
     }
 
-    /** `"variable|dir|via"`, plus `@scope` when the site belongs to another model's variable space. */
+    /** `"variable|dir|via"`, plus `@scope` — the callee's node id — when the site belongs to another
+     *  model's variable space. */
     private fun siteSig(s: Map<String, Any?>): String =
         "${s["variable"]}|${s["dir"]}|${s["via"]}" + (s["scope"]?.let { "@$it" } ?: "")
 
@@ -277,8 +524,8 @@ class IoParametersTest {
                 "orderId|read|inParameterSource",
                 // …and the value lands in a variable of the *callee*, which is where a reader must be
                 // looked for. Attributing it to this process would check the wrong model.
-                "subOrderId|write|inParameter@fulfilmentProcess",
-                "subTotal|read|outParameterSource@fulfilmentProcess",
+                "subOrderId|write|inParameter@process:fulfilmentProcess",
+                "subTotal|read|outParameterSource@process:fulfilmentProcess",
                 "total|write|outParameter",
                 // an `inputParameter` name is the service's contract, not a variable — nothing recorded
                 "newCustomerId|write|outputParameter",
@@ -376,23 +623,14 @@ class IoParametersTest {
             params(action).map { sig(it) },
         )
         assertEquals(setOf("script-evaluation-bot"), params(action).map { it["element"] }.toSet())
-        // a config key is bot wiring, not a variable — only the real inputs/outputs become flows
-        assertEquals(setOf("approved", "amount", "result"), ctx.paramFlows.map { it["variable"] }.toSet())
+        // A config key is bot wiring, and a `flw` payload key is the action's contract with its button — what
+        // the button sends and gets back — not a variable of any scope. Only the signal variable is one.
+        assertEquals(setOf("approved"), ctx.paramFlows.map { it["variable"] }.toSet())
         assertEquals(
-            listOf(
-                // The bot script and the payload mapping it produces are two views of the same call, so
-                // each name is recorded twice — once as the `flw.*` API the script performs, once as the
-                // payload contract it declares. Both are true, and the directions agree.
-                "amount|read|flwPayload", "amount|read|scriptApi",
-                // to pass a variable into the signalled instance the action first reads it
-                "approved|read|signalVariable",
-                "result|write|flwPayload", "result|write|scriptApi",
-            ),
+            // to pass a variable into the signalled instance the action first reads it
+            listOf("approved|read|signalVariable"),
             ctx.varSites.map { siteSig(it) }.sorted(),
         )
-        // `flw.setOutput` writes a value the *caller* consumes — a form button's `{{$response…}}`, the
-        // Work UI, a REST client. Atlas cannot follow any of those, so it must never call it unread.
-        assertEquals(setOf("result"), ctx.varReadsUnknown)
     }
 
     private fun form(nodeJson: String): Pair<Map<String, Any?>, Ctx> {
@@ -520,6 +758,180 @@ class IoParametersTest {
     fun aButtonWithoutAnyPayloadMappingAddsNothing() {
         val (f, _) = form("""{"id":"plain","type":"button","label":"Go","extraSettings":{"text":"Go"}}""")
         assertTrue(params(f).isEmpty())
+    }
+
+    // ---------- what a button does, on the button's own record ----------
+    // The form's reference list always said an action was triggered; these pin the half that was
+    // missing — by which button, with which settings, and under which condition.
+
+    @Suppress("UNCHECKED_CAST")
+    private fun fields(model: Map<String, Any?>): List<Map<String, Any?>> =
+        model["fields"] as List<Map<String, Any?>>
+
+    @Test
+    fun anActionButtonCarriesTheActionItInvokes() {
+        val (f, _) = form(
+            """{"id":"btn","type":"workAction","visible":"{{amount > 0}}","enabled":true,"primary":true,
+                "extraSettings":{"text":"Notify","actionDefinitionKey":"notifyAction",
+                                 "navigationUrl":"/work/case/1","autoExecute":false}}"""
+        )
+        val b = fields(f).single()
+        assertEquals(mapOf("kind" to "action", "key" to "notifyAction"), b["callee"])
+        // `false` is the palette default on every flag and a literal `enabled:true` is every button
+        // there is; only a condition is news.
+        assertEquals(
+            mapOf("navigationUrl" to "/work/case/1", "primary" to true, "visible" to "{{amount > 0}}"),
+            b["settings"],
+        )
+        assertEquals("Notify", b["label"])
+    }
+
+    @Test
+    fun anExpressionButtonCarriesItsExpressionAndWritesItsResult() {
+        val (f, ctx) = form(
+            """{"id":"total","type":"scriptButton","value":"{{orderTotal}}","extraSettings":{
+                 "text":"Recalculate","script":"{{amount * 1.081}}","autoExecute":true,"timer":30000}}"""
+        )
+        val b = fields(f).single()
+        assertEquals(
+            mapOf("script" to "{{amount * 1.081}}", "timer" to 30000.0, "autoExecute" to true),
+            b["settings"],
+        )
+        // The result lands in the button's own binding, and nothing else in the model writes it — so
+        // without this site the target looked neither read nor written.
+        assertEquals(listOf("orderTotal|write|scriptButton"), ctx.varSites.map { siteSig(it) })
+    }
+
+    @Test
+    fun aResultButtonWhoseValueNamesNoPathReplacesThePayload() {
+        // The forms runtime writes the result to the path a plain binding names, and to the root of the
+        // payload for anything else — so `{{}}` is no "no variable needed", it is "overwrite everything".
+        fun replaces(value: String?): Boolean {
+            val v = if (value == null) "" else ""","value":"$value""""
+            val (f, _) = form("""{"id":"b","type":"scriptButton"$v,"extraSettings":{"script":"{{1}}"}}""")
+            return fields(f).single()["replacesPayload"] == true
+        }
+        for (v in listOf("{{}}", "{{ }}", null, "", "{{a + b}}", "{{my-total}}", "total")) {
+            assertTrue("`$v` names no path, so the result lands on the root", replaces(v))
+        }
+        for (v in listOf("{{total}}", "{{ order.total }}", "{{${'$'}temp.total}}", "{{items[0].total}}")) {
+            assertTrue("`$v` is a path", !replaces(v))
+        }
+    }
+
+    @Test
+    fun aRestButtonWithAResponseMapWritesTheMappedNamesInstead() {
+        fun replaces(extra: String): Boolean {
+            val (f, _) = form("""{"id":"r","type":"restButton","extraSettings":{"url":"/api/x"$extra}}""")
+            return fields(f).single()["replacesPayload"] == true
+        }
+        assertTrue("no value and no map: the whole response becomes the payload", replaces(""))
+        assertTrue(!replaces(""","responsePayloadMapping":[{"name":"score","expression":"{{${'$'}response.score}}"}]"""))
+        // an empty map is still the mapping branch, which writes nothing
+        assertTrue(!replaces(""","responsePayloadMapping":[]"""))
+        // an action button carries a placeholder value and stores nothing; it is not asked
+        val (f, _) = form("""{"id":"a","type":"workAction","value":".","extraSettings":{"actionDefinitionKey":"x"}}""")
+        assertTrue(fields(f).single()["replacesPayload"] == null)
+    }
+
+    @Test
+    fun aCaptionlessButtonIsStillListedWithItsEndpoint() {
+        // Half the REST buttons of one real project have neither `label` nor `extraSettings.text`: they
+        // are icon-only, or captioned by `value`. They used to be dropped from the model entirely.
+        val (f, _) = form(
+            """{"id":"reload","type":"restButton","extraSettings":{"url":"/api/reload","method":"post"}}"""
+        )
+        val b = fields(f).single()
+        assertEquals("reload", b["id"])
+        assertEquals(mapOf("kind" to "rest", "key" to "/api/reload"), b["callee"])
+        // the endpoint itself stays a REST call keyed by the same element id — not copied onto the row
+        @Suppress("UNCHECKED_CAST")
+        val calls = f["restCalls"] as List<Map<String, Any?>>
+        assertEquals(listOf("reload" to "POST"), calls.map { it["where"] to it["method"] })
+    }
+
+    @Test
+    fun aLinkButtonIsCaptionedByItsValue() {
+        val (f, _) = form(
+            """{"id":"portal","type":"linkButton","value":"Open portal",
+                "extraSettings":{"url":"https://example.com","target":"_blank"}}"""
+        )
+        assertEquals("Open portal", fields(f).single()["label"])
+        assertEquals(mapOf("target" to "_blank"), fields(f).single()["settings"])
+    }
+
+    @Test
+    fun aFullPayloadFlagIsRecordedBecauseItOverridesTheMap() {
+        // The Work runtime sends the whole payload and ignores `sendPayloadMapping` — a reader shown the
+        // map alone would take it for the contract.
+        val (f, ctx) = form(
+            """{"id":"esc","type":"workAction","extraSettings":{"text":"Escalate",
+                 "actionDefinitionKey":{"key":"escalateAction","id":"ACTION_MODEL-7"},
+                 "sendFullPayload":true,"mapFullResponse":true,"mapResponseInsideScope":true,
+                 "sendPayloadMapping":[{"name":"total","expression":"{{orderTotal}}"}]}}"""
+        )
+        val b = fields(f).single()
+        assertEquals(mapOf("send" to "full-payload", "receive" to "full-response-in-scope"), b["payloadMode"])
+        // the newer Design editor writes the reference as {key, id} — the key is what the graph joins on
+        assertEquals(mapOf("kind" to "action", "key" to "escalateAction"), b["callee"])
+        assertTrue(ctx.refs.any { it["rel"] == "triggers-action" && it["value"] == "escalateAction" })
+        // the overridden mapping is still parsed: it is in the model, and the explorer marks it unused
+        assertEquals(listOf("in|sendPayloadMapping|{{orderTotal}}->total [expression=true]"), params(f).map { sig(it) })
+    }
+
+    @Test
+    fun aPlainFieldHasNothingToExpand() {
+        val (f, _) = form("""{"id":"amount","type":"number","label":"Amount","isRequired":true}""")
+        val b = fields(f).single()
+        assertTrue(b["callee"] == null && b["settings"] == null && b["payloadMode"] == null)
+    }
+
+    @Test
+    fun aHiddenAutoExecutingWorkerSaysSoAndStoresItsResponse() {
+        // The commonest button in a real project is not a button: `visible:false` + `autoExecute` is a
+        // worker that fires on its own. 252 of 338 buttons in one measured project are hidden this way.
+        val (f, ctx) = form(
+            """{"id":"score","type":"restButton","visible":false,"ignore":"{{!customer}}",
+                "value":"{{creditScore}}","description":"Hidden worker",
+                "i18n":{"en_us":{"extraSettings":{"text":"Refresh score"}}},
+                "extraSettings":{"url":"/api/score","autoExecute":"{{customer}}","executeAlways":true,
+                                 "valueExpression":"{{${'$'}response.score}}"}}"""
+        )
+        val b = fields(f).single()
+        // the caption exists only as a localised override — before, such a button had no name at all
+        assertEquals("Refresh score", b["label"])
+        assertEquals("Hidden worker", b["description"])
+        assertEquals("{{creditScore}}", b["stores"])
+        assertEquals(
+            mapOf("visible" to false, "ignore" to "{{!customer}}",
+                "valueExpression" to "{{\$response.score}}", "autoExecute" to "{{customer}}",
+                "executeAlways" to true),
+            b["settings"],
+        )
+        // the response lands in a variable, and this button is the only thing that writes it
+        assertEquals(listOf("creditScore|write|restButton"), ctx.varSites.map { siteSig(it) })
+    }
+
+    @Test
+    fun gatesAreRecordedOnlyWhenTheyDepartFromTheDefault() {
+        val (f, _) = form(
+            """{"id":"note","type":"textarea","label":"Note","visible":true,"enabled":"{{isBoss}}",
+                "ignore":false}"""
+        )
+        // `visible:true` and `ignore:false` are every component there is; only the condition is news
+        assertEquals(mapOf("enabled" to "{{isBoss}}"), fields(f).single()["settings"])
+    }
+
+    @Test
+    fun anActionButtonsPlaceholderValueIsNotAStoreTarget() {
+        // Design writes `value: "."` on an action button. Reading that as "the result is stored in ." is
+        // exactly the kind of thing a reader would then go looking for.
+        val (f, ctx) = form(
+            """{"id":"act","type":"workAction","value":".","extraSettings":{
+                 "text":"Go","actionDefinitionKey":"someAction"}}"""
+        )
+        assertEquals(null, fields(f).single()["stores"])
+        assertTrue(ctx.varSites.isEmpty())
     }
 
     @Test

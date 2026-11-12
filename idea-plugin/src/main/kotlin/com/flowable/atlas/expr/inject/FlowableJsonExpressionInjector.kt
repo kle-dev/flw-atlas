@@ -25,11 +25,16 @@ class FlowableJsonExpressionInjector : MultiHostInjector {
         if (context !is JsonStringLiteral) return
         val host = context as? PsiLanguageInjectionHost ?: return
         val vFile = context.containingFile?.viewProvider?.virtualFile ?: return
-        if (ModelFiles.typeOf(vFile) != ModelType.FORM) return
+        // A page binds `{{…}}` exactly as a form does; it used to get no highlighting, validation or completion.
+        if (ModelFiles.typeOf(vFile) !in FRONTEND_MODELS) return
         ExpressionInjectionSupport.inject(
             registrar,
             host,
             setOf(ExpressionDialect.FRONTEND, ExpressionDialect.BACKEND),
         )
+    }
+
+    private companion object {
+        val FRONTEND_MODELS = setOf(ModelType.FORM, ModelType.PAGE)
     }
 }

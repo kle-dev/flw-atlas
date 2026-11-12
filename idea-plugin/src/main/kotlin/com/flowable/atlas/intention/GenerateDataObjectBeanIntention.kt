@@ -1,5 +1,6 @@
 package com.flowable.atlas.intention
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.generate.dto.DataObjectDtoPlanner
 import com.flowable.atlas.generate.dto.DtoClassNamePattern
 import com.flowable.atlas.index.FlowableModelIndexService
@@ -8,7 +9,6 @@ import com.flowable.atlas.parsing.DataObjectInfo
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction
 import com.intellij.ide.highlighter.JavaFileType
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.components.service
@@ -43,7 +43,7 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
 
     override fun getText(): String = "Generate Java DTO for this Flowable data object"
 
-    override fun getFamilyName(): String = "Flowable Atlas"
+    override fun getFamilyName(): String = "Generate Java DTO for a Flowable data object"
 
     override fun startInWriteAction(): Boolean = false
 
@@ -147,8 +147,7 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
     private data class Resolved(val info: DataObjectInfo, val modelName: String?)
 
     private fun notify(project: Project, title: String, message: String) =
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("Flowable Atlas")
+        AtlasNotifications.results()
             .createNotification(title, message, NotificationType.INFORMATION)
             .notify(project)
 

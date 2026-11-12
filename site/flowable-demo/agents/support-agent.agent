@@ -3,10 +3,15 @@
   "name": "Onboarding assistant",
   "description": "Answers onboarding questions from the policy knowledge base.",
   "systemPrompt": "You help a sales colleague onboard a new customer. Use only the onboarding policies.",
-  "knowledgeBases": ["onboardingPolicies"],
+  "knowledgeBase": {"knowledgeBaseModelReference": {"key": "onboardingPolicies"}},
   "tools": [
-    {"type": "service", "serviceModelKey": "orderService", "operationKey": "findByNumber"},
-    {"type": "process", "processModelKey": "orderProcess"}
+    {"key": "orderService", "modelType": "service", "operationKey": "findByNumber"},
+    {"key": "orderProcess", "modelType": "process"}
+  ],
+  "operations": [
+    {"key": "answer", "name": "Answer a question",
+     "systemMessage": "You help a sales colleague onboard a new customer. Use only the onboarding policies.",
+     "userMessage": "{{question}}"}
   ],
   "variables": {"question": {"type": "string"}, "answer": {"type": "string"}}
 }

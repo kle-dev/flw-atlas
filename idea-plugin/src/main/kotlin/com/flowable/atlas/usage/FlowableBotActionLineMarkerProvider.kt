@@ -1,14 +1,16 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.FlowableAtlasBundle.message
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
-import com.intellij.codeInsight.daemon.LineMarkerProvider
+import com.intellij.codeInsight.daemon.LineMarkerProviderDescriptor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
-import com.intellij.openapi.util.IconLoader
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiIdentifier
@@ -23,7 +25,13 @@ import javax.swing.Icon
  * `botKey`). Mirrors [FlowableModelReferenceLineMarkerProvider]: the highlight pass does only cheap
  * cached-index lookups, the (potentially slow) resolution of action files is deferred to the click.
  */
-class FlowableBotActionLineMarkerProvider : LineMarkerProvider {
+class FlowableBotActionLineMarkerProvider : LineMarkerProviderDescriptor() {
+
+    // A descriptor, not a bare provider: Settings → Editor → General → Gutter Icons lists it by this
+    // name with its icon, so a team that finds one kind of mark noisy can switch that one off.
+    override fun getName(): String = message("linemarker.bot.name")
+    override fun getIcon(): Icon = AtlasIcons.GutterBot
+
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? = null
 
@@ -32,43 +40,57 @@ class FlowableBotActionLineMarkerProvider : LineMarkerProvider {
         result: MutableCollection<in LineMarkerInfo<*>>,
     ) {
         if (elements.isEmpty()) return
-        val index = elements.first().project.service<FlowableModelIndexService>().cachedOrNull() ?: return
+        val service = elements.first().project.service<FlowableModelIndexService>()
+        val index = service.cachedOrRequest() ?: return
         for (element in elements) {
             if (element !is PsiIdentifier) continue
             val cls = element.parent as? PsiClass ?: continue
             if (cls.nameIdentifier !== element) continue
             val botKey = BotPsi.botKeyOf(cls) ?: continue
-            if (index.actionsUsingBot(botKey).isEmpty()) continue
-            result.add(buildMarker(element, botKey))
+            val actions = index.actionsUsingBot(botKey).size
+            if (actions == 0) continue
+            result.add(buildMarker(element, botKey, actions))
         }
     }
 
-    private fun buildMarker(identifier: PsiIdentifier, botKey: String): LineMarkerInfo<PsiElement> =
-        LineMarkerInfo(
+    private fun buildMarker(identifier: PsiIdentifier, botKey: String, actions: Int): LineMarkerInfo<PsiElement> {
+        // The count is free here — the highlight pass already looked the actions up.
+        val tooltip = message("linemarker.bot.tooltip", actions)
+        return LineMarkerInfo(
             identifier,
             identifier.textRange,
             ICON,
-            { _ -> TOOLTIP },
+            { _ -> tooltip },
             { event, elt -> navigate(event, elt, botKey) },
             GutterIconRenderer.Alignment.RIGHT,
-            Supplier { TOOLTIP },
+            Supplier { tooltip },
         )
+    }
 
     private fun navigate(event: MouseEvent, element: PsiElement, botKey: String) {
         val project = element.project
-        object : Task.Backgroundable(project, "Finding actions using this bot", true) {
+        object : Task.Backgroundable(project, message("linemarker.bot.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
-                val files = project.service<FlowableModelIndexService>().actionsUsingBot(botKey).map { it.file }
+                // each action opens at its `botKey` — the line that names this bot, not the top of the file
+                val usages = project.service<FlowableModelIndexService>().actionsUsingBot(botKey)
+                    .map { it.file }.distinct()
+                    .associateWith { file -> botKeyOffset(file) }
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, "Actions using this bot", at)
+                    ModelReferenceNavigator.show(project, usages, message("linemarker.bot.popup", botKey), at)
                 }
             }
         }.queue()
     }
 
+    /** Offset of the `botKey` value in an action file, or null when the text does not spell it that way. */
+    private fun botKeyOffset(file: VirtualFile): Int? {
+        val text = runCatching { String(file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull() ?: return null
+        return BOT_KEY_VALUE.find(text)?.groups?.get(1)?.range?.first
+    }
+
     private companion object {
-        const val TOOLTIP = "Used by Flowable actions"
-        val ICON: Icon = IconLoader.getIcon("/META-INF/atlas-hub.svg", FlowableBotActionLineMarkerProvider::class.java)
+        val BOT_KEY_VALUE = Regex("\"botKey\"\\s*:\\s*\"([^\"]*)\"")
+        val ICON: Icon = AtlasIcons.GutterBot
     }
 }

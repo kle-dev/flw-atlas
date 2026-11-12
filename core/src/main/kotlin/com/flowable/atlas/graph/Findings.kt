@@ -1,5 +1,8 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.parsing.Constants
+import java.util.IdentityHashMap
+
 /**
  * The project's health findings — everything Atlas noticed that is probably wrong, as data.
  *
@@ -12,10 +15,15 @@ package com.flowable.atlas.graph
  * Computing them here instead makes them ordinary result data, available to every renderer, and leaves
  * one definition of each check rather than one per surface.
  *
- * Two result keys are produced:
- *  - **`findings`** — the itemized list, most severe first: `{check, severity, node, label, message}`
- *    plus `file`/`element`/`line`/`snippet` when known. This is what a report can name.
- *  - **`checks`** — `check → count`, plus `open` (the total). This is what a badge or a headline shows.
+ * Three result keys are produced:
+ *  - **`findings`** — the itemized list, most severe first: `{check, kind, severity, node, label,
+ *    message}` plus `file`/`element`/`subject`/`line`/`snippet` when known, `models` on an
+ *    expression's, `scriptLine` on a script problem no file line could be given, and `waived` on the
+ *    ones a waiver covers. This is what a report can name. `kind` is the check's [CheckCatalog.Check.kind].
+ *  - **`checks`** — `check → count` of the **open** ones, plus `open` (the total) and `waived`.
+ *    This is what a badge or a headline shows.
+ *  - **`waivers`** — present only when a waiver file was read: what it covered, and what went wrong
+ *    with it. See [Waivers].
  *
  * `checks.scriptIssues` counts **findings**, not scripts carrying them, matching `stats.scriptIssues`
  * and the CLI status line. The explorer used to count scripts here, so the same word meant two numbers
@@ -23,40 +31,72 @@ package com.flowable.atlas.graph
  */
 object Findings {
 
-    /**
-     * Check ids, in the order they are worth reading: broken first, then unfinished, then noise.
-     *
-     * `internal` rather than private so `SiteDocsCoverageTest` can assert that the documentation site
-     * describes every one of them — a new check that nobody documented should fail the build, not
-     * quietly make the published list wrong.
-     */
-    internal val CHECK_ORDER = listOf(
-        "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "changelogIssues",
-        "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
-        "unusedVars", "unreadInputs", "guessedVars",
-    )
-
     private const val ERROR = "error"
     private const val WARNING = "warning"
 
+    /**
+     * [source] reads a model file back by its `file` label, for the line of each finding (see
+     * [FindingLines]); without it, findings carry the lines the parsers already knew.
+     */
     @Suppress("UNCHECKED_CAST")
-    fun apply(result: MutableMap<String, Any?>) {
+    fun apply(
+        result: MutableMap<String, Any?>, waivers: Waivers.Set = Waivers.EMPTY, source: ((String) -> String?)? = null,
+    ) {
         val graph = result["graph"] as? Map<String, Any?> ?: return
         val nodes = graph["nodes"] as? List<Map<String, Any?>> ?: return
         val edges = graph["edges"] as? List<Map<String, Any?>> ?: emptyList()
         val findings = ArrayList<Map<String, Any?>>()
+        val nodeById = nodes.associateBy { it["id"] as? String }
+        // Who references a node — a missing model is reported where it is named, not on the placeholder
+        // node that has no file. App membership and access are not references.
+        val referrers = HashMap<String, MutableList<Map<String, Any?>>>()
+        for (e in edges) {
+            if (e["rel"] == "contains") continue
+            val s = e["s"] as? String ?: continue
+            if (s.startsWith("group:")) continue
+            val t = e["t"] as? String ?: continue
+            val from = nodeById[s] ?: continue
+            if (from["file"] == null) continue
+            val list = referrers.getOrPut(t) { ArrayList() }
+            if (list.none { it["id"] == s }) list.add(from)
+        }
 
         // A form is unused when nothing functionally references it. Every form sits in an app, so the
-        // app's `contains` edge alone does not count as use.
+        // app's `contains` edge alone does not count as use — and neither does an access edge: a group
+        // allowed to press a button on a form says who may use it, not that anything opens it.
         val referenced = HashSet<String>()
         for (e in edges) {
             if (e["rel"] == "contains") continue
+            if ((e["s"] as? String)?.startsWith("group:") == true) continue
             (e["t"] as? String)?.let { referenced.add(it) }
         }
+        // What kind of service a service-registry task calls: only a REST service leaves the engine.
+        // The beans the resolver accepted as beans — Java's and the expression roots it kept — so a
+        // service task's `expression` can be told from a variable read.
+        val projectBeans: Set<String> =
+            ((result["beans"] as? List<*>).orEmpty() + (result["beanIndex"] as? List<*>).orEmpty()).map { it.toString() }.toSet()
+        val serviceTypes = HashMap<String, String>()
+        for (n in nodes) {
+            if (n["type"] != "service") continue
+            val t = (n["data"] as? Map<String, Any?>)?.get("type") as? String ?: continue
+            (n["key"] as? String)?.let { serviceTypes[it] = t }
+        }
 
+        /**
+         * [subject] names *which* of several findings this is, when one check fires more than once on
+         * one node — the scope a variable was mapped into, the column a gap is about. Without it the
+         * only thing separating those findings is [message], which is generated prose carrying counts
+         * and "(+N more)": it rewords when something unrelated on the same node changes, so nothing
+         * downstream can name one finding and still mean the same one after the next run.
+         *
+         * [file] stands in for a node that has none — the model that holds an expression, the model that
+         * names a missing one; it is a location, never part of the finding's identity (check + node +
+         * element + subject), so a waiver keeps matching.
+         */
         fun add(
             check: String, severity: String, node: Map<String, Any?>, message: String,
-            element: String? = null, line: Any? = null, snippet: String? = null,
+            element: String? = null, subject: String? = null, line: Any? = null, snippet: String? = null,
+            file: Any? = null, models: List<String>? = null,
         ) {
             val f = linkedMapOf<String, Any?>(
                 "check" to check,
@@ -65,10 +105,12 @@ object Findings {
                 "label" to (node["label"] ?: node["key"]),
                 "message" to message,
             )
-            if (node["file"] != null) f["file"] = node["file"]
+            (node["file"] ?: file)?.let { f["file"] = it }
             if (element != null) f["element"] = element
+            if (subject != null) f["subject"] = subject
             if (line != null) f["line"] = line
             if (snippet != null) f["snippet"] = snippet
+            if (!models.isNullOrEmpty()) f["models"] = models
             findings.add(f)
         }
 
@@ -82,42 +124,128 @@ object Findings {
                     // (something is definitely wrong) or merely suspect (unknown name), which is the
                     // distinction a reader acts on — so classify it once, by its worst problem.
                     val invalid = problems.any { it["severity"] == ERROR }
+                    // An expression is no file of its own: the finding names the models that hold it, and
+                    // takes the file of the one model when there is one, so it can be opened there.
+                    val models = (data["usedBy"] as? List<*>).orEmpty().map { it.toString() }.sorted()
+                    val home = models.singleOrNull()?.let { nodeById[it]?.get("file") }
                     for (p in problems) {
                         add(
                             check = if (invalid) "invalidExpr" else "suspectExpr",
                             severity = if (p["severity"] == ERROR) ERROR else WARNING,
                             node = n,
                             message = p["message"]?.toString() ?: "expression problem",
+                            // An unknown name identifies itself; a syntax problem has only its position
+                            // in the expression, which is stable because the expression text is part of
+                            // the node id — edit the expression and this is a different node anyway.
+                            subject = p["kind"]?.let { "$it:${p["subject"]}" }
+                                ?: p["start"]?.let { "@$it" },
                             snippet = p["snippet"]?.toString(),
+                            file = home, models = models,
                         )
                     }
                 }
-                "form" -> if (n["id"] !in referenced) {
-                    add("unusedForms", WARNING, n, "no model or code references this form")
+                "form", "page" -> {
+                    if (n["type"] == "form" && n["id"] !in referenced) {
+                        add("unusedForms", WARNING, n, "no model or code references this form")
+                    }
+                    for (f in (data["fields"] as? List<*>).orEmpty()) {
+                        val field = f as? Map<String, Any?> ?: continue
+                        if (field["replacesPayload"] != true) continue
+                        val id = field["id"]?.toString() ?: continue
+                        add("payloadOverwrite", WARNING, n, payloadOverwriteMessage(field, id),
+                            element = id, subject = id,
+                            snippet = (field["value"] as? String)?.takeIf { it.isNotEmpty() })
+                    }
                 }
                 "liquibase" -> {
                     val authority = data["authority"] as? Map<String, Any?> ?: continue
                     when (authority["status"]) {
                         "orphan" -> add("changelogIssues", WARNING, n,
-                            "changelog is referenced by no service or data object")
+                            (authority["namesMissing"] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { names ->
+                                "changelog names service" + (if (names.size == 1) " " else "s ") + names.joinToString(", ") { "`$it`" } +
+                                    ", which the project does not define, and no service or data object references it"
+                            } ?: "changelog is referenced by no service or data object")
                         "superseded" -> add("changelogIssues", WARNING, n,
                             "superseded by " + ((authority["supersededBy"] as? List<*>)
                                 ?.joinToString(", ") { it.toString() } ?: "another changelog"))
                     }
+                    (authority["drift"] as? Map<String, Any?>)?.let { d ->
+                        add("changelogDrift", WARNING, n, driftMessage(d), subject = d["application"]?.toString())
+                    }
                 }
+                // Like the variable branch below: two independent things can be wrong with one service,
+                // so a service without coverage data must still be able to report a crossed mapping.
                 "service" -> {
+                    literalSecrets(data) { path ->
+                        add("hardcodedSecrets", ERROR, n, "`$path` holds a literal value — move it to an expression " +
+                            "or an environment setting", subject = path)
+                    }
+                    for (g in (data["crossedColumns"] as? List<*> ?: emptyList<Any?>())) {
+                        val group = g as? Map<String, Any?> ?: continue
+                        val pairs = (group["mappings"] as? List<*> ?: emptyList<Any?>())
+                            .mapNotNull { it as? Map<String, Any?> }
+                        if (pairs.isEmpty()) continue
+                        add(
+                            check = "crossedColumns",
+                            // A closed cycle is a permutation of one name set: nothing but a mistake
+                            // pairs them that way. One direction alone can still be a deliberate
+                            // mapping onto a legacy column, so it only warns.
+                            severity = if (group["kind"] == "crossed") WARNING else ERROR,
+                            node = n,
+                            message = crossingMessage(group, pairs),
+                            subject = pairs.first()["field"]?.toString(),
+                        )
+                    }
                     val coverage = data["schemaCoverage"] as? Map<String, Any?> ?: continue
                     val rows = coverage["rows"] as? List<Map<String, Any?>> ?: emptyList()
+                    // No data object binds this service at all: it is used directly, and "used by no data
+                    // object" would be true of every mapped column and say nothing about any one of them.
+                    val hasDataObject = !(coverage["dataObjects"] as? List<*>).isNullOrEmpty()
                     for (r in rows) {
                         val what = when (r["status"]) {
                             "no-service" -> "column `${r["sql"]}` of table `${r["table"]}` is in Liquibase " +
                                 "but not mapped by the service"
-                            "no-dataobject" -> "column `${r["sql"]}` of table `${r["table"]}` is mapped by " +
-                                "the service but used by no data object"
+                            "no-dataobject" -> if (!hasDataObject) null else
+                                "column `${r["sql"]}` of table `${r["table"]}` is mapped by " +
+                                    "the service but used by no data object"
                             else -> null
                         } ?: continue
-                        add("schemaGaps", WARNING, n, what)
+                        add("schemaGaps", WARNING, n, what, subject = "${r["table"]}.${r["sql"]}")
                     }
+                }
+                "process" -> {
+                    runtimeRiskChecks(data, serviceTypes, projectBeans) { check, message, element -> add(check, WARNING, n, message, element) }
+                    topologyChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
+                    secretFields(data) { element, what, field ->
+                        add("hardcodedSecrets", ERROR, n, "`$what` sets `$field` to a literal value — move it to " +
+                            "an expression or an environment setting", element, subject = field)
+                    }
+                }
+                "case" -> secretFields(data) { element, what, field ->
+                    add("hardcodedSecrets", ERROR, n, "`$what` sets `$field` to a literal value — move it to " +
+                        "an expression or an environment setting", element, subject = field)
+                }
+                // A query template that interpolates a value without escaping it lets the value change the
+                // query — the injection shape, in the one place a project writes raw search JSON.
+                "query" -> for (k in listOf("templateContent", "templateFilter")) {
+                    val tpl = data[k] as? String ?: continue
+                    for (m in UNESCAPED_TEMPLATE_PARAM.findAll(tpl)) {
+                        val inner = m.groupValues[1].trim()
+                        val name = inner.takeWhile { it != '.' && it != '[' && it != ' ' && it != '(' }
+                        add("unsafeQueries", WARNING, n,
+                            "`\${$inner}` in $k is interpolated without escaping — `?json_string` (or `?c` for a " +
+                                "number) keeps a value from changing the query", subject = name)
+                    }
+                }
+                // A decision nothing consults is the DMN twin of the unused form: app membership is not use.
+                // A decision *service* is the caller, not a table: Design generates one per DRD, and the rule
+                // tasks point at the tables it contains.
+                "decision" -> if (data["decisionService"] != true && n["id"] !in referenced) {
+                    add("unusedDecisions", WARNING, n, "no process, case or decision service calls this decision")
+                }
+                "channel", "agent", "knowledgeBase" -> literalSecrets(data) { path ->
+                    add("hardcodedSecrets", ERROR, n, "`$path` holds a literal value — move it to an expression " +
+                        "or an environment setting", subject = path)
                 }
                 "serviceOperation" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
                     add("unusedOps", WARNING, n, "no model or code calls this operation")
@@ -125,8 +253,17 @@ object Findings {
                 "customFunction" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
                     add("unusedFns", WARNING, n, "custom function is registered but never used")
                 }
+                // One finding per missing model, as before — the count and every waiver keyed on the node
+                // stay — but it names who references it and points at the first of them, by file.
                 "external" -> if (data["missingModel"] == true) {
-                    add("missingRefs", ERROR, n, "referenced model does not exist in this project")
+                    val from = referrers[n["id"]].orEmpty().sortedBy { it["file"].toString() }
+                    val first = from.firstOrNull()
+                    if (first == null) add("missingRefs", ERROR, n, "referenced model does not exist in this project")
+                    else add("missingRefs", ERROR, n,
+                        "`${first["label"] ?: first["key"]}`" + (if (from.size > 1) " (+${from.size - 1} more)" else "") +
+                            " references ${data["kind"]?.toString()?.removePrefix("model:") ?: "model"} `${n["key"]}`, " +
+                            "which does not exist in this project",
+                        file = first["file"])
                 }
                 // Three independent things can be worth saying about one variable, so this branch must
                 // not `continue` between them the way the others do.
@@ -140,25 +277,93 @@ object Findings {
                     }
                     for (scope in (data["unreadIn"] as? List<*> ?: emptyList<Any?>())) {
                         add("unreadInputs", WARNING, n,
-                            "mapped into `$scope`, which never reads it — " + writeSites(data))
+                            "mapped into `$scope`, which never reads it — " + writeSites(data),
+                            subject = scope?.toString())
                     }
                 }
             }
         }
 
-        // Scripts are not graph nodes: their findings hang off the parsed model buckets.
-        collectScriptFindings(result, findings)
+        // Scripts are not graph nodes: their findings hang off the parsed model buckets. Which script each
+        // finding is about is kept by identity: two findings can be equal maps — one script copied into two
+        // listeners of an element — and still sit in two places.
+        val scriptSites = IdentityHashMap<MutableMap<String, Any?>, FindingLines.ScriptSite>()
+        collectScriptFindings(result, findings, scriptSites)
 
         // Parse/read failures. Custom-function extraction keeps its own diagnostics list.
         for (d in (result["diagnostics"] as? List<Map<String, Any?>> ?: emptyList())) {
+            // A key two model types share is information, not a finding: both files were read completely
+            // and everything harvested from them carries its type. Only a bare Java literal is ambiguous,
+            // and that edge is already marked suspect.
+            if (d["kind"] == "conflict") continue
+            // Two differing copies of one model are information too: both were read, and the node says so.
+            if (d["kind"] == "copy") continue
+            // A file that is not a Flowable model at all — a Helm chart's `.tpl`, a palette JSON, a manifest —
+            // is recorded in `diagnostics` (and printed by `-v`) but is no finding: nothing about the project
+            // is wrong, and a warning about somebody else's file taught readers to skim the list.
+            if (d["kind"] == "skip" && NOT_A_MODEL_SKIPS.any { (d["message"] as? String)?.startsWith(it) == true }) continue
             findings.add(linkedMapOf(
                 "check" to "parseIssues",
-                "severity" to ERROR,
+                // A file that would not parse is an error: a model is missing from the report. A file
+                // Atlas decided not to read was never a model that failed — a warning.
+                "severity" to (if (d["kind"] == "skip") WARNING else ERROR),
                 "node" to null,
                 "label" to (d["path"] ?: "?"),
                 "message" to "${d["kind"]}: ${d["message"]}",
                 "file" to d["path"],
-            ))
+            ).apply {
+                // where the XML broke, so the explorer and the IDE open the file there and not at line 1
+                d["line"]?.let { put("line", it) }
+            })
+        }
+        // Leftover markers — a TODO is a promise; the report lists the ones nobody kept. Keyed by the
+        // first model the file defines, or by the file when it defines none.
+        // The same model loose and inside a `.bar` is one model with one marker: the model buckets are
+        // deduped that way, and so is this — the first file wins, the finding is one.
+        val seenMarkers = HashSet<List<Any?>>()
+        for (m in (result["markers"] as? List<Map<String, Any?>> ?: emptyList())) {
+            // the first of the file's models that is a node: a DRD lists its decisions before its service,
+            // and a decision that was a copy of a table merged into the table (DecisionServiceCopies)
+            val owner = (m["models"] as? List<*>)?.firstNotNullOfOrNull { nodeById[it.toString()] }
+            val text = m["text"]?.toString().orEmpty()
+            // A marker with no text of its own is told apart by where it sits: the path of the JSON element
+            // holding it (a minified model is one line, and a column moves on every export), or in an XML
+            // model the element and what carries it (`sentry2/documentation`), else its line.
+            val path = m["path"]?.toString()
+            val subject = text.ifEmpty { path ?: "@${m["line"]}" }
+            val element = m["element"]?.toString()
+            val value = m["value"]?.toString()
+            // The element and what it says name the marker in every copy of a JSON model: a Design export
+            // (`components[0].components[4]`) and the app's `.bar` (`rows[1].cols[0]`) spell the same label's
+            // path two ways, which made one TODO two findings. An XML model's copies are the same text, so
+            // there the subject and line do it — and two text-less markers in one element stay two.
+            val json = path != null && '/' !in path
+            val seenKey = if (element != null && json) listOf(owner?.get("id") ?: m["file"], m["marker"], "@$element", value ?: text)
+                          else listOf(owner?.get("id") ?: m["file"], m["marker"], subject, m["line"])
+            if (!seenMarkers.add(seenKey)) continue
+            // what carries it — "the label", "the documentation" — from the path's last step
+            val last = path?.substringAfterLast('/')
+            val what = when {
+                last == null -> null
+                last.startsWith("#comment") -> "comment"
+                else -> last.substringAfterLast('.').substringBefore('[').substringBefore('#').removePrefix("@")
+            }?.takeIf { it.isNotBlank() && !it.first().isDigit() }
+            val message = when {
+                text.isNotEmpty() -> "${m["marker"]}: $text"
+                value != null && what != null -> "${m["marker"]} in the $what: \"$value\""
+                value != null -> "${m["marker"]} in \"$value\""
+                what != null -> "${m["marker"]} in the $what"
+                else -> "${m["marker"]} left in the model"
+            }
+            findings.add(linkedMapOf(
+                "check" to "leftoverMarkers",
+                "severity" to WARNING,
+                "node" to owner?.get("id"),
+                "label" to (owner?.get("label") ?: owner?.get("key") ?: m["file"]),
+                "message" to message,
+                "file" to m["file"],
+                "subject" to subject,
+            ).apply { m["line"]?.let { put("line", it) }; if (element != null) put("element", element) })
         }
         val customFns = result["customFunctions"] as? Map<String, Any?>
         for (d in (customFns?.get("diagnostics") as? List<*> ?: emptyList<Any?>())) {
@@ -168,21 +373,691 @@ object Findings {
                 "node" to null,
                 "label" to "custom functions",
                 "message" to d.toString(),
+                // the one finding kind that had no file — and so could never be accepted: a waiver
+                // covers a finding by its node or its file
+                "file" to ((customFns?.get("source") ?: customFns?.get("path") ?: "custom-functions").toString()),
             ))
         }
 
-        val order = CHECK_ORDER.withIndex().associate { (i, c) -> c to i }
+        if (source != null) {
+            FindingLines.locate(findings.map { it as MutableMap<String, Any?> }, scriptSites,
+                { id -> nodeById[id]?.get("key") as? String }, source)
+        }
+
+        val order = CheckCatalog.ORDER.withIndex().associate { (i, c) -> c to i }
         val sorted = findings.sortedWith(
             compareBy({ order[it["check"]] ?: Int.MAX_VALUE }, { it["label"]?.toString() ?: "" })
         )
+
+        // A waived finding is kept, marked, and left out of the counts. It is not dropped: "nothing is
+        // silent" is the promise the whole report is built on, and a suppression that also hides the
+        // thing it suppressed leaves a reader unable to see what a team decided to live with.
+        val matching = Waivers.Matching(waivers)
+        val marked = sorted.map { raw ->
+            // Every record says its kind, next to its check: the headline counts defects and advice, and
+            // a consumer of graph.json asking "what is broken" otherwise had only `severity` to go on —
+            // which leaves out every warning-level defect, a gateway the engine cannot leave among them.
+            val f = LinkedHashMap<String, Any?>().apply {
+                put("check", raw["check"])
+                CheckCatalog.kind(raw["check"].toString())?.let { put("kind", it) }
+                putAll(raw)
+            }
+            val w = matching.match(f) ?: return@map f
+            f.apply {
+                put("waived", linkedMapOf<String, Any?>("reason" to w.reason).also { m ->
+                    w.by?.let { m["by"] = it }
+                    w.at?.let { m["at"] = it }
+                    w.until?.let { m["until"] = it }
+                })
+            }
+        }
+        val open = marked.filter { it["waived"] == null }
+
         val counts = linkedMapOf<String, Any?>()
-        for (c in CHECK_ORDER) {
-            val n = sorted.count { it["check"] == c }
+        for (c in CheckCatalog.ORDER) {
+            val n = open.count { it["check"] == c }
             if (n > 0) counts[c] = n
         }
-        counts["open"] = sorted.size
-        result["findings"] = sorted
+        counts["open"] = open.size
+        val waivedCount = marked.size - open.size
+        if (waivedCount > 0) counts["waived"] = waivedCount
+        result["findings"] = marked
         result["checks"] = counts
+        // The two numbers every headline leads with. In `stats`, not `checks`: every consumer of `checks`
+        // treats each key but `open`/`waived` as a check id, and two more pseudo-ids would break them.
+        (result["stats"] as? MutableMap<String, Any?>)?.let { st ->
+            st["defects"] = CheckCatalog.countOpen(open, CheckCatalog.DEFECT)
+            st["advice"] = CheckCatalog.countOpen(open, CheckCatalog.ADVICE)
+        }
+        waiverReport(matching)?.let { result["waivers"] = it }
+    }
+
+    /**
+     * Which finding [f] is, from one run to the next: check, node (the file, for a parse finding, which has
+     * no node), element and subject — the key a [Waivers.Waiver] narrows on, so "the same finding" means one
+     * thing to a waiver and to a baseline. The message is deliberately not part of it: it is prose that
+     * rewords ("… (+3 more)") when something unrelated on the same node changes.
+     */
+    fun identity(f: Map<String, Any?>): String =
+        listOf(f["check"], f["node"] ?: f["file"], f["element"] ?: "", f["subject"] ?: "").joinToString("\u0000")
+
+    /**
+     * The findings of [head] that [base] does not have, in [head]'s order — the instances themselves, so a
+     * caller can tell two equal findings apart. Counted, not set-wise: one check can fire twice on one node
+     * with one subject, and a second occurrence against one in the base is new.
+     */
+    fun newSince(base: List<Map<String, Any?>>, head: List<Map<String, Any?>>): List<Map<String, Any?>> {
+        val left = HashMap<String, Int>()
+        for (f in base) left.merge(identity(f), 1, Int::plus)
+        return head.filter { f ->
+            val k = identity(f)
+            val n = left[k] ?: 0
+            if (n > 0) left[k] = n - 1
+            n == 0
+        }
+    }
+
+    /**
+     * What the waiver file did, for every surface that has to say so. Absent when there is no file: an
+     * empty block in every report would read as a feature nobody is using rather than as one nobody
+     * needed here.
+     */
+    private fun waiverReport(matching: Waivers.Matching): Map<String, Any?>? {
+        val waivers = matching.set
+        if (waivers.isEmpty) return null
+        // The rules travel whole — author, date and expiry included — because the explorer edits this
+        // block and writes it back as waivers.json; a field it never received is a field it would drop.
+        val rules = waivers.waivers.mapIndexed { i, w ->
+            linkedMapOf<String, Any?>("check" to w.check, "node" to w.node).also { m ->
+                w.element?.let { m["element"] = it }
+                w.subject?.let { m["subject"] = it }
+                m["reason"] = w.reason
+                w.by?.let { m["by"] = it }
+                w.at?.let { m["at"] = it }
+                w.until?.let { m["until"] = it }
+                m["matched"] = matching.matchCount(i)
+            }
+        }
+        val out = linkedMapOf<String, Any?>("rules" to rules)
+        waivers.createdWith?.let { out["createdWith"] = it }
+        if (waivers.notes.isNotEmpty()) {
+            out["notes"] = waivers.notes.map { n ->
+                linkedMapOf<String, Any?>("node" to n.node).also { m ->
+                    n.check?.let { m["check"] = it }
+                    n.element?.let { m["element"] = it }
+                    n.subject?.let { m["subject"] = it }
+                    m["text"] = n.text
+                    m["importance"] = n.importance
+                    n.by?.let { m["by"] = it }
+                    n.at?.let { m["at"] = it }
+                }
+            }
+        }
+        // Three ways a waiver file goes wrong, each reported rather than fixed silently: it points at
+        // something that is gone, it ran out, or it never said why — and the last one is the only thing
+        // a reviewer could actually have reviewed.
+        val stale = matching.stale()
+        if (stale.isNotEmpty()) out["stale"] = stale
+        val unexplained = waivers.unexplained()
+        if (unexplained.isNotEmpty()) out["unexplained"] = unexplained
+        if (waivers.problems.isNotEmpty()) out["problems"] = waivers.problems
+        return out
+    }
+
+    /** Every BPMN element list that carries the shared engine-behaviour extras. */
+    private val ELEMENT_LISTS = listOf(
+        "userTasks", "serviceTasks", "scriptTasks", "ruleTasks", "callActivities", "subProcesses",
+        "events", "gateways", "otherTasks",
+    )
+
+    /**
+     * How a process is configured to behave at runtime, as opposed to whether its references resolve.
+     *
+     * Each of these is a question rather than a verdict — "is that deliberate?" — which is why they warn
+     * and why each one stays quiet wherever the model does not give enough to be sure.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun runtimeRiskChecks(
+        data: Map<String, Any?>, serviceTypes: Map<String, String>, projectBeans: Set<String>,
+        report: (String, String, String) -> Unit,
+    ) {
+        val events = data["events"] as? List<Map<String, Any?>> ?: emptyList()
+        // Errors caught anywhere in the process: a boundary event on a task, and an error event
+        // subprocess, which catches for the whole process.
+        val guarded = HashSet<String>()
+        for (e in events) {
+            if (e["def"] == "error") (e["attachedTo"] as? String)?.let { guarded.add(it) }
+        }
+        // An error *start* event catches — in an event subprocess it catches for the whole process. An
+        // error *end* event throws, and counting it as a catch would silence the check on exactly the
+        // processes that raise errors.
+        val catchesEverywhere = events.any { it["def"] == "error" && it["type"] == "startEvent" }
+        // A task inside a subprocess is guarded by a boundary event on that subprocess, and the element
+        // lists are flat, so containment cannot be recovered here. Rather than report a task that is
+        // already handled one level up, the check stands down for the whole process when a subprocess
+        // carries an error boundary — for every task whose failure that boundary could catch.
+        val subprocessGuarded = (data["subProcesses"] as? List<Map<String, Any?>> ?: emptyList())
+            .any { guarded.contains(it["id"]) }
+
+        for (list in ELEMENT_LISTS) {
+            for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
+                val id = el["id"] as? String ?: continue
+                val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+                if (el["async"] != null) {
+                    // `exclusive` defaults to true in the engine and is only ever written to say false,
+                    // so its presence here is an explicit opt-out: jobs of this process instance may then
+                    // run at the same time, which is an optimistic-locking risk unless it was intended.
+                    if (el["exclusive"] == "false") {
+                        report("nonExclusiveAsync",
+                            "`$what` is async with exclusive=false — its jobs can run concurrently with " +
+                                "other jobs of the same process instance", id)
+                    }
+                    if (el["retryTimeCycle"] == null) {
+                        report("asyncWithoutRetry",
+                            "`$what` is async with no failedJobRetryTimeCycle — the engine default applies",
+                            id)
+                    }
+                }
+            }
+        }
+
+        // Only a BPMN error reaches an error boundary or an error event subprocess: any other exception out
+        // of a class, delegate, mail or HTTP task is rethrown unless the task maps it to an error code
+        // (ClassDelegate, ErrorPropagation.mapException). So a guard counts only for a task that can
+        // raise one — see [raisesBpmnError].
+        val centrally = catchesEverywhere || subprocessGuarded
+        val runsInAJob = jobOnlyReach(data)
+        for (el in (data["serviceTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
+            val id = el["id"] as? String ?: continue
+            // An async task's failure is a failed job — retried, then an incident for an administrator —
+            // and never an exception to whoever completed the previous step. That *is* its error path;
+            // `asyncWithoutRetry` judges the rest. (83 async mail tasks on one project said otherwise.)
+            if (el["async"] != null) continue
+            // The same holds for a task that only ever runs inside a job: every way to it starts at a
+            // timer or an async step, with no wait state between, so the job is its caller.
+            if (runsInAJob(id)) continue
+            if (!leavesTheEngine(el, serviceTypes, projectBeans)) continue
+            val fields = el["fields"] as? Map<*, *>
+            val statusCodes = (fields?.get("handleStatusCodes") as? String)?.trim()?.ifEmpty { null }
+            // An HTTP task told to swallow failures has its error path — unless it also maps status codes:
+            // those become BPMN errors, which ignoreException does not swallow (DefaultBpmnHttpActivityDelegate
+            // rethrows a BusinessError first).
+            if (fields != null && fields.containsKey("ignoreException") && statusCodes == null) continue
+            val caught = id in guarded || centrally
+            if (caught && raisesBpmnError(el)) continue
+            val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+            // The message names the fix for the kind of call: a synchronous mail task is made async far
+            // more often than it is given a boundary event, and the reader should be told both.
+            val message = when {
+                // handleStatusCodes is a promise that something catches HTTP<code>: with nothing catching it,
+                // the instance fails on exactly those codes
+                el["type"] == "http" && statusCodes != null ->
+                    "`$what` raises BPMN error HTTP<code> for status codes $statusCodes and nothing in this process " +
+                        "catches it — the instance fails on those codes unless a caller catches it; attach an error " +
+                        "boundary event or an error event subprocess"
+                // there is an error path in the model, and this failure cannot take it — worded so it holds
+                // whether or not the task is inside the guarded subprocess
+                caught && el["type"] == "mail" -> "`$what` sends mail, and no error boundary or error event " +
+                    "subprocess can catch its failure — a failed mail is not a BPMN error unless flowable:mapException " +
+                    "turns it into one; mark the task async or set ignoreException instead"
+                caught && el["type"] == "http" -> "`$what` calls out of the engine, and no error boundary or error " +
+                    "event subprocess can catch its failure — a failed call is not a BPMN error unless " +
+                    "flowable:mapException or handleStatusCodes turns it into one"
+                el["type"] == "mail" -> "`$what` sends mail synchronously with no error path — a failure fails the caller's " +
+                    "transaction; mark the task async (a failed job is retried and reported), set ignoreException, or map " +
+                    "the failure to an error code with flowable:mapException and catch it"
+                el["type"] in LEAVING_TASK_TYPES || el["type"] == "service-registry" -> "`$what` calls out of the engine with " +
+                    "no error boundary event — a failure propagates to the caller"
+                else -> "`$what` calls code of the project's own with no error boundary event — an exception " +
+                    "propagates to the caller; a boundary catches it only if the code throws a BpmnError or the task " +
+                    "maps the exception with flowable:mapException"
+            }
+            report("unguardedTasks", message, id)
+        }
+    }
+
+    /**
+     * Whether a failure of this task can come out as a BPMN error — the only thing an error boundary or
+     * an error event subprocess catches. A mail task's failure is a FlowableException
+     * (BaseMailActivityDelegate) and an HTTP task's is an exception too, unless `flowable:mapException`
+     * maps it or the HTTP task maps status codes (handleStatusCodes) or handles the response itself. The
+     * project's own code, an external worker and an agent can throw or report a BpmnError, so their guard
+     * is taken at its word.
+     */
+    private fun raisesBpmnError(el: Map<String, Any?>): Boolean = when (el["type"]) {
+        "mail" -> el["mapsExceptions"] == true
+        "http" -> el["mapsExceptions"] == true || el["responseHandler"] == true ||
+            !((el["fields"] as? Map<*, *>)?.get("handleStatusCodes") as? String).isNullOrBlank()
+        else -> true
+    }
+
+    /**
+     * Which elements of a process only ever run inside a job: walking back over the sequence flows from
+     * the element, every path reaches a timer event or an async step before it reaches a wait state or the
+     * start of the process. Wait states win over async — an async user task is still a user task, whose
+     * completion is the caller of what follows it. An element with no incoming flow and anything unknown
+     * count as a caller, and a flow back into a step already walked adds no way in — so a loop entered
+     * from a timer stays in the job, and a loop nothing enters is no job. The answer is "in a job" only when
+     * every way in says so. Elements inside an embedded subprocess carry no parent here, so a none start
+     * inside one counts as a caller too: the finding stays, which is the safe side.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun jobOnlyReach(data: Map<String, Any?>): (String) -> Boolean {
+        val flows = data["flows"] as? List<Map<String, Any?>> ?: return { false }
+        val byId = HashMap<String, Pair<String, Map<String, Any?>>>()
+        for (list in ELEMENT_LISTS) for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
+            (el["id"] as? String)?.let { byId.putIfAbsent(it, list to el) }
+        }
+        val incoming = HashMap<String, MutableList<String>>()
+        for (f in flows) {
+            val from = f["from"] as? String ?: continue
+            val to = f["to"] as? String ?: continue
+            incoming.getOrPut(to) { ArrayList() }.add(from)
+        }
+        // What a step tells a walk arriving from what follows it: true = a job starts here, false = a
+        // caller (a wait state, or something unknown), null = it ran synchronously, keep walking.
+        fun origin(id: String): Boolean? {
+            val (list, el) = byId[id] ?: return false
+            // async-leave: what follows this step is a job of its own
+            if (el["asyncLeave"] != null) return true
+            val type = el["type"]
+            val wait = list == "userTasks" || list == "callActivities" || list == "subProcesses" ||
+                (list == "otherTasks" && type == "receiveTask") ||
+                (list == "serviceTasks" && (type == "external-worker" || el["triggerable"] == "true")) ||
+                (list == "events" && type in WAIT_EVENT_TYPES && el["def"] != "timer")
+            if (wait) return false
+            if (list == "events" && el["def"] == "timer") return true
+            if (el["async"] != null) return true
+            return null
+        }
+        val memo = HashMap<String, Boolean>()
+        return fun(start: String): Boolean = memo.getOrPut(start) {
+            val seen = HashSet<String>()
+            var reachedJob = false
+            val stack = ArrayDeque<String>().apply { addLast(start) }
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                if (!seen.add(cur)) continue
+                val preds = incoming[cur].orEmpty()
+                // the task itself, or a step on the way, that nothing leads into: someone called it
+                if (preds.isEmpty()) return@getOrPut false
+                for (p in preds) {
+                    when (origin(p)) {
+                        true -> reachedJob = true
+                        false -> return@getOrPut false
+                        null -> if (p !in seen) stack.addLast(p)
+                    }
+                }
+            }
+            reachedJob
+        }
+    }
+
+    /**
+     * Events that wait: a start, catch or boundary event that is not a timer was set off by something —
+     * a start call, a message, a signal, an error — and that is the caller of what follows it.
+     */
+    private val WAIT_EVENT_TYPES = setOf("startEvent", "intermediateCatchEvent", "boundaryEvent")
+
+    /** Skip diagnostics about files that are not Flowable models — recorded, not reported (see the diagnostics loop). */
+    private val NOT_A_MODEL_SKIPS = listOf("not a JSON document", "JSON is not an object", "JSON carries no model key")
+
+    /** Task types whose work happens outside the engine, whatever bean Design wrote for them. */
+    private val LEAVING_TASK_TYPES = setOf("http", "external-worker", "agent", "mail")
+
+    /** The root name of `${bean}` / `${bean.method(x)}` / `#{bean}`. */
+    private val EXPR_ROOT_RE = Regex("^\\s*[#$]\\{\\s*([A-Za-z_]\\w*)")
+
+    /** `${bpmn:removeAssignee()}` — a platform function namespace, not a bean: the call stays in the engine. */
+    private val EXPR_NAMESPACE_RE = Regex("^\\s*[#$]\\{\\s*[A-Za-z_]\\w*\\s*:")
+
+    /**
+     * Whether a service task's work happens outside the engine — the one thing that makes a missing
+     * error path a risk. Design writes a platform bean into every task type's `delegateExpression`, so
+     * a delegate alone says nothing: `${initVariablesService}` sets variables and `${auditLogService}`
+     * writes a row, and neither depends on anyone else's uptime. Before this distinction the check fired
+     * on 94 % platform beans across real projects. What leaves: the task types that call out (HTTP,
+     * external worker, agent, mail), code of the project's own (`class`, a bean that is not the
+     * platform's, an `expression` whose root is neither an engine context nor a platform bean), and a
+     * service-registry task whose service is REST.
+     */
+    private fun leavesTheEngine(el: Map<String, Any?>, serviceTypes: Map<String, String>, projectBeans: Set<String>): Boolean {
+        if (el["type"] in LEAVING_TASK_TYPES) return true
+        if (!(el["class"] as? String).isNullOrEmpty()) return true
+        fun root(attr: String) = (el[attr] as? String)?.let { EXPR_ROOT_RE.find(it)?.groupValues?.get(1) }
+        root("expression")?.let { r ->
+            val namespaced = (el["expression"] as? String)?.let { EXPR_NAMESPACE_RE.containsMatchIn(it) } == true
+            // `${requesterData.getName()}` reads a variable and stays in the engine; only a bean of the
+            // project's own — one Java declares, one an expression elsewhere resolved, or one named the
+            // way beans are named — is a call out. 15 findings on one project sat on variables.
+            if (!namespaced && r !in Constants.FLOWABLE_CONTEXT && r !in Constants.FLOWABLE_PLATFORM_BEANS &&
+                (r in projectBeans || Constants.looksLikeBeanName(r))) return true
+        }
+        val bean = root("delegateExpression") ?: return false
+        if (bean == "serviceRegistryService" || el["type"] == "service-registry") {
+            val svc = el["serviceModelKey"] as? String ?: return false
+            return serviceTypes[svc].equals("REST", ignoreCase = true)
+        }
+        return bean !in Constants.FLOWABLE_PLATFORM_BEANS
+    }
+
+    /** `${name}` in a query template with no FreeMarker built-in behind the name — nothing escapes it. */
+    private val UNESCAPED_TEMPLATE_PARAM = Regex("\\$\\{([^}?]*)\\}")
+
+    /** Every path the parser recorded a literal secret under, for a JSON model. */
+    @Suppress("UNCHECKED_CAST")
+    private fun literalSecrets(data: Map<String, Any?>, report: (String) -> Unit) {
+        for (p in (data["literalSecrets"] as? List<*> ?: emptyList<Any?>())) report(p.toString())
+    }
+
+    /**
+     * Every element of a process or case whose field injections carry a literal secret. A process keeps
+     * its elements in flat lists; a case keeps a plan tree, walked through `children`.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun secretFields(data: Map<String, Any?>, report: (String, String, String) -> Unit) {
+        fun visit(el: Map<String, Any?>) {
+            val id = el["id"] as? String ?: return
+            val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+            for (f in (el["secretFields"] as? List<*> ?: emptyList<Any?>())) report(id, what, f.toString())
+        }
+        for (list in ELEMENT_LISTS) for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) visit(el)
+        fun walk(node: Map<String, Any?>) {
+            visit(node)
+            for (c in (node["children"] as? List<Map<String, Any?>> ?: emptyList())) walk(c)
+        }
+        (data["planModel"] as? Map<String, Any?>)?.let { walk(it) }
+    }
+
+    /**
+     * How the sequence flows are wired, as opposed to how the elements are configured. Both questions
+     * here have a definite consequence at runtime — an exception, or a fork nobody drew — and both stay
+     * quiet wherever the model gives the engine a way out.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun topologyChecks(data: Map<String, Any?>, report: (String, String, String) -> Unit) {
+        val flows = data["flows"] as? List<Map<String, Any?>> ?: return
+        val outgoing = HashMap<String, MutableList<Map<String, Any?>>>()
+        for (f in flows) (f["from"] as? String)?.let { outgoing.getOrPut(it) { ArrayList() }.add(f) }
+
+        fun flowName(f: Map<String, Any?>) = (f["name"] as? String)?.ifEmpty { null } ?: f["id"].toString()
+
+        for (g in (data["gateways"] as? List<Map<String, Any?>> ?: emptyList())) {
+            val id = g["id"] as? String ?: continue
+            // Only the gateways that choose: a parallel gateway takes every flow, an event gateway waits.
+            if (g["type"] != "exclusiveGateway" && g["type"] != "inclusiveGateway") continue
+            val outs = outgoing[id] ?: continue
+            val what = (g["name"] as? String)?.ifEmpty { null } ?: id
+
+            // The engine walks a gateway's flows in file order and takes the first one whose condition
+            // holds — and a flow with no condition always holds (ExclusiveGatewayActivityBehavior,
+            // ConditionUtil.hasTrueCondition). The default is consulted only when nothing was taken. So
+            // once an unconditional flow comes up, the default is dead, and so is every flow after it out
+            // of an exclusive gateway; an inclusive gateway takes every true flow, so there only the
+            // default dies. An unconditional flow written *last* is an implicit default and kills nothing.
+            fun isDefault(f: Map<String, Any?>) = f["default"] == true || (g["default"] != null && f["id"] == g["default"])
+            val first = outs.firstOrNull { it["condition"] == null && !isDefault(it) }
+            if (first != null) {
+                val dead = if (g["type"] == "exclusiveGateway") {
+                    outs.drop(outs.indexOf(first) + 1).filter { !isDefault(it) } + outs.filter { isDefault(it) }
+                } else outs.filter { isDefault(it) }
+                if (dead.isNotEmpty()) {
+                    val names = dead.joinToString(", ") { (if (isDefault(it)) "the default " else "") + "`${flowName(it)}`" }
+                    report("shadowedFlow",
+                        "`$what` always leaves through `${flowName(first)}`, which has no condition — $names " +
+                            "${if (dead.size == 1) "is" else "are"} never taken", id)
+                }
+            }
+
+            if (g["default"] != null) continue
+            // An unconditional flow is the way out when nothing else matches; with one there is no risk. A
+            // single conditional flow is no choice, but it throws the very same exception when it is false.
+            if (outs.any { it["condition"] == null }) continue
+            if (hasComplementaryPair(outs.mapNotNull { it["condition"] as? String })) continue
+            val n = outs.size
+            report("gatewayNoDefault",
+                "`$what` has $n conditional outgoing flow${if (n == 1) "" else "s"} and no default — when " +
+                    "${if (n == 1) "it is" else "none of them is"} true the engine throws \"no outgoing sequence flow\"", id)
+        }
+
+        // A DMN service task sits in `serviceTasks` and in `ruleTasks`: one element, judged once.
+        val seen = HashSet<String>()
+        for (list in ELEMENT_LISTS) {
+            if (list == "gateways") continue
+            for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
+                val id = el["id"] as? String ?: continue
+                if (!seen.add(id)) continue
+                val outs = outgoing[id] ?: continue
+                val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+                // Conditional flows straight out of a task, an event or a subprocess are a choice drawn
+                // without a gateway, and the engine leaves the activity the way it leaves a gateway
+                // (TakeOutgoingSequenceFlowsOperation): false flows drop out, the activity's own default
+                // flow is the fallback, and with nothing left it throws "no outgoing sequence flow".
+                if (outs.all { it["condition"] != null } && outs.none { it["default"] == true } &&
+                    !hasComplementaryPair(outs.mapNotNull { it["condition"] as? String })) {
+                    val n = outs.size
+                    report("gatewayNoDefault",
+                        "`$what` leaves only through $n conditional flow${if (n == 1) "" else "s"} and has no default " +
+                            "flow — when ${if (n == 1) "it is false" else "none of them is true"} the engine throws " +
+                            "\"no outgoing sequence flow\"", id)
+                    continue
+                }
+                if (outs.size < 2) continue
+                // The engine takes every unconditional flow, so two of them are a fork with no gateway
+                // saying so. A set of flows that are all conditional is a choice someone drew on purpose,
+                // and is gatewayNoDefault's question — and so is an activity's own default flow, which BPMN
+                // allows and the engine takes only when no condition holds.
+                val plain = outs.count { it["condition"] == null && it["default"] != true }
+                if (plain == 0) continue
+                val how = if (plain == outs.size) "all of them run in parallel"
+                    else "the unconditional one${if (plain > 1) "s" else ""} run${if (plain > 1) "" else "s"} in parallel with whichever condition holds"
+                report("implicitSplit", "`$what` has ${outs.size} outgoing flows and no gateway — $how", id)
+            }
+        }
+    }
+
+    /**
+     * Whether two of [conds] are exact opposites — `${x}`/`${!x}`, `${a == b}`/`${a != b}`,
+     * `${vars:isEmpty(v)}`/`${vars:isNotEmpty(v)}` — so that one of them always holds and a default
+     * could never be reached. The engine takes the first flow whose condition is true, and a condition
+     * that evaluates to null or to something not boolean makes the *condition* throw
+     * (UelExpressionCondition) before any default is consulted; EL's `!=` is the negation of `==`, `!null`
+     * is true, and the platform defines `isNotEmpty` as `!isEmpty`. Deliberately *not* opposites:
+     * `== true`/`== false` and `vars:equals`/`vars:notEquals` (both false on null), and `<`/`>=` (EL
+     * comparisons with null are false) — those still leave the engine nowhere to go.
+     */
+    internal fun hasComplementaryPair(conds: List<String>): Boolean {
+        val bodies = conds.map { conditionBody(it) }
+        for (i in bodies.indices) for (j in bodies.indices) {
+            if (i == j) continue
+            val a = bodies[i] ?: continue
+            val b = bodies[j] ?: continue
+            if (negated(a) == b) return true
+            val ea = comparison(a)
+            val eb = comparison(b)
+            if (ea != null && eb != null && ea.first && !eb.first &&
+                (ea.second == eb.second || ea.second == eb.second.reversed())) return true
+            val ca = emptyCall(a)
+            val cb = emptyCall(b)
+            if (ca != null && cb != null && !ca.first && cb.first && ca.second == cb.second) return true
+        }
+        return false
+    }
+
+    /** `vars:isEmpty(x)` / `variables:notEmpty(x)`: prefix, function, argument text. */
+    private val EMPTY_CALL_RE = Regex("^(?:variables|vars|var)\\s*:\\s*(isEmpty|empty|isNotEmpty|notEmpty)\\s*(\\()(.*)\\)$")
+
+    /** `vars:isEmpty(x)` → (false, "x"); `vars:notEmpty(x)` → (true, "x"); null for anything else. */
+    private fun emptyCall(s: String): Pair<Boolean, String>? {
+        val m = EMPTY_CALL_RE.matchEntire(s) ?: return null
+        // `vars:isEmpty(a) || vars:isEmpty(b)` also ends in `)` — the call has to be the whole text
+        if (!closesAtEnd(s, m.groups[2]!!.range.first)) return null
+        return m.groupValues[1].let { it == "isNotEmpty" || it == "notEmpty" } to m.groupValues[3].trim()
+    }
+
+    /** The body of a condition that is exactly one `${…}` / `#{…}`, whitespace collapsed, outer parentheses gone. */
+    private fun conditionBody(c: String): String? {
+        val t = c.trim()
+        if (!(t.startsWith("\${") || t.startsWith("#{")) || !t.endsWith("}")) return null
+        val body = t.substring(2, t.length - 1)
+        // `${a}${b}` is two expressions; comparing their halves would compare nothing
+        if ("\${" in body || "#{" in body) return null
+        return stripParens(body.replace(Regex("\\s+"), " ").trim())
+    }
+
+    /** `(a == b)` → `a == b`, as often as the outer pair encloses the whole text. */
+    private fun stripParens(s: String): String {
+        var t = s
+        while (t.startsWith("(") && closesAtEnd(t, 0)) t = t.substring(1, t.length - 1).trim()
+        return t
+    }
+
+    /** Whether the bracket opened at [open] closes at the very end of [s] — quotes respected. */
+    private fun closesAtEnd(s: String, open: Int): Boolean {
+        if (open < 0 || open >= s.length || s[open] != '(' || !s.endsWith(")")) return false
+        var depth = 0
+        var quote = '\u0000'
+        var i = open
+        while (i < s.length) {
+            val c = s[i]
+            if (quote != '\u0000') {
+                if (c == '\\') i++ else if (c == quote) quote = '\u0000'
+            } else when (c) {
+                '\'', '"' -> quote = c
+                '(' -> depth++
+                ')' -> { depth--; if (depth == 0) return i == s.length - 1 }
+            }
+            i++
+        }
+        return false
+    }
+
+    /**
+     * The operators at the top level of [s] — outside brackets and string literals — that make it more
+     * than one operand: logical, relational, ternary, and EL's word forms. A word preceded by `:` or `.`
+     * is a function or property name (`vars:empty(x)`), not an operator.
+     */
+    private fun topLevelOperators(s: String): List<Pair<Int, String>> {
+        val out = ArrayList<Pair<Int, String>>()
+        var depth = 0
+        var quote = '\u0000'
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (quote != '\u0000') {
+                if (c == '\\') i++ else if (c == quote) quote = '\u0000'
+                i++; continue
+            }
+            when {
+                c == '\'' || c == '"' -> quote = c
+                c == '(' || c == '[' || c == '{' -> depth++
+                c == ')' || c == ']' || c == '}' -> depth--
+                depth != 0 -> {}
+                s.startsWith("&&", i) || s.startsWith("||", i) || s.startsWith("==", i) || s.startsWith("!=", i) ||
+                    s.startsWith("<=", i) || s.startsWith(">=", i) -> { out.add(i to s.substring(i, i + 2)); i += 2; continue }
+                c == '<' || c == '>' || c == '?' -> out.add(i to c.toString())
+                c.isLetter() && (i == 0 || !(s[i - 1].isLetterOrDigit() || s[i - 1] == '_' || s[i - 1] == '$')) -> {
+                    var e = i
+                    while (e < s.length && (s[e].isLetterOrDigit() || s[e] == '_')) e++
+                    val word = s.substring(i, e)
+                    val before = s.substring(0, i).trimEnd().lastOrNull()
+                    if (word in EL_WORD_OPERATORS && before != ':' && before != '.') out.add(i to word)
+                    i = e; continue
+                }
+            }
+            i++
+        }
+        return out
+    }
+
+    private val EL_WORD_OPERATORS = setOf("and", "or", "not", "eq", "ne", "lt", "gt", "le", "ge", "empty", "instanceof", "div", "mod")
+
+    /** `!x`, `!(x && y)`, `not x` → what they negate, or null when the negation is not of the whole text. */
+    private fun negated(s: String): String? {
+        val rest = when {
+            s.startsWith("!") && !s.startsWith("!=") -> s.substring(1).trim()
+            s.startsWith("not ") || s.startsWith("not(") -> s.substring(3).trim()
+            else -> return null
+        }
+        if (rest.isEmpty()) return null
+        // `!x && y` negates x, not the whole: only a parenthesised group or a single operand counts
+        if (rest.startsWith("(") && closesAtEnd(rest, 0)) return stripParens(rest)
+        return rest.takeIf { topLevelOperators(it).isEmpty() && !it.startsWith("!") }
+    }
+
+    /** `L == R` → (true, (L, R)); `L != R` → (false, (L, R)); null unless that is the whole condition. */
+    private fun comparison(s: String): Pair<Boolean, Pair<String, String>>? {
+        val ops = topLevelOperators(s)
+        if (ops.size != 1) return null
+        val (at, op) = ops.single()
+        val eq = when (op) { "==", "eq" -> true; "!=", "ne" -> false; else -> return null }
+        val l = s.substring(0, at).trim()
+        val r = s.substring(at + op.length).trim()
+        if (l.isEmpty() || r.isEmpty()) return null
+        return eq to (stripParens(l) to stripParens(r))
+    }
+
+    private fun <A> Pair<A, A>.reversed(): Pair<A, A> = second to first
+
+    /**
+     * Why one button writes over the payload, in the words its value gives: an empty binding, no value, or
+     * one that is not a path. What the button is goes first, by Design's name — the id alone does not say
+     * whether it computes something or calls something.
+     */
+    private fun payloadOverwriteMessage(field: Map<String, Any?>, id: String): String {
+        val rest = field["type"] == "restButton"
+        val what = if (rest) "REST button" else "Expression button"
+        val value = (field["value"] as? String)?.takeIf { it.isNotEmpty() }
+        val target = when {
+            value == null -> "has no value to store its ${if (rest) "response" else "result"} in"
+            value.removeSurrounding("{{", "}}").isBlank() -> "stores its ${if (rest) "response" else "result"} in `$value`, which names no variable"
+            else -> "stores its ${if (rest) "response" else "result"} in `$value`, which is not a variable path"
+        }
+        // A conditional auto-execute (`{{customer}}`) may or may not fire on its own, so it is not stated as fact.
+        val effect = when ((field["settings"] as? Map<*, *>)?.get("autoExecute")) {
+            true, "true" -> "it runs as the form opens and replaces the whole payload"
+            is String -> "pressing it, or its automatic run, replaces the whole payload"
+            else -> "pressing it replaces the whole payload"
+        }
+        return "$what `$id` $target — $effect"
+    }
+
+    /**
+     * One [CrossedColumns] group in words. The message spells out both halves of the pairing, because
+     * the reader has to compare two names to see the defect at all — "the mapping looks crossed" alone
+     * would send them back to the model to find out which one.
+     */
+    /** `db/…/customer.xml` in the code does not match the app's copy: which change sets differ, and how. */
+    private fun driftMessage(d: Map<String, Any?>): String {
+        fun sets(k: String) = (d[k] as? List<*>).orEmpty().map { it.toString() }
+        fun named(ids: List<String>) = (if (ids.size == 1) "change set " else "change sets ") + ids.joinToString(", ") { "`$it`" }
+        val parts = listOfNotNull(
+            sets("onlyApplication").takeIf { it.isNotEmpty() }?.let { "${named(it)} only in the code" },
+            sets("onlyDefinition").takeIf { it.isNotEmpty() }?.let { "${named(it)} only in the app" },
+            sets("changed").takeIf { it.isNotEmpty() }?.let { "${named(it)} ${if (it.size == 1) "differs" else "differ"}" },
+        )
+        // the copy by its archive and entry name: the whole path of a nested export says nothing more
+        val f = d["definition"].toString()
+        val def = if ('!' in f) f.substringBeforeLast('!').substringAfterLast('/') + "!" + f.substringAfterLast('!').substringAfterLast('/')
+            else f.substringAfterLast('/')
+        return "`${d["application"]}` in the code does not match the app's copy `$def`: " + parts.joinToString("; ")
+    }
+
+    private fun crossingMessage(group: Map<String, Any?>, pairs: List<Map<String, Any?>>): String {
+        fun arrow(p: Map<String, Any?>) = "`${p["field"]}` → `${p["column"]}`"
+        val first = pairs.first()
+        val cycle = group["kind"] != "crossed"
+        // Keyed off how many mappings are actually there rather than off the kind alone: the wording
+        // then cannot read the second half of a pair the group does not carry.
+        return when {
+            cycle && pairs.size == 2 -> "`${first["field"]}` maps to column `${first["column"]}` and " +
+                "`${pairs[1]["field"]}` maps to `${pairs[1]["column"]}` — the two column mappings " +
+                "look swapped"
+            cycle -> "${pairs.size} column mappings form a rotation: " + pairs.joinToString(", ") { arrow(it) }
+            else -> "`${first["field"]}` maps to column `${first["column"]}`, but the table's own " +
+                "`${group["expected"]}` is the column its name points at" +
+                (group["otherField"]?.let { " — `$it` maps that one" } ?: ", and no field maps it")
+        }
     }
 
     /**
@@ -192,13 +1067,28 @@ object Findings {
     @Suppress("UNCHECKED_CAST")
     private fun writeSites(data: Map<String, Any?>): String {
         val writes = data["writes"] as? List<Map<String, Any?>> ?: return "written somewhere"
-        val named = writes.take(3).map { w ->
-            val what = VIA_TERMS[w["via"]] ?: w["via"]?.toString() ?: "a mapping"
-            val where = (w["elementName"] as? String)?.ifEmpty { null } ?: w["element"] as? String
-            if (where != null) "$what `$where`" else what
+        // Three "Initialize variables" tasks writing the same name are one kind of site, three times —
+        // said once with a count, not three times word for word.
+        val grouped = writes.groupBy { w ->
+            (w["via"]?.toString() ?: "") to ((w["elementName"] as? String)?.ifEmpty { null } ?: w["element"] as? String)
+        }
+        val named = grouped.entries.take(3).map { (k, ws) ->
+            val (via, where) = k
+            val what = VIA_TERMS[via] ?: via.ifEmpty { "a mapping" }
+            val phrase = if (ws.size > 1) "${ws.size} ${plural(what)}" else what
+            if (where != null) "$phrase `$where`" else phrase
         }
         val total = (data["writeCount"] as? Number)?.toInt() ?: writes.size
-        return "written by " + named.joinToString(", ") + (if (total > named.size) " (+${total - named.size} more)" else "")
+        val shown = grouped.entries.take(3).sumOf { it.value.size }
+        return "written by " + named.joinToString(", ") + (if (total > shown) " (+${total - shown} more)" else "")
+    }
+
+    /** `an in parameter on` → `in parameters on`: the article goes, the noun before the preposition pluralises. */
+    private fun plural(term: String): String {
+        val words = term.removePrefix("a ").removePrefix("an ").removePrefix("the ").split(' ').toMutableList()
+        val at = words.indexOfFirst { it in setOf("on", "of", "in") }.let { if (it < 0) words.size else it }
+        if (at > 0) words[at - 1] = com.flowable.atlas.model.DesignTerms.pluralize(words[at - 1])
+        return words.joinToString(" ")
     }
 
     /** Design's wording for each way a variable can be written. */
@@ -213,11 +1103,13 @@ object Findings {
         "variableMapping" to "an init-variables mapping on",
         "scriptApi" to "a script on",
         "dmnOutput" to "a decision output of",
+        "dmnResult" to "the result list of the decision",
         "formField" to "a form field",
         "formOutcome" to "the outcome variable of",
         "formProperty" to "a form property",
         "dataObject" to "a data-object declaration in",
         "multiInstanceElement" to "a multi-instance element variable",
+        "variableAggregation" to "a multi-instance variable aggregation",
         "initiator" to "the initiator variable",
         "variableExtractor" to "a variable extractor",
         "flwPayload" to "an action payload output of",
@@ -228,14 +1120,25 @@ object Findings {
      * Script syntax findings, with the element that carries the script.
      *
      * Mirrors the explorer's `allScripts()` sources: BPMN script tasks, scripts anywhere in a CMMN plan
-     * tree, execution/task listeners of a model and of its elements, and an action's bot script.
+     * tree, execution/task listeners of a model and of its elements, an action's bot script, and a
+     * script-type service operation.
+     *
+     * A problem's line counts from the start of its script body, so it travels as `scriptLine`, and
+     * [sites] records which script of the model it is — [FindingLines] turns the two into a line of the
+     * file. The body's line 1 used to be printed as `order.bpmn:1`, and every Open landed on the XML
+     * declaration.
      */
     @Suppress("UNCHECKED_CAST")
     private fun collectScriptFindings(
         result: Map<String, Any?>,
         findings: MutableList<Map<String, Any?>>,
+        sites: MutableMap<MutableMap<String, Any?>, FindingLines.ScriptSite>,
     ) {
-        fun emit(modelType: String, model: Map<String, Any?>, element: Any?, problems: Any?) {
+        // No `subject` here, deliberately. One script element can carry several problems, but the only
+        // things that would tell them apart are the line and the message, and both move when the script
+        // is edited above them. The element is the honest grain: a reader judges a script body, not a
+        // line of it.
+        fun emit(modelType: String, model: Map<String, Any?>, element: Any?, problems: Any?, site: FindingLines.ScriptSite?) {
             val list = problems as? List<Map<String, Any?>> ?: return
             for (p in list) {
                 val f = linkedMapOf<String, Any?>(
@@ -247,29 +1150,53 @@ object Findings {
                 )
                 model["file"]?.let { f["file"] = it }
                 element?.let { f["element"] = it.toString() }
-                p["line"]?.let { f["line"] = it }
+                p["line"]?.let { f["scriptLine"] = it }
                 p["snippet"]?.let { f["snippet"] = it }
                 findings.add(f)
+                if (site != null) sites[f] = site
             }
         }
+        /** The listeners of one element, each with its place among the listeners of its kind. */
+        fun listeners(owner: Map<String, Any?>): List<Pair<Map<String, Any?>, Int>> {
+            val seen = HashMap<String, Int>()
+            return (owner["listeners"] as? List<Map<String, Any?>> ?: emptyList()).map { l ->
+                val kind = l["kind"]?.toString().orEmpty()
+                l to seen.merge(kind, 1, Int::plus)!!.minus(1)
+            }
+        }
+        fun listenerSite(elementId: Any?, l: Map<String, Any?>, index: Int) =
+            elementId?.toString()?.let { FindingLines.ScriptSite(it, l["kind"]?.toString(), index) }
 
         for (pAny in (result["processes"] as? List<Map<String, Any?>> ?: emptyList())) {
             for (t in (pAny["scriptTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
-                emit("process", pAny, t["id"], t["problems"])
+                emit("process", pAny, t["id"], t["problems"], t["id"]?.let { FindingLines.ScriptSite(it.toString()) })
             }
-            emitListeners("process", pAny, findings, ::emit)
+            emitListeners("process", pAny, ::listeners, ::listenerSite, ::emit)
         }
         for (cAny in (result["cases"] as? List<Map<String, Any?>> ?: emptyList())) {
-            // CMMN keeps scripts in the plan tree (`<task flowable:type="script">`).
+            // CMMN keeps scripts in the plan tree (`<task flowable:type="script">`), and a plan item's
+            // listeners hang off the plan item — not off the buckets emitListeners reads for a process. A
+            // `planItemLifecycleListener` with a script is a no-op at runtime and is flagged by the parser;
+            // until now that problem was recorded on the item and read by nothing.
             fun walk(node: Map<String, Any?>) {
-                emit("case", cAny, node["id"], node["problems"])
+                emit("case", cAny, node["id"], node["problems"], node["id"]?.let { FindingLines.ScriptSite(it.toString()) })
+                for ((l, i) in listeners(node)) emit("case", cAny, node["id"], l["problems"], listenerSite(node["id"], l, i))
                 for (ch in (node["children"] as? List<Map<String, Any?>> ?: emptyList())) walk(ch)
             }
             (cAny["planModel"] as? Map<String, Any?>)?.let { walk(it) }
-            emitListeners("case", cAny, findings, ::emit)
+            emitListeners("case", cAny, ::listeners, ::listenerSite, ::emit)
         }
         for (aAny in (result["actions"] as? List<Map<String, Any?>> ?: emptyList())) {
-            emit("action", aAny, null, aAny["scriptProblems"])
+            // an action's script lives in a JSON string: there is no file line to give it
+            emit("action", aAny, null, aAny["scriptProblems"], null)
+        }
+        // a script-type service operation: the operation is the element, as a script task is in a process.
+        // Its script is a JSON string, like an action's, so there is no file line to give a problem in it —
+        // the finding opens on the operation instead.
+        for (sAny in (result["services"] as? List<Map<String, Any?>> ?: emptyList())) {
+            for (op in (sAny["operations"] as? List<Map<String, Any?>> ?: emptyList())) {
+                emit("service", sAny, op["key"], op["scriptProblems"], null)
+            }
         }
     }
 
@@ -278,20 +1205,18 @@ object Findings {
     private fun emitListeners(
         modelType: String,
         model: Map<String, Any?>,
-        findings: MutableList<Map<String, Any?>>,
-        emit: (String, Map<String, Any?>, Any?, Any?) -> Unit,
+        listeners: (Map<String, Any?>) -> List<Pair<Map<String, Any?>, Int>>,
+        site: (Any?, Map<String, Any?>, Int) -> FindingLines.ScriptSite?,
+        emit: (String, Map<String, Any?>, Any?, Any?, FindingLines.ScriptSite?) -> Unit,
     ) {
-        for (l in (model["listeners"] as? List<Map<String, Any?>> ?: emptyList())) {
-            emit(modelType, model, null, l["problems"])
-        }
+        // the model's own listeners sit on the process (or case) element, whose id is the model's key
+        for ((l, i) in listeners(model)) emit(modelType, model, null, l["problems"], site(model["key"], l, i))
         for (bucket in listOf(
             "userTasks", "serviceTasks", "scriptTasks", "ruleTasks", "callActivities",
             "subProcesses", "events", "gateways", "otherTasks",
         )) {
             for (el in (model[bucket] as? List<Map<String, Any?>> ?: emptyList())) {
-                for (l in (el["listeners"] as? List<Map<String, Any?>> ?: emptyList())) {
-                    emit(modelType, model, el["id"], l["problems"])
-                }
+                for ((l, i) in listeners(el)) emit(modelType, model, el["id"], l["problems"], site(el["id"], l, i))
             }
         }
     }

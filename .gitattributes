@@ -1,0 +1,5 @@
+# The vendored model schemas are kept byte for byte as the Flowable engine publishes them — that
+# identity is their provenance record, and it is what THIRD-PARTY-NOTICES.md claims about them. Several
+# arrive with CRLF line endings, so line-ending normalisation is off for them: a normalised copy is no
+# longer the file anyone can diff against the published one.
+idea-plugin/src/main/resources/schemas/** -text

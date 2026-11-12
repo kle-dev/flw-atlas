@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn"
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="http://flowable.org/demo"
+             xmlns:flowable="http://flowable.org/bpmn"
              xmlns:design="http://flowable.org/design"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
@@ -8,7 +9,9 @@
     <userTask id="t1" name="Approve order"/>
     <serviceTask id="t2" name="Calculate" flowable:class="com.acme.X"/>
     <serviceTask id="t3" name="Lookup customer" flowable:type="service-registry">
-      <extensionElements><design:stencilid><![CDATA[ServiceRegistryTask]]></design:stencilid></extensionElements>
+      <!-- calls an operation whose required customerId it never passes: the operation page shows the gap -->
+      <extensionElements><design:stencilid><![CDATA[ServiceRegistryTask]]></design:stencilid>
+        <flowable:serviceMapping serviceModelKey="customerService" operationKey="findById"/></extensionElements>
     </serviceTask>
     <serviceTask id="t4" name="Ask the agent" flowable:type="agent"/>
     <serviceTask id="t5" name="Call REST" flowable:type="http"/>
@@ -18,6 +21,16 @@
     <scriptTask id="t7" name="Compute" scriptFormat="groovy"><script>x=1</script></scriptTask>
     <callActivity id="t8" name="Fulfil" calledElement="sub"/>
     <serviceTask id="t9" name="Send mail" flowable:type="mail"/>
+    <!-- Async work, two ways round. t11 opts out of exclusive jobs and states no retry policy, so both
+         runtime-risk checks have an honest example; t12 is the same call done deliberately, and is what
+         those checks must stay quiet about. -->
+    <serviceTask id="t11" name="Sync inventory" flowable:type="http" flowable:async="true" flowable:exclusive="false"/>
+    <serviceTask id="t12" name="Push to warehouse" flowable:type="http" flowable:async="true">
+      <extensionElements><flowable:failedJobRetryTimeCycle>R3/PT10M</flowable:failedJobRetryTimeCycle></extensionElements>
+    </serviceTask>
+    <boundaryEvent id="b2" name="Warehouse down" attachedToRef="t12">
+      <errorEventDefinition errorRef="boom"/>
+    </boundaryEvent>
     <userTask id="t10" name="Review each">
       <multiInstanceLoopCharacteristics isSequential="false"/>
     </userTask>
@@ -26,6 +39,12 @@
     </boundaryEvent>
     <exclusiveGateway id="g1" name="OK?"/>
     <endEvent id="e1" name="Failed"><errorEventDefinition errorRef="boom"/></endEvent>
+    <!-- Two unconditional flows out of one task: the engine takes both, so "Approve order" forks into
+         Calculate and Compute in parallel with no gateway saying so — the implicitSplit check's
+         honest example. -->
+    <sequenceFlow id="fl1" sourceRef="s1" targetRef="t1"/>
+    <sequenceFlow id="fl2" sourceRef="t1" targetRef="t2"/>
+    <sequenceFlow id="fl3" sourceRef="t1" targetRef="t7"/>
   </process>
   <bpmndi:BPMNDiagram id="d"><bpmndi:BPMNPlane bpmnElement="typeDemo" id="p">
     <bpmndi:BPMNShape bpmnElement="s1" id="sh0"><omgdc:Bounds x="30" y="30" width="30" height="30"/></bpmndi:BPMNShape>

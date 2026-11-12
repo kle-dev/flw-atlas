@@ -1,10 +1,13 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.environment.auth.AuthContext
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -32,7 +35,7 @@ class DesignClientHttpTest {
 
     private fun conn() = DesignClient.Connection(baseUrl(), "user", "secret")
 
-    private fun tokenConn(token: String = "T0K") = DesignClient.Connection(baseUrl(), DesignClient.Auth.Token(token))
+    private fun tokenConn(token: String = "T0K") = DesignClient.Connection(baseUrl(), AuthContext.token(token))
 
     private fun respond(ex: HttpExchange, code: Int, body: ByteArray) {
         ex.sendResponseHeaders(code, body.size.toLong())
@@ -87,6 +90,40 @@ class DesignClientHttpTest {
         assertEquals(2, (out as DesignClient.Result.Success).value.size)
         assertEquals(2, auths.size)                                  // one request per page
         assertTrue(auths.all { it == listOf("Bearer T0K") })         // exactly one header, no Basic
+    }
+
+    /**
+     * The reason the auth model was unified: a Design server behind an identity provider is reachable
+     * with the browser session the user already has. This client sent exactly one `Authorization`
+     * header and had no way to carry a cookie, so that server could not be pulled from at all.
+     */
+    @Test fun sendsACapturedBrowserSession() {
+        val cookies = mutableListOf<List<String>?>()
+        val auths = mutableListOf<List<String>?>()
+        server.createContext("/design-api/workspaces") { ex ->
+            cookies += ex.requestHeaders["Cookie"]
+            auths += ex.requestHeaders["Authorization"]
+            respond(ex, 200, """{"data":[],"total":0}""".toByteArray())
+        }
+
+        val session = mapOf("Cookie" to "SESSION=abc", "X-XSRF-TOKEN" to "t")
+        DesignClient.listWorkspaces(DesignClient.Connection(baseUrl(), AuthContext.session(session)))
+
+        assertEquals(listOf(listOf("SESSION=abc")), cookies)
+        assertNull("nothing to send, so nothing is sent", auths.single())
+    }
+
+    /** A cookie alone is enough — the pre-flight must not demand a token it does not need. */
+    @Test fun aCapturedSessionSatisfiesTheTokenPreflight() {
+        server.createContext("/design-api/workspaces") { ex ->
+            respond(ex, 200, """{"data":[],"total":0}""".toByteArray())
+        }
+
+        val out = DesignClient.listWorkspaces(
+            DesignClient.Connection(baseUrl(), AuthContext.token("", mapOf("Cookie" to "SESSION=abc"))),
+        )
+
+        assertTrue("a blank token with a session must not be refused before the socket", out is DesignClient.Result.Success)
     }
 
     /** A pasted `Bearer …` must not become `Bearer Bearer …`. */
@@ -188,6 +225,31 @@ class DesignClientHttpTest {
         val export = (out as DesignClient.Result.Success).value
         assertArrayEquals(zip, export.bytes)
         assertEquals("HR App.zip", export.fileName)
+    }
+
+    /**
+     * Plaintext `http://` must go out as plain HTTP/1.1. The JDK client defaults to HTTP/2, which over
+     * cleartext means an h2c *upgrade* request (`Connection: Upgrade` + `HTTP2-Settings`); a Design
+     * server that neither answers nor declines the upgrade leaves the request hanging until the timeout,
+     * reported as "Cannot reach … request timeout" while the very same URL answers a plain curl at once.
+     */
+    @Test fun sendsNoHttp2UpgradeOnCleartext() {
+        val headers = mutableMapOf<String, String?>()
+        server.createContext("/design-api/workspaces") { ex ->
+            headers["Connection"] = ex.requestHeaders.getFirst("Connection")
+            headers["Upgrade"] = ex.requestHeaders.getFirst("Upgrade")
+            headers["HTTP2-Settings"] = ex.requestHeaders.getFirst("HTTP2-Settings")
+            respond(ex, 200, """{"data":[],"total":0}""".toByteArray())
+        }
+
+        assertTrue(DesignClient.listWorkspaces(conn()) is DesignClient.Result.Success)
+
+        assertNull("no h2c upgrade offer", headers["Upgrade"])
+        assertNull("no h2c settings", headers["HTTP2-Settings"])
+        assertFalse(
+            "Connection header must not offer an upgrade: ${headers["Connection"]}",
+            headers["Connection"].orEmpty().contains("Upgrade", ignoreCase = true),
+        )
     }
 
     @Test fun rejectsNonZipExportResponse() {

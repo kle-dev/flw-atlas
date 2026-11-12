@@ -1,16 +1,16 @@
 package com.flowable.atlas.usage
 
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.parsing.ModelUsageLocator
-import com.intellij.openapi.vfs.VirtualFile
+import com.flowable.atlas.model.ModelFiles
+import com.intellij.find.findUsages.CustomUsageSearcher
 import com.intellij.find.findUsages.FindUsagesOptions
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.service
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiMethod
-import com.intellij.find.findUsages.CustomUsageSearcher
 import com.intellij.usageView.UsageInfo
 import com.intellij.usages.Usage
 import com.intellij.usages.UsageInfo2UsageAdapter
@@ -34,7 +34,7 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
     private data class Subject(
         val botKey: String?,
         val endpoints: List<EndpointPsi.Endpoint>,
-        val names: Set<String>,
+        val ref: ModelReferenceScan.JavaRef?,
     )
 
     override fun processElementUsages(element: PsiElement, processor: Processor<in Usage>, options: FindUsagesOptions) {
@@ -46,11 +46,11 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
             Subject(
                 botKey = (element as? PsiClass)?.let { BotPsi.botKeyOf(it) },
                 endpoints = (element as? PsiMethod)?.let { EndpointPsi.endpointsOf(it) }.orEmpty(),
-                names = ModelReferenceScan.namesOf(element),
+                ref = ModelReferenceScan.refOf(element),
             )
         }
-        val (botKey, endpoints, names) = subject
-        if (botKey == null && endpoints.isEmpty() && names.isEmpty()) return
+        val (botKey, endpoints, ref) = subject
+        if (botKey == null && endpoints.isEmpty() && ref == null) return
 
         // Phase 2 — the index, deliberately OUTSIDE any read action. On a cold cache this is a full
         // model scan, and holding the read lock across it makes every write action (typing, a VFS
@@ -59,13 +59,21 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
         // anything if the caller does not wrap the whole thing in a read action again.
         val index = project.service<FlowableModelIndexService>().index()
 
-        // Phase 3 — reporting, back under a read action (PsiManager / PsiFile / UsageInfo).
-        ReadAction.runBlocking<RuntimeException> {
-            if (project.isDisposed) return@runBlocking
-            val psiManager = PsiManager.getInstance(project)
+        val psiManager = PsiManager.getInstance(project)
 
-            // Bot class → the .action models that invoke it (matched by botKey).
-            if (botKey != null) {
+        // Phase 3 — reporting. The model files are read outside the read lock; only a file with a hit takes
+        // it, briefly, for its PsiFile and the UsageInfo. One read action around up to two passes over every
+        // model and archive made each write wait for the whole scan, and Cancel waited with it.
+        fun report(vf: VirtualFile, ranges: List<IntRange>) = ReadAction.runBlocking<RuntimeException> {
+            if (project.isDisposed || !vf.isValid) return@runBlocking
+            val psiFile = psiManager.findFile(vf) ?: return@runBlocking
+            for (r in ranges) processor.process(UsageInfo2UsageAdapter(UsageInfo(psiFile, r.first, r.last + 1, false)))
+        }
+
+        // Bot class → the .action models that invoke it (matched by botKey) — a handful of files, read in place.
+        if (botKey != null) {
+            ReadAction.runBlocking<RuntimeException> {
+                if (project.isDisposed) return@runBlocking
                 for (entry in index.actionsUsingBot(botKey)) {
                     val psiFile = psiManager.findFile(entry.file) ?: continue
                     val text = runCatching { String(entry.file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
@@ -74,37 +82,25 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
                     processor.process(UsageInfo2UsageAdapter(usage))
                 }
             }
+        }
 
-            // Spring REST handler → the model HTTP tasks whose requestUrl resolves to its endpoint.
-            val calledEndpoints = endpoints.filter { EndpointModelScan.anyModelCalls(index, it) }
-            if (calledEndpoints.isNotEmpty()) {
-                ModelReferenceScan.forEachModelText(project) { vf, text ->
-                    val ranges = EndpointModelScan.usageRanges(text, calledEndpoints)
-                    if (ranges.isNotEmpty()) {
-                        psiManager.findFile(vf)?.let { psiFile ->
-                            for (r in ranges) {
-                                processor.process(UsageInfo2UsageAdapter(UsageInfo(psiFile, r.first, r.last + 1, false)))
-                            }
-                        }
-                    }
-                }
+        // Spring REST handler → the model HTTP tasks whose requestUrl resolves to its endpoint.
+        val all = if (endpoints.isEmpty()) emptyList()
+            else ReadAction.computeBlocking<List<EndpointPsi.Endpoint>, RuntimeException> { EndpointPsi.projectEndpoints(project) }
+        val calledEndpoints = endpoints.filter { EndpointModelScan.anyModelCalls(index, it, all) }
+        if (calledEndpoints.isNotEmpty()) {
+            ModelReferenceScan.forEachModelTextUnlocked(project) { vf, text ->
+                val ranges = EndpointModelScan.usageRanges(text, vf.name, calledEndpoints, ModelFiles.typeOf(vf)?.parserKey, all)
+                if (ranges.isNotEmpty()) report(vf, ranges)
             }
+        }
 
-            // Java symbol → the model expressions that reference it by name.
-            if (names.isEmpty()) return@runBlocking
-            if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return@runBlocking
-
-            fun reportUsages(vf: VirtualFile, text: String) {
-                if (names.none { text.contains(it) }) return
-                val ranges = ModelUsageLocator.findUsages(text, names)
-                if (ranges.isEmpty()) return
-                val psiFile = psiManager.findFile(vf) ?: return
-                for (r in ranges) {
-                    processor.process(UsageInfo2UsageAdapter(UsageInfo(psiFile, r.first, r.last + 1, false)))
-                }
-            }
-
-            ModelReferenceScan.forEachModelText(project, ::reportUsages)
+        // Java symbol → the model expressions that use it through one of its beans, or name its class.
+        if (ref == null || !ref.usedIn(index)) return
+        ModelReferenceScan.forEachModelTextUnlocked(project) { vf, text ->
+            if (ref.absentFrom(text)) return@forEachModelTextUnlocked
+            val ranges = ref.findIn(text)
+            if (ranges.isNotEmpty()) report(vf, ranges)
         }
     }
 

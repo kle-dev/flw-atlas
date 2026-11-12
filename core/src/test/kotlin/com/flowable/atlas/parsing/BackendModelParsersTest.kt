@@ -126,7 +126,8 @@ class BackendModelParsersTest {
         assertEquals(emptyList<Any?>(), c["sentries"])
         assertEquals(emptyList<Any?>(), c["milestones"])
         assertEquals(emptyList<Any?>(), c["eventListeners"])
-        assertEquals(emptyList<Any?>(), c["modelRefs"])
+        // the security policy the plan model names is the case's own
+        assertEquals(listOf(mapOf("rel" to "security-policy-model", "key" to "orderPolicy")), c["modelRefs"])
 
         // cross-model references recorded on ctx
         val r = refs(ctx)
@@ -144,5 +145,181 @@ class BackendModelParsersTest {
 
         // starter/candidate groups feed the group index
         assertTrue(ctx.groups.contains("auditors"))
+    }
+
+    /**
+     * The event contract tables join an event's publishers and consumers element by element — which task
+     * sends it, over which channel — and a signal's throw and catch by the name the shared node is keyed
+     * by, not by each model's own definition id.
+     */
+    @Test
+    fun anElementSaysWhichEventAndChannelItUses() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
+              <signal id="sigDone" name="customerOnboarded"/>
+              <process id="p">
+                <startEvent id="start"><extensionElements><flowable:eventType>customerCreated</flowable:eventType></extensionElements></startEvent>
+                <serviceTask id="announce" flowable:type="send-event">
+                  <extensionElements>
+                    <flowable:eventType>customerCreated</flowable:eventType>
+                    <flowable:channelKey>customerEventsOut</flowable:channelKey>
+                  </extensionElements>
+                </serviceTask>
+                <serviceTask id="legacy" flowable:type="send-event">
+                  <extensionElements><flowable:field name="eventType"><flowable:string>orderShipped</flowable:string></flowable:field></extensionElements>
+                </serviceTask>
+                <intermediateThrowEvent id="tell"><signalEventDefinition signalRef="sigDone"/></intermediateThrowEvent>
+              </process>
+            </definitions>"""
+        val p = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")[0]
+        val events = listOfMaps(p["events"]).associateBy { it["id"] }
+        assertEquals("customerCreated", events["start"]!!["eventType"])
+        assertEquals("receive", events["start"]!!["eventRole"])
+        assertEquals("the name, not the definition id", "customerOnboarded", events["tell"]!!["ref"])
+        val tasks = listOfMaps(p["serviceTasks"]).associateBy { it["id"] }
+        assertEquals("send", tasks["announce"]!!["eventRole"])
+        assertEquals("customerEventsOut", tasks["announce"]!!["channelKey"])
+        assertEquals("a send-event task configured by field", "orderShipped", tasks["legacy"]!!["eventType"])
+    }
+
+    /** The engine spells it `adHocSubProcess`, and tags compare case-sensitively: under the misspelling
+     *  `adhocSubProcess` the element was not listed and its tasks had no `parent`. */
+    @Test
+    fun anAdHocSubProcessIsListedAndScopesItsTasks() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+              <process id="p">
+                <adHocSubProcess id="adhoc1" name="Pick any">
+                  <userTask id="review"/>
+                </adHocSubProcess>
+              </process>
+            </definitions>"""
+        val p = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")[0]
+        val sp = listOfMaps(p["subProcesses"]).single()
+        assertEquals("adhoc1", sp["id"])
+        assertEquals("adHocSubProcess", sp["type"])
+        assertEquals("adhoc1", listOfMaps(p["userTasks"]).single()["parent"])
+    }
+
+    /**
+     * A hand-written CMMN Java task names its implementation on the `<task>` itself, with no
+     * `<extensionElements>` at all — the engine's TaskXmlConverter reads it there. Returning early on the
+     * missing element dropped the bean reference, and `flowable:class` was never a reference at all.
+     */
+    @Test
+    fun aCmmnJavaTaskWithoutExtensionElementsKeepsItsImplementation() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c">
+                <extensionElements>
+                  <flowable:caseLifecycleListener sourceState="active" targetState="completed" delegateExpression="${'$'}{caseEndListener}"/>
+                </extensionElements>
+                <casePlanModel id="plan">
+                  <planItem id="pi1" definitionRef="byClass"/>
+                  <planItem id="pi2" definitionRef="byBean"/>
+                  <planItem id="pi3" definitionRef="human"/>
+                  <task id="byClass" flowable:type="java" flowable:class="com.example.DemoDelegate"/>
+                  <task id="byBean" flowable:type="java" flowable:delegateExpression="${'$'}{demoBean}"/>
+                  <humanTask id="human"/>
+                </casePlanModel>
+              </case>
+            </definitions>"""
+        val ctx = Ctx()
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), ctx, "c.cmmn")[0]
+        assertTrue(refs(ctx).containsAll(setOf(
+            Triple("task-class", "class", "com.example.DemoDelegate"),
+            Triple("task-delegate", "bean", "demoBean"),
+            Triple("caseLifecycleListener:completed", "bean", "caseEndListener"),
+        )))
+        @Suppress("UNCHECKED_CAST")
+        val items = listOfMaps((case["planModel"] as Map<String, Any?>)["children"]).associateBy { it["id"] }
+        assertEquals("com.example.DemoDelegate", items["byClass"]!!["class"])
+        assertEquals("\${demoBean}", items["byBean"]!!["delegateExpression"])
+        assertFalse("a task that names no implementation keeps its shape", items["human"]!!.containsKey("class"))
+        val listener = listOfMaps(case["listeners"]).single()
+        assertEquals("caseLifecycleListener", listener["kind"])
+        assertEquals("completed", listener["event"])
+    }
+
+    /** A case lifecycle listener with a script is a silent no-op: CmmnListenerFactory has no script branch
+     *  for it, as for a plan item's — so it carries the same problem. */
+    @Test
+    fun aScriptOnACaseLifecycleListenerIsFlagged() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c">
+                <extensionElements>
+                  <flowable:caseLifecycleListener targetState="completed"><flowable:script scriptFormat="groovy">x = 1</flowable:script></flowable:caseLifecycleListener>
+                </extensionElements>
+                <casePlanModel id="plan"/>
+              </case>
+            </definitions>"""
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), Ctx(), "c.cmmn")[0]
+        val problems = listOfMaps(listOfMaps(case["listeners"]).single()["problems"])
+        assertEquals("unsupported-script-listener", problems.single()["kind"])
+    }
+
+    /** A process's documentation is its own `<documentation>` child — never the first one below it, which
+     *  on the public demo turned a user task's TODO into the process description. */
+    @Test
+    fun aProcessIsDescribedOnlyByItsOwnDocumentation() {
+        fun process(own: String) = BackendModelParsers.parseBpmn("""<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+              <process id="p">$own
+                <userTask id="t"><documentation>DEMO task note</documentation></userTask>
+              </process>
+            </definitions>""".toByteArray(), Ctx(), "p.bpmn")[0]
+        val bare = process("")
+        assertEquals(null, bare["documentation"])
+        assertEquals("DEMO task note", listOfMaps(bare["userTasks"]).single()["documentation"])
+        assertEquals("DEMO process", process("<documentation>DEMO process</documentation>")["documentation"])
+    }
+
+    /** A case's documentation is its own, or its plan model's (where Design keeps the plan model shape's
+     *  prose) — never a sentry's or a task's. */
+    @Test
+    fun aCaseIsDescribedByItsOwnOrItsPlanModelsDocumentation() {
+        fun case(own: String, plan: String) = BackendModelParsers.parseCmmn("""<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL">
+              <case id="c">$own
+                <casePlanModel id="plan">$plan
+                  <sentry id="s"><documentation>DEMO sentry note</documentation></sentry>
+                </casePlanModel>
+              </case>
+            </definitions>""".toByteArray(), Ctx(), "c.cmmn")[0]
+        assertEquals(null, case("", "")["documentation"])
+        assertEquals("DEMO plan", case("", "<documentation>DEMO plan</documentation>")["documentation"])
+        assertEquals("DEMO case",
+            case("<documentation>DEMO case</documentation>", "<documentation>DEMO plan</documentation>")["documentation"])
+    }
+
+    @Test
+    fun aCaseWithoutListenersHasNoListenersKey() {
+        val case = BackendModelParsers.parseCmmn(bytes("miniproject/cases/review.cmmn"), Ctx(), "cases/review.cmmn")[0]
+        assertFalse(case.containsKey("listeners"))
+    }
+
+    /** What turns a task's failure into a BPMN error — the only thing an error boundary catches — and a wait. */
+    @Test
+    fun aServiceTaskSaysWhatCanMakeItsFailureABpmnError() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
+              <process id="p">
+                <serviceTask id="mail" flowable:type="mail">
+                  <extensionElements><flowable:mapException errorCode="E">com.example.X</flowable:mapException></extensionElements>
+                </serviceTask>
+                <serviceTask id="http" flowable:type="http">
+                  <extensionElements><flowable:httpResponseHandler class="com.example.Handler"/></extensionElements>
+                </serviceTask>
+                <serviceTask id="wait" flowable:class="com.example.Y" flowable:triggerable="true"/>
+                <serviceTask id="plain" flowable:type="mail"/>
+              </process>
+            </definitions>"""
+        val tasks = listOfMaps(BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")[0]["serviceTasks"]).associateBy { it["id"] }
+        assertEquals(true, tasks["mail"]!!["mapsExceptions"])
+        assertEquals(true, tasks["http"]!!["responseHandler"])
+        assertEquals("true", tasks["wait"]!!["triggerable"])
+        // written only when present
+        assertEquals(setOf<String>(), setOf("mapsExceptions", "responseHandler", "triggerable").filter { it in tasks["plain"]!! }.toSet())
     }
 }

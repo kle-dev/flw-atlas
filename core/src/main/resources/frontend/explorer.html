@@ -16,7 +16,19 @@ try{
   var _p=null; try{_p=localStorage.getItem('atlas-theme');}catch(e){}
   _p=_p||(_ide?'auto':'light');
   var _sys=_ide||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
-  document.documentElement.dataset.theme=(_p==='auto')?_sys:_p;
+  var _theme=(_p==='auto')?_sys:_p;
+  document.documentElement.dataset.theme=_theme;
+  /* The IDE's colours (?idePal=, nine 6-hex groups — see IdePalette.kt): only the surfaces that would
+     otherwise flash in Hub colours before boot; explorer.js applies the full derived set right after. */
+  var _pal=new URLSearchParams(location.search).get('idePal');
+  if(_pal&&_ide&&_theme===_ide){
+    var _c=_pal.split('.');
+    if(_c.length===9&&_c.every(function(x){return /^[0-9a-f]{6}$/i.test(x);})){
+      var _s=document.documentElement.style;
+      _s.setProperty('--bg','#'+_c[0]); _s.setProperty('--panel','#'+_c[1]); _s.setProperty('--panel2','#'+_c[2]);
+      _s.setProperty('--line','#'+_c[3]); _s.setProperty('--ink','#'+_c[4]); _s.setProperty('--ink-dim','#'+_c[5]); _s.setProperty('--accent','#'+_c[6]);
+    }
+  }
 }catch(e){}
 </script>
 <style>
@@ -35,7 +47,7 @@ try{
 </div>
 <div class="shell">
   <aside class="sidebar" id="sidebar">
-    <!-- Flowable brand lockup, derived from the Flowable Hub logo (FlowableHubFull);
+    <!-- Flowable brand lockup, derived from the Flowable Hub logo;
          the "flow" letters use currentColor so the wordmark inverts with the theme.
          The mark-only variant is the same red path cropped via viewBox (collapsed rail). -->
     <div class="side-logo">
@@ -52,46 +64,97 @@ try{
       </svg>
     </div>
     <nav class="side-nav" id="nav" aria-label="Categories"></nav>
+    <!-- Below 800px the list above is hidden and this picker stands in for it (filled by renderSidebar). -->
+    <select class="navpick" id="navpick" aria-label="Go to"></select>
+    <!-- Two rows on a 2-column grid (explorer.css .side-foot): project · parse-issue chip / provenance ·
+         text size. The old single flex row overflowed the 240px sidebar as soon as the version stamp
+         grew a "generated 3 days ago" — the project name shrank to one letter and the buttons clipped.
+         The theme toggle lives in the topbar only; two of them was one too many. -->
     <div class="side-foot" id="sidefoot">
-      <div class="proj mono" id="proj"></div>
-      <div class="atlasver mono" id="atlasver" title="Flowable Atlas generator version">__ATLAS_VERSION__</div>
+      <div class="proj" id="proj"></div>
       <button class="side-warn" id="diagchip" hidden></button>
-      <button class="tbtn" data-theme-btn aria-label="Switch color theme"></button>
+      <div class="atlasver" id="atlasver" title="Flowable Atlas generator version">__ATLAS_VERSION__</div>
+      <span class="footbtns">
+        <button class="tbtn" data-ui-scale="-" aria-label="Smaller text">A−</button>
+        <button class="tbtn" data-ui-scale="+" aria-label="Larger text">A+</button>
+      </span>
     </div>
   </aside>
   <div class="side-resize" id="sideresize" role="separator" aria-orientation="vertical"
        tabindex="0" aria-label="Resize sidebar"></div>
   <div class="main">
     <header class="topbar">
+      <!-- The page's own back/forward: inside the IDE there is no browser chrome, and the header
+           button on a node's page was the only way back — none at all from a report page. -->
+      <span class="navbtns">
+        <button class="tbtn navbtn" id="navback" disabled data-tip="Back (Alt+←)" aria-label="Back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+        </button>
+        <button class="tbtn navbtn" id="navfwd" disabled data-tip="Forward (Alt+→)" aria-label="Forward">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 5 7 7-7 7"/><path d="M5 12h14"/></svg>
+        </button>
+      </span>
       <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
-      <button class="searchbtn" id="searchbtn" aria-haspopup="dialog" aria-controls="palette">
+      <!-- aria-label carries the name even below 1100px, where the placeholder span is display:none
+           and the accessible name would otherwise collapse to "⌘K" -->
+      <button class="searchbtn" id="searchbtn" aria-haspopup="dialog" aria-controls="palette"
+              aria-label="Search everything" title="Search everything — press / or the shortcut">
         <span class="ic" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
         <span class="ph">Search everything…</span>
         <kbd class="kbd" id="searchkbd">⌘K</kbd>
       </button>
-      <button class="tbtn" id="linkfilter" hidden aria-pressed="false">≈</button>
+      <!-- What the page shows, as labelled switches of one menu: the two used to be bare glyphs in the bar
+           ("≈" and a flag) whose meaning only a hover bubble told. aria-checked means *shown*. -->
+      <div class="viewmenu" id="viewmenu" hidden>
+        <button class="tbtn" id="viewbtn" aria-haspopup="menu" aria-expanded="false" aria-controls="viewpop"
+                aria-label="View options" data-tip="View options">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+          <span class="lbl">View</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="viewpop" id="viewpop" role="menu" aria-labelledby="viewbtn" hidden>
+          <button type="button" role="menuitemcheckbox" id="linkfilter" aria-checked="true" tabindex="-1" hidden>
+            <span class="vm-ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="vm-t"><span class="vm-l">Uncertain links</span><span class="vm-d"></span></span>
+          </button>
+          <button type="button" role="menuitemcheckbox" id="markfilter" aria-checked="true" tabindex="-1" hidden>
+            <span class="vm-ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="vm-t"><span class="vm-l">Finding badges on diagrams</span><span class="vm-d"></span></span>
+          </button>
+        </div>
+      </div>
+      <button class="tbtn" id="keysbtn" data-tip="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
+              aria-haspopup="dialog" aria-controls="keysheet">?</button>
       <button class="tbtn" id="reloadbtn" data-tip="Reload the page" aria-label="Reload the page">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
       </button>
       <button class="tbtn" data-theme-btn aria-label="Switch color theme"></button>
     </header>
+    <!-- decisions taken on this page and not yet in waivers.json — on every view, until they are saved -->
+    <div class="wvbar" id="wvbar" hidden role="region" aria-label="Waiver decisions" aria-live="polite"></div>
     <div class="content" id="content">
       <section class="view" id="view-overview" hidden></section>
       <section class="view" id="view-schema" hidden></section>
       <section class="view" id="view-scripts" hidden></section>
       <section class="view" id="view-checks" hidden></section>
       <section class="view" id="view-variables" hidden></section>
+      <section class="view" id="view-tree" hidden></section>
+      <section class="view" id="view-elements" hidden></section>
+      <section class="view" id="view-flow" hidden></section>
       <section class="view view-browse" id="view-browse" hidden>
         <div class="listcol"><div id="list"></div></div>
+        <!-- shown while the list is folded away (atlas-list-hidden) -->
+        <button type="button" class="listshow" id="listshow" hidden data-tip="Show the list" aria-label="Show the list">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>
+        </button>
+        <div class="listresize" id="listresize" role="separator" aria-orientation="vertical" tabindex="0"
+             aria-label="Resize the list — drag, arrow keys, Home to reset"></div>
         <!-- The tab strip must not scroll with the detail body, so it is a sibling of #detail
              inside a flex column rather than a child of it. #detail keeps its id and class:
              it stays the single scroll container and the only detail renderer target. -->
         <div class="detailwrap">
-          <div class="dtabs" id="dtabs" role="tablist" aria-label="Open nodes" hidden></div>
+          <div class="dtabs" id="dtabs" hidden></div>
           <main class="detailcol" id="detail" role="tabpanel" aria-label="Node details"></main>
         </div>
       </section>
-      <section class="view view-flow" id="view-flow" hidden aria-label="Business flow"></section>
     </div>
   </div>
 </div>
@@ -111,7 +174,7 @@ try{
     <!-- Result count + section chips. Sibling of the scrolling list, so the count stays put while the
          results scroll under it. Populated by palRenderFacets(); hidden while the query is empty. -->
     <div class="pal-facets" id="palfacets" hidden></div>
-    <div class="pal-results" id="palresults" role="listbox" aria-label="Search results"></div>
+    <div class="pal-results" id="palresults" role="listbox" aria-label="Search results" aria-multiselectable="true"></div>
     <!-- Sibling of the scrolling result list, so the multi-select hint stays pinned to the bottom. -->
     <div class="pal-foot" id="palfoot" hidden></div>
   </div>
@@ -129,6 +192,16 @@ try{
       <button data-close title="Close">esc</button>
     </div>
     <div class="dgview" id="dgmodalview"><div class="dgpan"></div></div>
+  </div>
+</div>
+<!-- Every keyboard shortcut, generated from one table in explorer.js (SHORTCUTS) — opened with ? or the
+     top bar's ? button. It replaced a cheat sheet in the empty detail pane that had drifted out of date. -->
+<div class="palette" id="keysheet" hidden>
+  <div class="pal-overlay" data-close></div>
+  <div class="keys-panel" role="dialog" aria-modal="true" aria-labelledby="keys-t" tabindex="-1">
+    <div class="keys-h"><span id="keys-t">Keyboard shortcuts</span>
+      <button type="button" class="kbd keys-x" data-close aria-label="Close">esc</button></div>
+    <div class="keys-body" id="keysbody"></div>
   </div>
 </div>
 <script type="application/json" id="atlas-data">__ATLAS_DATA__</script>

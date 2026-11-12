@@ -45,6 +45,17 @@ class ExtractResolutionTest {
         assertTrue(modelIndex().keys.toString(), modelIndex().keys.containsAll(required))
     }
 
+    /** The index names the copy the node shows — one winner for every reader of a model's file. */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun everyIndexedModelNamesItsNodesFile() {
+        val nodes = ((result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        for ((id, file) in modelIndex()) {
+            val node = nodes[id] ?: continue
+            assertTrue("$id: index $file, node ${node["file"]}", node["file"] == file)
+        }
+    }
+
     // test_bean_method_resolves_to_java
     @Test
     fun beanMethodResolvesToJava() {

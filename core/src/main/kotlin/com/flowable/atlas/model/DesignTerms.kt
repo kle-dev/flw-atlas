@@ -27,7 +27,7 @@ object DesignTerms {
         "el:callActivity" to "Call activity",
         "el:subProcess" to "Sub-process",
         "el:transaction" to "Transaction",
-        "el:adhocSubProcess" to "Ad-hoc sub-process",
+        "el:adHocSubProcess" to "Ad-hoc sub-process",
         "el:sendTask" to "Send task",
         "el:receiveTask" to "Receive task",
         "el:manualTask" to "Manual task",
@@ -65,6 +65,7 @@ object DesignTerms {
         "el:executionListener" to "Execution listener",
         "el:taskListener" to "Task listener",
         "el:planItemLifecycleListener" to "Lifecycle listener",
+        "el:caseLifecycleListener" to "Case lifecycle listener",
         // --- model types, singular and lowercase: they are counted mid-sentence ("2 data objects").
         // The explorer's plural sidebar labels live in `TM`; the sync test keeps both in step.
         "type:process" to "process",
@@ -73,6 +74,7 @@ object DesignTerms {
         "type:form" to "form",
         "type:page" to "page",
         "type:dataObject" to "data object",
+        "type:masterData" to "master data",
         "type:dataDictionary" to "data dictionary",
         "type:service" to "service",
         "type:agent" to "AI agent",
@@ -102,6 +104,7 @@ object DesignTerms {
 
     /** English plural of a Design term. Enough for the vocabulary at hand (`query` → `queries`). */
     fun pluralize(term: String): String = when {
+        term.endsWith("data") -> term          // "143 master data", not "master datas"
         term.endsWith("y") && !term.endsWith("ay") -> term.dropLast(1) + "ies"
         term.endsWith("s") || term.endsWith("x") || term.endsWith("ch") || term.endsWith("sh") -> term + "es"
         else -> term + "s"

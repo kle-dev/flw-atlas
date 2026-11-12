@@ -23,7 +23,7 @@ class FlowableRenameWarningTest : BasePlatformTestCase() {
         )
         myFixture.addFileToProject(
             "com/acme/MyBean.java",
-            "package com.acme; public class MyBean { public void doWork() {} public void neverReferenced() {} }",
+            "package com.acme; @Service public class MyBean { public void doWork() {} public void neverReferenced() {} }",
         )
         project.service<FlowableModelIndexService>().index()
 
@@ -41,7 +41,7 @@ class FlowableRenameWarningTest : BasePlatformTestCase() {
             """<definitions xmlns:flowable="http://flowable.org/bpmn"><process id="P">""" +
                 """<serviceTask id="t" flowable:expression="${'$'}{myBean.doWork()}"/></process></definitions>""",
         )
-        myFixture.addFileToProject("com/acme/MyBean.java", "package com.acme; public class MyBean { public void doWork() {} }")
+        myFixture.addFileToProject("com/acme/MyBean.java", "package com.acme; @Service public class MyBean { public void doWork() {} }")
         // Simulate "not scanned yet": with no cached index, the listener must still attach so the
         // warning is reliable regardless of when the index gets built (the actual check runs later).
         project.service<FlowableModelIndexService>().invalidate()

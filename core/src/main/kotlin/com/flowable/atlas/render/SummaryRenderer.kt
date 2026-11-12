@@ -1,6 +1,8 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.model.DesignTerms
+import com.flowable.atlas.parsing.Constants
 import java.io.File
 
 /**
@@ -13,36 +15,18 @@ import java.io.File
  */
 object SummaryRenderer {
 
+    /** Node types that gather references without being anyone's artifact — see the hotspot list. */
+    private val HOTSPOT_EXCLUDED = setOf("group", "external", "securityPolicy")
+
+    /** Shipped by the platform, not written by the project — a bot key no project class implements. */
+    private fun isPlatformNode(n: Map<String, Any?>) = (n["data"] as? Map<*, *>)?.get("platform") == true
+
     /**
-     * Human wording for the [com.flowable.atlas.graph.Findings] check ids. Shared with the overview so
-     * one check is called the same thing wherever it appears.
+     * @param siblings what is written beside this file: every pointer below names only those, and says
+     *   how to produce the rest otherwise.
      */
-    internal val CHECK_LABELS = linkedMapOf(
-        "parseIssues" to "unparseable files",
-        "invalidExpr" to "invalid expressions",
-        "scriptIssues" to "script syntax",
-        "missingRefs" to "missing models",
-        "changelogIssues" to "changelog problems",
-        "schemaGaps" to "schema gaps",
-        "suspectExpr" to "suspect expressions",
-        "unusedForms" to "unused forms",
-        "unusedOps" to "unused service operations",
-        "unusedFns" to "unused custom functions",
-        "unusedVars" to "variables never read",
-        "unreadInputs" to "unread call parameters",
-        "guessedVars" to "script-inferred variables",
-    )
-
-    /** Well-known Flowable platform service-task beans (engine-provided) — mirrors the Python set. */
-    private val FLOWABLE_PLATFORM_BEANS = setOf(
-        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
-        "createDocumentService", "serviceRegistryService", "agentService",
-        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
-        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
-    )
-
     @Suppress("UNCHECKED_CAST")
-    fun render(result: Map<String, Any?>, root: File): String {
+    fun render(result: Map<String, Any?>, root: File, siblings: Siblings = Siblings.ALL): String {
         val g = result["graph"] as Map<String, Any?>
         val nodes = g["nodes"] as List<Map<String, Any?>>
         val edges = g["edges"] as List<Map<String, Any?>>
@@ -64,19 +48,29 @@ object SummaryRenderer {
         fun cap(items: List<String>, n: Int = 15): String = Fmt.cap(items, n)
 
         // Sibling artifact names, so every pointer below names a file the reader can open rather than a
-        // CLI flag it cannot run or an explorer tab it cannot see.
+        // CLI flag it cannot run or an explorer tab it cannot see — and only a file that was written.
         val an = Fmt.artifactName(root)
+        val overview = "`$an.overview.md`".takeIf { siblings.overview }
+        val graph = "`$an.graph.json`".takeIf { siblings.graph }
 
         val L = ArrayList<String>()
-        L.add("# Flowable project — `${root.absoluteFile.name}` (quick overview)\n")
-        L.add("_${st["models"]} model files · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
+        L.add("# Flowable project — `${Fmt.projectName(root)}` (quick overview)\n")
+        val fuller = listOfNotNull(overview?.let { "full report in $it" }, graph?.let { "full graph in $it" })
+        L.add("_${Fmt.modelScale(st)} · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
                 "${st["edges"] ?: 0} relationships · ${st["groups"] ?: 0} user groups. " +
-                "Compact summary — full report in `$an.overview.md`, full graph in `$an.graph.json`._\n")
-        val diags = result["diagnostics"] as? List<*> ?: emptyList<Any?>()
+                (if (fuller.isNotEmpty()) "Compact summary — ${fuller.joinToString(", ")}._\n"
+                else "Compact summary — the full report and the graph: ${Siblings.GENERATE}._\n"))
+        // A shared key (`conflict`) and a second, differing copy of a model (`copy`) are information, not a
+        // file Atlas failed to read.
+        val diags = (result["diagnostics"] as? List<*> ?: emptyList<Any?>())
+            .filter { (it as? Map<*, *>)?.get("kind") !in setOf("conflict", "copy") }
         if (diags.isNotEmpty()) {
+            val details = listOfNotNull(overview?.let { "the Findings section of $it" },
+                graph?.let { "`diagnostics` in $it" })
             L.add("⚠ **${diags.size} file(s) could not be fully analyzed** (parse/read failures) — " +
-                    "the map below may be incomplete. Details: the Findings section of " +
-                    "`$an.overview.md`, or `diagnostics` in `$an.graph.json`.\n")
+                    "the map below may be incomplete. Details: " +
+                    (if (details.isNotEmpty()) details.joinToString(", or ") + ".\n"
+                    else "the Findings section of the full report, or `-v` on the command line.\n"))
         }
 
         // Apps
@@ -96,7 +90,7 @@ object SummaryRenderer {
         }
 
         // Inventory
-        val order = listOf("process", "case", "decision", "form", "page", "dataObject", "dataDictionary",
+        val order = listOf("process", "case", "decision", "form", "page", "dataObject", "masterData", "dataDictionary",
             "service", "agent", "channel", "event", "action", "query", "template", "sequence",
             "securityPolicy", "variableExtractor", "liquibase")
         // Design's word for each type, counted — "2 data objects", not "2 dataObject".
@@ -174,9 +168,11 @@ object SummaryRenderer {
                 val loc: Any? = when {
                     truthy(d["baseUrl"]) -> d["baseUrl"]
                     truthy(d["tableName"]) -> d["tableName"]
+                    // a script service runs its operations' scripts — there is nowhere it points to
+                    d["type"] == "script" -> null
                     else -> "?"
                 }
-                L.add("- `${s["key"]}` ${s["label"]} (${pystr(d["type"])} → $loc)")
+                L.add("- `${s["key"]}` ${s["label"]} (${pystr(d["type"])}${if (loc != null) " → $loc" else ""})")
             }
             if (bt("service").size > 15) L.add("- … (+${bt("service").size - 15} more)")
             L.add("")
@@ -209,8 +205,12 @@ object SummaryRenderer {
         // method — the class is the thing a reader navigates to.
         val hotJavaClasses = indeg.keys.filter { it.startsWith("java:") }
             .map { it.removePrefix("java:") }.toSet()
+        // Hotspots are the project's own central artifacts. A platform bean, a URL or a security policy
+        // draws a reference from every model that uses it and would take the whole list — on one real
+        // project the top ten were `initVariablesService`, two IDM URLs and `flwTimeUtils`. A bot the
+        // platform ships (`data.platform`) is not the project's code either, so it goes too.
         val hot = indeg.entries
-            .filter { val n = byId[it.key]; n != null && n["type"] != "group" }
+            .filter { val n = byId[it.key]; n != null && n["type"] !in HOTSPOT_EXCLUDED && !isPlatformNode(n) }
             .filterNot { e ->
                 e.key.startsWith("method:") &&
                     hotJavaClasses.any { e.key.removePrefix("method:").startsWith("$it#") }
@@ -232,9 +232,9 @@ object SummaryRenderer {
         val unresolved = result["unresolvedRefs"] as? List<Map<String, Any?>> ?: emptyList()
         val groupPairs = LinkedHashSet<Pair<String, String>>()
         for (r in unresolved) groupPairs.add((r["kind"] as String) to (r["value"] as String))
-        val platform = groupPairs.filter { it.first == "bean" && it.second in FLOWABLE_PLATFORM_BEANS }
+        val platform = groupPairs.filter { it.first == "bean" && it.second in Constants.FLOWABLE_PLATFORM_BEANS }
             .map { it.second }.distinct().sorted()
-        val review = groupPairs.filter { !(it.first == "bean" && it.second in FLOWABLE_PLATFORM_BEANS) }
+        val review = groupPairs.filter { !(it.first == "bean" && it.second in Constants.FLOWABLE_PLATFORM_BEANS) }
             .map { "${it.first}:${it.second}" }.distinct().sorted()
         val extUrls = bt("external").count { truthy((it["data"] as Map<String, Any?>)["external_url"]) }
         L.add("## External surface")
@@ -253,25 +253,58 @@ object SummaryRenderer {
         // summary could only say "see the explorer's Checks tab" — useless to an agent holding the file.
         val checks = result["checks"] as? Map<String, Any?> ?: emptyMap()
         val open = (checks["open"] as? Number)?.toInt() ?: 0
+        val waivedN = (checks["waived"] as? Number)?.toInt() ?: 0
         if (open > 0) {
-            val findings = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
-            L.add("## Health — $open open finding(s)")
-            L.add(checks.entries.filter { it.key != "open" }
-                .joinToString(" · ") { "${CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
-            // Name the worst few; the overview lists them all with file/line.
-            for (f in findings.filter { it["severity"] == "error" }.take(5)) {
+            val all = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
+            // Defects and advice are two different questions — "what is wrong" and "what could be
+            // better" — so the headline and the count lines keep them apart.
+            L.add("## Health — ${Fmt.healthHeadline(result["stats"] as? Map<*, *>)}" +
+                if (waivedN > 0) " ($waivedN waived)" else "")
+            L.addAll(Fmt.healthLines(checks))
+            // Name the worst few of what the headline counts as defects; the overview lists them all
+            // with file/line.
+            val labels by lazy { Fmt.nodeLabels(result) }
+            val defects = Fmt.openDefects(all)
+            for (f in defects.take(5)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")
-                L.add("- ⚠ ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else ""))
+                // an expression is no model: name the models it sits in
+                val models = Fmt.findingModels(f, labels)
+                L.add("- ${Fmt.severityMark(f)} ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else "") +
+                    (if (models.isNotEmpty()) " $models" else ""))
             }
-            val errors = findings.count { it["severity"] == "error" }
-            if (errors > 5) L.add("- … (+${errors - 5} more errors — see `$an.overview.md`)")
+            if (defects.size > 5) {
+                L.add("- … (+${defects.size - 5} more defects — " +
+                    (overview?.let { "see $it)" } ?: "the full report lists them)"))
+            }
+            L.add("")
+        }
+        // A waived error is still an error somebody decided to carry. The summary is the surface a
+        // reader skims, so it says so even when nothing is open — otherwise "0 findings" reads as
+        // "nothing wrong" when it means "nothing we have not already agreed to live with".
+        if (waivedN > 0) {
+            val waivedErrors = (result["findings"] as? List<Map<String, Any?>> ?: emptyList())
+                .count { it["waived"] != null && it["severity"] == "error" }
+            L.add("$waivedN finding(s) waived in `${com.flowable.atlas.graph.Waivers.FILE_NAME}`" +
+                (if (waivedErrors > 0) ", $waivedErrors of them error-level" else "") + ".")
+            L.add("")
+        }
+        // Expressions that got no verdict are not "fine": say how many, so the health block above is
+        // read as "of what was judged".
+        val notJudged = ((result["stats"] as? Map<*, *>)?.get("exprSkippedNested") as? Number)?.toInt() ?: 0
+        if (notJudged > 0) {
+            L.add("_${notJudged} expression(s) not validated — the harvested text holds a nested `{` and may be truncated._")
             L.add("")
         }
 
-        L.add("---\n_Next: `$an.overview.md` has every model, relationship and the access map · " +
-                "`$an.graph.json` is the traversable graph to query · `$an.explorer.html` is the clickable view · " +
-                "regenerate with `atlas <project-dir>`._")
+        val next = listOfNotNull(
+            overview?.let { "$it has every model, relationship and the access map" },
+            graph?.let { "$it is the traversable graph to query" },
+            "`$an.explorer.html` is the clickable view".takeIf { siblings.explorer },
+        )
+        L.add("---\n_Next: " + (if (next.isNotEmpty()) next.joinToString(" · ") + " · regenerate with ${Siblings.GENERATE}._"
+            else "the full report, the graph and the clickable explorer: ${Siblings.GENERATE} · one model in " +
+                "context: `java -jar <atlas-cli>.jar <project-dir> --slice <type:key> --stdout`._"))
         return L.joinToString("\n")
     }
 

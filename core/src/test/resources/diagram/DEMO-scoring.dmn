@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions name="Scoring" xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             namespace="http://flowable.org/demo">
+  <decisionService id="DEMO-scoring" name="Scoring Service">
+    <outputDecision href="#dec_score"/>
+    <encapsulatedDecision href="#dec_country"/>
+    <encapsulatedDecision href="#dec_amount"/>
+  </decisionService>
+  <decision id="dec_score" name="Risk score">
+    <informationRequirement id="ir_country"><requiredDecision href="#dec_country"/></informationRequirement>
+    <informationRequirement id="ir_amount"><requiredDecision href="#dec_amount"/></informationRequirement>
+    <knowledgeRequirement id="kr_rules"><requiredKnowledge href="#bkm_rules"/></knowledgeRequirement>
+    <authorityRequirement id="ar_policy"><requiredAuthority href="#ks_policy"/></authorityRequirement>
+  </decision>
+  <decision id="dec_country" name="Country risk"/>
+  <decision id="dec_amount" name="Amount risk"/>
+  <businessKnowledgeModel id="bkm_rules" name="Scoring rules"/>
+  <knowledgeSource id="ks_policy" name="Risk policy"/>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram>
+      <dmndi:DMNShape dmnElementRef="DEMO-scoring">
+        <dc:Bounds x="100" y="40" width="400" height="300"/>
+        <dmndi:DMNDecisionServiceDividerLine>
+          <di:waypoint x="100" y="170"/>
+          <di:waypoint x="500" y="170"/>
+        </dmndi:DMNDecisionServiceDividerLine>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="dec_score">
+        <dc:Bounds x="240" y="80" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="dec_country">
+        <dc:Bounds x="140" y="240" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="dec_amount">
+        <dc:Bounds x="340" y="240" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="bkm_rules">
+        <dc:Bounds x="560" y="80" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="ks_policy">
+        <dc:Bounds x="560" y="200" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge dmnElementRef="ir_country">
+        <di:waypoint x="200" y="240"/>
+        <di:waypoint x="280" y="140"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge dmnElementRef="ir_amount">
+        <di:waypoint x="400" y="240"/>
+        <di:waypoint x="320" y="140"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge dmnElementRef="kr_rules">
+        <di:waypoint x="560" y="110"/>
+        <di:waypoint x="360" y="110"/>
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

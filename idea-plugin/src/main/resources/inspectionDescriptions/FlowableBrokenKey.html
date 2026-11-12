@@ -1,0 +1,18 @@
+<html>
+<body>
+Reports a string literal — or a constant reference — used as a Flowable model key at a catalogued API call
+site (<code>startProcessInstanceByKey(…)</code>, <code>caseDefinitionKey(…)</code>, <code>formKey(…)</code>, …)
+whose value is not an indexed key of the type that position expects.
+<p>Example: <code>runtimeService.startProcessInstanceByKey("DEMO-P999")</code> is reported as
+<i>'DEMO-P999' is not a known Process key — did you mean 'DEMO-P001'?</i></p>
+<p>
+Quick fixes: <b>Replace with '…'</b> on a literal; <b>Change constant value to '…'</b> on a constant whose
+initializer is a literal — that edit lands in the constants class, and the preview says so.
+</p>
+<!-- tooltip end -->
+<p>Silent when the project has no indexed key of that type, or the model index has not been built yet (the
+Atlas Hub shows its status; <i>Rebuild Model Index</i> forces one). The index reads deployment artifacts,
+<code>.bar</code> / <code>.zip</code> archives and — when enabled — the Flowable Design workspace.
+<i>Recognize model keys anywhere in code</i> does not widen this inspection: it checks call sites only.</p>
+</body>
+</html>

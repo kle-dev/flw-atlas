@@ -1,6 +1,7 @@
 package com.flowable.atlas.render
 
 import com.flowable.atlas.graph.Atlas
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,6 +34,113 @@ class RenderersSmokeTest {
         )) {
             assertTrue("expected CLAUDE.md to contain: $needle", md.contains(needle))
         }
+        // What was cut on purpose: the summary's inventory, the rules' echo of themselves, and the
+        // truncated catalog lists — see ClaudeFactsTest for the reasoning behind each.
+        for (gone in listOf("**Scale:**", "**Models:**", "Common Flowable pitfalls", " … (+", "not auto-detected")) {
+            assertFalse("CLAUDE.md still contains: $gone", md.contains(gone))
+        }
+    }
+
+    /**
+     * The ER diagram designer is a page of its own: the explorer carries none of it (it moved out because the
+     * explorer is the page that grows with the project), and the ER page is complete — the explorer's
+     * stylesheet for its tokens, its own script, a payload of tables only.
+     */
+    @Test
+    fun theErDesignerIsItsOwnPage() {
+        val explorer = ExplorerHtmlRenderer.render(result, fixtureDir)
+        assertFalse("the explorer carries none of the designer", explorer.contains("ATLAS_ERD") || explorer.contains(".erd-card"))
+        assertFalse("…and no route to it", explorer.contains("'/erd'"))
+
+        val erd = ErdHtmlRenderer.render(result, fixtureDir, explorerFile = "miniproject.explorer.html")
+        for (marker in listOf("/*__ATLAS_CSS__*/", "/*__ERD_CSS__*/", "/*__ERD_JS__*/", "__ATLAS_DATA__", "__ATLAS_VERSION__")) {
+            assertFalse("leftover marker $marker", erd.contains(marker))
+        }
+        assertTrue("the explorer's tokens", erd.contains("--space-1:"))
+        assertTrue("the designer's script", erd.contains("window.ATLAS_ERD=") && erd.contains("function erdArrange("))
+        assertTrue("the designer's styles", erd.contains(".erd-card"))
+        assertFalse("nothing of explorer.js", erd.contains("function renderDashboard"))
+        // …except its theme section, verbatim: the IDE's mode and colours arrive the same way on both pages
+        assertTrue("the explorer's theme code", erd.contains(ErdHtmlRenderer.themeScript()) && erd.contains("function applyIdePalette("))
+        assertTrue("…and its theme button", erd.contains("data-theme-btn"))
+        assertTrue("the fixture's table", erd.contains("\"cust_customer\""))
+        assertTrue("the link to the explorer beside it", erd.contains("\"explorer\":\"miniproject.explorer.html\""))
+        assertFalse("no drawings, no findings — tables only", erd.contains("\"diagram\":") || erd.contains("\"findings\":"))
+        assertTrue("a sliver of the explorer (${erd.length} vs ${explorer.length})", erd.length * 2 < explorer.length)
+    }
+
+    /**
+     * What the designer proposes a relation from reaches it: a service's lookup column, and a relation's join
+     * table with its two columns — the shape Design writes, which carries no column of the service's table.
+     */
+    @Test
+    fun theErPageCarriesARelationsJoinTable() {
+        val dir = java.nio.file.Files.createTempDirectory("erd-relation").toFile()
+        try {
+            java.io.File(dir, "order.service").writeText("""{"key": "DEMO-S1", "name": "Orders", "type": "database",
+                "tableName": "DEMO_ORDER_", "lookupId": "id", "columnMappings": [{"name": "id", "columnName": "ID_", "type": "string"},
+                  {"name": "customer", "type": "object-relation",
+                   "relation": {"joinTableName": "DEMO_ORDER_CUSTOMER_", "owningColumnName": "DEMO_ORDER_ID_", "referenceColumnName": "DEMO_CUSTOMER_ID_"}}]}""")
+            val erd = ErdHtmlRenderer.render(Atlas.extract(dir), dir)
+            assertTrue("the lookup column", erd.contains("\"lookupColumn\":\"ID_\""))
+            assertTrue("the join table and its columns", erd.contains(
+                "\"relation\":{\"joinTable\":\"DEMO_ORDER_CUSTOMER_\",\"owningColumn\":\"DEMO_ORDER_ID_\",\"referenceColumn\":\"DEMO_CUSTOMER_ID_\"}"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun onlyAProjectWithTablesHasAnErPage() {
+        assertTrue(ErdHtmlRenderer.hasTables(result))
+        // deleted in a finally block — deleteOnExit removes only an empty directory, and this one holds a model
+        val empty = java.nio.file.Files.createTempDirectory("no-tables").toFile()
+        try {
+            java.io.File(empty, "DEMO-P001.bpmn").writeText("""<definitions><process id="DEMO-P001"/></definitions>""")
+            assertFalse(ErdHtmlRenderer.hasTables(Atlas.extract(empty)))
+        } finally {
+            empty.deleteRecursively()
+        }
+    }
+
+    /**
+     * A large island is embedded deflated, and it has to come back as exactly the JSON a plain page carries:
+     * the page's own inflater (explorer.js, `atlasIslandText`) returns what it inflates to JSON.parse and
+     * nothing else, so byte equality here is the whole contract. scripts/island-selftest.mjs holds that
+     * inflater to zlib, and the build's browser test runs every explorer check again on a deflated page.
+     */
+    @Test
+    fun aLargeIslandIsDeflatedAndInflatesToTheSameJson() {
+        val at = java.time.Instant.parse("2026-09-28T08:00:00Z")
+        val plain = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at, compressAbove = Int.MAX_VALUE)
+        val deflated = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at, compressAbove = 0)
+        val json = Regex("""<script type="application/json" id="atlas-data">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+            .find(plain)!!.groupValues[1]
+        val tag = Regex("""<script type="application/octet-stream" id="atlas-data" data-encoding="deflate-base64" data-size="(\d+)">([A-Za-z0-9+/=]+)</script>""")
+            .find(deflated)
+        assertTrue("expected a deflated island", tag != null)
+        val bytes = java.util.Base64.getDecoder().decode(tag!!.groupValues[2])
+        val inflater = java.util.zip.Inflater(true)
+        val inflated = try {
+            inflater.setInput(bytes)
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(1 shl 16)
+            while (!inflater.finished()) {
+                val n = inflater.inflate(buf)
+                check(n > 0 || !inflater.needsInput()) { "the deflated island ends before its data does" }
+                out.write(buf, 0, n)
+            }
+            out.toByteArray()
+        } finally {
+            inflater.end()
+        }
+        assertEquals("data-size is the inflated byte count", inflated.size, tag.groupValues[1].toInt())
+        assertEquals("the deflated island inflates to the plain island's JSON", json, inflated.toString(Charsets.UTF_8))
+        assertEquals("the rest of the page is the same", plain.replace(json, ""),
+            deflated.replace(tag.value, """<script type="application/json" id="atlas-data"></script>"""))
+        assertTrue("deflated, the page is smaller", deflated.length < plain.length)
+        assertTrue("a small project's island stays plain JSON",
+            ExplorerHtmlRenderer.render(result, fixtureDir).contains("""<script type="application/json" id="atlas-data">"""))
     }
 
     @Test
@@ -55,6 +163,20 @@ class RenderersSmokeTest {
         assertTrue("expected the atlasCopy helper from explorer.js", html.contains("function atlasCopy"))
         assertTrue("expected the copy-button class from explorer.js/css", html.contains("class=\"cpy\"") || html.contains(".cpy{"))
         assertTrue("expected the __atlasCopy IDE bridge hook from explorer.js", html.contains("__atlasCopy"))
+        // The other half of the IDE bridge: a file path / file:line in the page opens the source.
+        assertTrue("expected the __atlasOpen IDE bridge hook from explorer.js", html.contains("__atlasOpen"))
+        // The accepted-findings section. It renders from DATA.waivers, which is absent here (the fixture
+        // has no waivers.json), so the assertion is that the code shipped — the block's own behaviour is
+        // covered by WaiversTest and the CLI round-trip test.
+        assertTrue("expected the waived-block renderer from explorer.js", html.contains("function waivedBlockHtml"))
+        assertTrue("expected the accepted-findings section id", html.contains("chk-waived"))
+        // The catalog rides along so the page can say why a finding matters without a second copy of the text.
+        assertTrue("expected the check catalog in the payload", html.contains("\"checkCatalog\":["))
+        assertTrue("expected the open-in-IDE button builder", html.contains("function openBtn("))
+        // The findings ride along itemised; the page renders them rather than re-deriving them from nodes.
+        assertTrue("expected the itemised findings in the payload", html.contains("\"findings\":[{"))
+        assertFalse("the node -> check index is gone, the findings replace it", html.contains("findingsByNode"))
+        assertTrue("expected the waiver author slot in the payload", html.contains("\"waiverAuthor\":"))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))
         // In/out parameters survive `slimData`'s allowlist (they are nested lists, not scalars) and the
@@ -62,6 +184,14 @@ class RenderersSmokeTest {
         assertTrue("expected the call activity's in-mapping in the payload", html.contains("subOrderId"))
         assertTrue("expected the parameter renderer from explorer.js", html.contains("function paramSection"))
         assertTrue("expected the parameter search haystack from explorer.js", html.contains("function paramHaystack"))
+        // A model's "Uses — variables & expressions" section is rebuilt in the browser from the artifact
+        // nodes' `usedBy` lists; the payload does not carry `_uses` (its transpose) and must not need to.
+        assertTrue("expected the usesIndex builder from explorer.js", html.contains("function usesIndex("))
+        assertFalse("`_uses` leaked into the explorer payload", html.contains("\"_uses\""))
+        // Provenance travels with the page: when it was generated and by which Atlas.
+        assertTrue("expected generatedAt in the payload", html.contains("\"generatedAt\":\""))
+        assertTrue("expected atlasVersion in the payload", html.contains("\"atlasVersion\":\""))
+        assertTrue("expected the footer to render the generation time", html.contains("function stampProvenance"))
         assertTrue("expected the parameter direction styling from explorer.css", html.contains(".parmgrid .pd{"))
         // A form button's payload mapping reaches the page — the name the action script reads back.
         assertTrue("expected the action button's payload key in the payload", html.contains("customerEmail"))
@@ -82,7 +212,9 @@ class RenderersSmokeTest {
         // the health object + Checks tab; the fixture's broken script task pins the whole path.
         assertTrue("expected the scriptIssues health key in explorer.js", html.contains("scriptIssues"))
         assertTrue("expected the fixture's script finding in the payload", html.contains("'(' is never closed"))
-        assertTrue("expected the script-syntax checks block from explorer.js", html.contains("Script syntax findings"))
+        // One block builder for every check; the block's title is the catalog's, shipped in the payload.
+        assertTrue("expected the per-check block builder from explorer.js", html.contains("function checkBlockHtml"))
+        assertTrue("expected the catalog title of the script check in the payload", html.contains("\"title\":\"Script syntax\""))
         // The script code viewer: syntax highlighting + line numbers + problem-line marking.
         assertTrue("expected the script highlighter from explorer.js", html.contains("function hlScript"))
         assertTrue("expected the code viewer from explorer.js", html.contains("function codeBoxHtml"))
@@ -91,7 +223,8 @@ class RenderersSmokeTest {
         // A form/page REST button's endpoint reaches the page (it used to live only in the shared Ctx,
         // which the payload never carried) and is both rendered and searchable.
         assertTrue("expected the REST button's endpoint in the payload", html.contains("/canEdit"))
-        assertTrue("expected the REST calls section from explorer.js", html.contains("'restcalls'"))
+        // A form's REST calls and data sources are rows of its calls table; its fields answer "who reads this".
+        assertTrue("expected the form's fit tables from explorer.js", html.contains("function formFieldVars(") && html.contains("function formOutcomesFit("))
         // The ⌘K palette is resizable from its corner and remembers the size the user settles on.
         assertTrue("expected the palette resize wiring from explorer.js", html.contains("function wirePaletteResize("))
         assertTrue("expected the palette size store from explorer.js", html.contains("atlas-palette"))
@@ -109,7 +242,7 @@ class RenderersSmokeTest {
         assertTrue("expected the tab closer from explorer.js", html.contains("function closeTab("))
         assertTrue("expected the tab/hash reconciliation from explorer.js", html.contains("function syncTabsWith("))
         assertTrue("expected the tab store key from explorer.js", html.contains("atlas-tabs"))
-        assertTrue("expected the tab store to be project-scoped", html.contains("p:DATA.project"))
+        assertTrue("expected the tab store to be project-scoped", html.contains("p:PROJECT_SCOPE"))
         assertTrue("expected the tab styling from explorer.css", html.contains(".dtab.on{"))
         assertTrue("expected the scrolling tablist from explorer.css", html.contains(".dtablist{"))
         // One navigation contract for every node link, in one delegated helper: ⌘/Ctrl-click and
@@ -205,5 +338,72 @@ class RenderersSmokeTest {
         assertTrue("expected Design's wording for a mapped-in parameter", html.contains("'via:inParameter'"))
         assertTrue("expected the silence rules in the payload", html.contains("silenceRules"))
         assertTrue("expected the write/read styling from explorer.css", html.contains(".vw{color:var(--bad-text)}"))
+        // Node-type icons: the table, the builder and the CSS that sizes them in --ui-scale units. A bare
+        // coloured dot is what these replaced; the docs mockups lift TYPE_ICONS out of explorer.js by name.
+        assertTrue("expected the node-type icon table from explorer.js", html.contains("const TYPE_ICONS={"))
+        assertTrue("expected the icon builder from explorer.js", html.contains("function typeIcon("))
+        assertTrue("expected the icon sizing from explorer.css", html.contains(".ti{"))
+        // Sidebar groups fold and are remembered; below 800px a <select> stands in for the list.
+        assertTrue("expected the folded-groups store from explorer.js", html.contains("atlas-navgroups"))
+        assertTrue("expected the category picker from explorer.html", html.contains("id=\"navpick\""))
+        // The health list replaced the card wall on the overview, the Checks page and the variables report.
+        assertTrue("expected the health list builder from explorer.js", html.contains("function healthListHtml("))
+        assertTrue("expected the health list styling from explorer.css", html.contains(".hlist{"))
+        assertFalse("the health card grid is gone", html.contains(".hcard"))
+        // The relations are one remembered section — the bipartite drawing, then one table per relation.
+        assertTrue("expected the relations section id from explorer.js", html.contains("section('relations'"))
+        assertTrue("expected the relations model from explorer.js", html.contains("function relationsOf(") && html.contains("function relGraphSvg("))
+        assertTrue("expected the Elements section from explorer.js", html.contains("function elementsSection(") && html.contains("S.elements="))
+        assertTrue("expected the coverage table on data object and changelog pages", html.contains("function coverageServicesFor("))
+        assertTrue("expected the neighborhood styling from explorer.css", html.contains(".nb-label{"))
+        assertFalse("the radial star's legend is gone", html.contains("Neighborhood — solid: uses"))
+        // The IDE palette bridge: the page takes nine LaF colours from the URL and the live push.
+        assertTrue("expected the IDE palette applier from explorer.js", html.contains("function applyIdePalette("))
+        assertTrue("expected the idePal URL seed in explorer.html", html.contains("idePal"))
+        // The detail page: a hero header, the page's tabs (the facts as a definition list open Overview),
+        // and the components every section is built from — a column-headed table, cards, a code block. The
+        // section navigator stays for the report pages.
+        assertTrue("expected the hero builder from explorer.js", html.contains("function heroHtml("))
+        assertTrue("expected the facts table from explorer.js", html.contains("const FACTS="))
+        assertTrue("expected the page's tabs from explorer.js", html.contains("function paneBarHtml(") && html.contains("function setPane("))
+        assertTrue("expected the page's tabs styling from explorer.css", html.contains(".ptab[aria-selected=\"true\"]{"))
+        assertTrue("expected the section navigator from explorer.js", html.contains("function secnavHtml("))
+        assertTrue("expected the table component from explorer.js", html.contains("function tbl("))
+        assertTrue("expected the cards component from explorer.js", html.contains("function cards("))
+        assertTrue("expected the props component from explorer.js", html.contains("function props("))
+        assertTrue("expected the code block component from explorer.js", html.contains("function codeblk("))
+        assertTrue("expected the hero styling from explorer.css", html.contains(".dhero{"))
+        assertTrue("expected the facts styling from explorer.css", html.contains(".props.facts{"))
+        assertTrue("expected the navigator styling from explorer.css", html.contains(".secnav{"))
+        assertTrue("expected the table styling from explorer.css", html.contains(".tbl{"))
+        assertFalse("the stat-cell grid is gone", html.contains(".cell{"))
+        // The report pages share the detail page's bones: the same header, sections and tables.
+        assertTrue("expected the report page header from explorer.js", html.contains("function pageHeader("))
+        assertTrue("expected the report wiring from explorer.js", html.contains("function wireReport("))
+        // One vocabulary for findings, and empty states drawn with icons rather than glyphs the font lacks.
+        assertTrue("expected the finding tone from explorer.js", html.contains("function findTone("))
+        assertTrue("expected the advice pill from explorer.css", html.contains(".pill-advice{"))
+        assertTrue("expected the empty-state helper from explorer.js", html.contains("function estateHtml("))
+        assertTrue("expected the one-line check head from explorer.js", html.contains("function checkHeadHtml("))
+        assertTrue("expected the View menu in the top bar", html.contains("id=\"viewbtn\"") && html.contains("role=\"menuitemcheckbox\""))
+        assertTrue("expected the compact sidebar for an editor-tab width", html.contains(".shell.compact .side-item{"))
+        assertTrue("expected the tab strip's overflow menu", html.contains("function syncTabOverflow(") && html.contains("id=\"dtmore\""))
+        assertTrue("expected the list to fold away", html.contains("function setListHidden(") && html.contains("id=\"listshow\""))
+        assertTrue("expected the keyboard sheet", html.contains("id=\"keysheet\"") && html.contains("const SHORTCUTS="))
+        assertTrue("expected the category table", html.contains("function renderCatLanding(") && html.contains(".tbl .th-s{"))
+        assertTrue("expected the overview's health summary", html.contains("function healthSummaryHtml(") && html.contains(".hsum{"))
+        assertFalse("the inventory chips are gone", html.contains(".invc{"))
+        assertFalse("what accepting does is said on the button, not above every model's findings",
+            html.contains("Accepting one keeps it in the report"))
+        assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
+        assertFalse("the old row list styling is gone", html.contains(".oplist{"))
+        // Every "does it fit" question — the schema coverage first — is one gap table with one set of marks.
+        assertTrue("expected the gap table from explorer.js", html.contains("function gapTable(") && html.contains("function gm("))
+        assertTrue("expected the gap marks from explorer.css", html.contains(".gm-miss{"))
+        assertTrue("expected the health strip", html.contains("function healthStripHtml(") && html.contains(".dhealth{"))
+        assertTrue("expected the contract engine from explorer.js",
+            html.contains("function contractOf(") && html.contains("function callsTable(") && html.contains("function callersMatrix("))
+
+
     }
 }

@@ -108,7 +108,7 @@ class ReferenceFixesTest {
                </definitions>""".toByteArray(), ctx, "p1.bpmn",
         )
         assertTrue(refTriples(ctx).toString(),
-            Triple("serviceTask-delegate", "bean", "myBean") in refTriples(ctx))
+            Triple("serviceTask-expression", "bean", "myBean") in refTriples(ctx))
     }
 
     @Test
@@ -201,6 +201,33 @@ class ReferenceFixesTest {
         val t = refTriples(ctx)
         assertTrue(t.toString(), Triple("requires", "decision", "d2") in t)
         assertTrue(t.toString(), Triple("contains-decision", "decision", "d1") in t)
+        // the decisions belong to the service — the engine deploys only it from such a file — and copy nothing
+        assertEquals("ds1", d1["embeddedIn"])
+        assertEquals("ds1", out.first { it["key"] == "d2" }["embeddedIn"])
+        assertTrue(ctx.decisionCopies.isEmpty())
+    }
+
+    @Test
+    fun aDrdDecisionNamesTheTableItCopiesAndItsOutputSitesAreMarked() {
+        val ctx = Ctx()
+        val out = ModelParsers.parseDmn(
+            """<definitions xmlns:flowable="http://flowable.org/dmn">
+                 <decision id="decisionElement_1" flowable:decisionKey="DEMO-table">
+                   <decisionTable><output id="o1" name="risk"/></decisionTable>
+                 </decision>
+                 <decision id="decisionElement_2" flowable:decisionKey=" "/>
+                 <decisionService id="DEMO-ds"><outputDecision href="#decisionElement_1"/></decisionService>
+               </definitions>""".toByteArray(), ctx, "ds.dmn",
+        )
+        assertEquals(mapOf("DEMO-ds" to mapOf("decisionElement_1" to "DEMO-table")), ctx.decisionCopies)
+        // in no service's hrefs, it still sits in the service's file
+        assertEquals("DEMO-ds", out.first { it["key"] == "decisionElement_2" }["embeddedIn"])
+        assertEquals(listOf("ds.dmn"), ctx.varSites.filter { it["variable"] == "risk" }.map { it[Ctx.DRD_FILE] })
+        // a plain decision file is no DRD
+        val plain = Ctx()
+        val dec = ModelParsers.parseDmn("""<definitions><decision id="DEMO-t"><decisionTable><output name="x"/></decisionTable></decision></definitions>""".toByteArray(), plain, "t.dmn")
+        assertNull(dec.single()["embeddedIn"])
+        assertNull(plain.varSites.single()[Ctx.DRD_FILE])
     }
 
     @Test
@@ -251,7 +278,10 @@ class ReferenceFixesTest {
         }
         assertTrue(Triple("starts-process", "process", "target") in parse("bpmn-start-process-instance-bot"))
         assertTrue(Triple("starts-case", "case", "target") in parse("cmmn-start-case-instance-bot"))
-        assertTrue(Triple("triggers-signal", "signal", "target") in parse("some-other-bot"))
+        assertTrue(Triple("triggers-signal", "signal", "target") in parse("platform-signal-process-bot"))
+        assertTrue(Triple("starts-process", "process", "target") in parse("bpmn-inject-dynamic-subprocess-bot"))
+        // any other bot reads `signalName` however it likes — nothing Atlas can check
+        assertTrue(parse("some-other-bot").none { it.third == "target" })
     }
 
     @Test

@@ -9,10 +9,36 @@ package com.flowable.atlas.parsing
  */
 object JavaParser {
 
-    private val PKG_RE = Regex("""^\s*package\s+([\w.]+)\s*;""", RegexOption.MULTILINE)
-    private val TYPE_RE = Regex("""\b(?:public\s+|final\s+|abstract\s+)*(class|interface|enum)\s+(\w+)""")
-    private val BEAN_ANN_RE = Regex("""@(Component|Service|Repository|Named)\s*(?:\(\s*(?:value\s*=\s*)?"([^"]+)"\s*\))?""")
+    // Java and Kotlin share one pass: the annotations Spring and Flowable care about are spelled the
+    // same, so the regexes only have to tolerate Kotlin's spellings of the surrounding syntax — no `;`
+    // after the package, `object`/`enum class`, a supertype list after the primary constructor, `fun`.
+    private val PKG_RE = Regex("""^\s*package\s+([\w.]+)\s*;?""", RegexOption.MULTILINE)
+    // `import a.b.C;`, `import a.b.*;`, Kotlin's `import a.b.C as D` — static imports are members, not types
+    private val IMPORT_RE = Regex("""^\s*import\s+(static\s+)?([\w.]+?)(\.\*)?(?:\s+as\s+(\w+))?\s*;?\s*$""", RegexOption.MULTILINE)
+    // a factory method's return type: Java `Type name(`, Kotlin `fun name(…): Type`
+    private val JAVA_RETURN_RE = Regex("""([\w.]+)(?:<[^(){};]*>)?(?:\[])?\s+(\w+)\s*\(""")
+    private val KT_RETURN_RE = Regex("""\bfun\s+(\w+)\s*\([^)]*\)\s*:\s*([\w.]+)""")
+    private val TYPE_RE = Regex("""\b(?:(?:public|final|abstract|open|data|internal|sealed|private)\s+)*(class|interface|enum\s+class|enum|object)\s+(\w+)""")
+    // A stereotype on a *type* makes it a bean, named explicitly or after the type. The same annotation on a
+    // method or a parameter (MapStruct's `@Named`, a JSR-330 qualifier) makes nothing, and `@NamedQuery` or
+    // `@ServiceActivator` are other annotations altogether — both used to register bean names.
+    private val BEAN_ANN_RE = Regex("""@(Component|Service|Repository|Named|Configuration|Controller|RestController)\b\s*(?:\(([^)]*)\))?""")
+    private val BEAN_NAME_ARG_RE = Regex("""^\s*(?:value\s*=\s*)?"([^"]+)"""")
+    private val TYPE_DECL_START_RE = Regex("""^(?:(?:public|protected|private|final|abstract|open|data|internal|sealed|static)\s+)*(?:class|interface|enum|object|record)\s+(\w+)""")
+    // Spring Data makes a bean of every repository interface, named after it
+    private val REPOSITORY_RE = Regex("""\binterface\s+(\w+)[^{;]*\b(?:extends|:)\s*[^{;]*Repository\b""")
+    // `@Bean` / `@Bean("name")` / `@Bean(name = "name")` on a factory method: the bean is what the method
+    // returns, named after the method unless the annotation says otherwise. Beans declared this way —
+    // in a @Configuration class, for a delegate one does not own — were invisible: every model that
+    // named one resolved to nothing.
+    private val BEAN_METHOD_ANN_RE = Regex("""@Bean\b(?:\s*\((?:[^)"]*?(?:name|value)\s*=\s*)?\{?\s*"([^"]+)"[^)]*\))?""")
+    private val ANNOTATION_RE = Regex("""@\w+(?:\.\w+)*(?:\s*\([^)]*\))?""")
+    private val FIRST_CALLABLE_RE = Regex("""\b(\w+)\s*\(""")
     private val IMPLEMENTS_RE = Regex("""\bimplements\s+([\w.,\s<>]+?)\s*\{""")
+    // Kotlin: `class X(…) : A, B(), C<T> {` — the supertype list after the primary constructor.
+    private val KT_SUPERTYPES_RE = Regex("""\b(?:class|object)\s+\w+(?:<[^>]*>)?(?:\s*\([^)]*\))?\s*:\s*([\w.,\s<>()]+?)\s*\{""")
+    private val KT_METHOD_RE = Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[\w.]+\.)?(\w+)\s*\(([^)]*)\)""")
+    private val KT_PROP_RE = Regex("""\b(?:val|var)\s+\w+\s*:\s*([A-Z]\w+)""")
     private val MAPPING_RE = Regex("""@(Get|Post|Put|Delete|Patch|Request)Mapping\b\s*(?:\(([^)]*)\))?""")
     private val CONTROLLER_RE = Regex("""@(RestController|Controller)\b""")
     private val METHOD_RE = Regex("""(?:public|protected|private)\s+(?:[\w${'$'}<>\[\].,]+\s+)+?(\w+)\s*\(([^;{)]*)\)\s*(?:throws[\w.,\s]+)?\{""")
@@ -21,6 +47,13 @@ object JavaParser {
     // which is what lets a variable be reported as written-but-never-consumed. `has`/`remove` decide
     // nothing.
     private val JAVA_VAR_RE = Regex("""\b(set|get|has|remove)Variable(?:Local)?\s*\(\s*(?:[^,"]+,\s*)?"([A-Za-z_]\w*)"""")
+
+    // A map the code hands to the engine as variables: `startProcessInstanceByKey(k, vars)`,
+    // `.variables(vars)`, `taskService.complete(id, vars)`, `setVariables(vars)`. Its `vars.put("x", …)`
+    // writes `x` exactly as `setVariable("x", …)` does, and was invisible — every such name looked
+    // written by nobody (the models read it) or read by nobody.
+    private val VARS_HANDOFF_RE = Regex("""\b(?:startProcessInstanceBy\w*|complete|setVariables(?:Local)?|variables|transientVariables|trigger)\s*\(([^;{}]*)\)""")
+    private val IDENT_ARG_RE = Regex("""(?<![\w."])([a-z]\w*)(?=\s*(?:,|$))""")
 
     /** `execution.getVariables()` — a read of the whole map, so no variable of a scope this class
      *  touches can be proven unread. Only the no-argument forms; the name-collection overloads are
@@ -32,43 +65,87 @@ object JavaParser {
     // real variable reads that neither the setVariable/getVariable scan nor the model-side expression
     // harvest can see: the expression lives in .java, and the variable name is not a quoted argument.
     private val JAVA_EL_RE = Regex("""[#$]\{([^}"]*)}""")
+    // A Kotlin raw string has no escapes: a literal `${` in one is spelled `${'$'}{`.
+    private val KOTLIN_RAW_EL_RE = Regex("""\$\{'\$'}\{([^}"]*)}""")
+
+    /** Whether the `$` at [at] is escaped — preceded by an odd number of backslashes (`\${x}` is text,
+     *  `\\${x}` a backslash followed by a template). */
+    private fun escapedDollar(text: String, at: Int): Boolean {
+        var k = at - 1
+        while (k >= 0 && text[k] == '\\') k--
+        return (at - 1 - k) % 2 == 1
+    }
     private val EL_ROOT_RE = Regex("""(?<![\w.$'"])([A-Za-z_]\w*)(?!\s*[(\w:])""")
     private val JAVA_STR_RE = Regex("""\"([^"\\\n]{2,80})\"""")
-    private val COMMENT_RE = Regex("""/\*.*?\*/|//[^\n]*""", RegexOption.DOT_MATCHES_ALL)
-    private val NON_NEWLINE = Regex("""[^\n]""")
     private val REQUEST_METHOD_RE = Regex("""RequestMethod\.(\w+)""")
-    private val VALUE_PATH_RE = Regex("""(?:value|path)\s*=\s*"([^"]*)"""")
-    private val ANY_STR_RE = Regex("""\"([^"]*)\"""")
+    private val PATH_ATTR_RE = Regex("""(?:value|path)\s*=\s*(.+)""", RegexOption.DOT_MATCHES_ALL)
+    private val CONST_REF_RE = Regex("""(?:\w+\.)*[A-Za-z_]\w*""")
     private val HANDLER_RE = Regex("""\b(\w+)\s*\(""")
 
     // `static final String NAME = "value";` constant declarations — used to resolve a data-object key
     // referenced by a constant (e.g. a generated model-keys class field) back to its literal value.
-    private val STRING_CONST_RE = Regex("""\bstatic\s+final\s+String\s+(\w+)\s*=\s*"([^"]+)"""")
+    private val STRING_CONST_RE = Regex("""\b(?:static\s+final\s+String|const\s+val)\s+(\w+)\s*(?::\s*String)?\s*=\s*"([^"]+)"""")
 
     // A string literal that is the first argument of a method call — `method("literal"` — so the
     // literal's call context is known. Literals passed to a known key-taking Flowable API produce a
     // confident CODE→MODEL edge; any other literal that happens to equal a model key only a suspect one.
     private val STR_CTX_RE = Regex("""\b(\w+)\s*\(\s*"([^"\\\n]{2,80})"""")
-    private val KEY_API_METHODS = setOf(
-        // engine + platform methods whose (first) String argument is a model key
-        "startProcessInstanceByKey", "startProcessInstanceByKeyAndTenantId", "startProcessInstanceByMessage",
-        "processDefinitionKey", "processDefinitionKeyLike", "processDefinitionKeyLikeIgnoreCase",
-        "caseDefinitionKey", "caseDefinitionKeyLike", "caseDefinitionKeyLikeIgnoreCase",
-        "decisionKey", "formDefinitionKey", "getFormModelByKey", "getFormModelWithVariablesByKey",
-        "getFormInstanceModelByKey", "definitionKey", "dataObjectDefinitionKey",
-        "eventDefinitionKey", "channelDefinitionKey", "getEventModelByKey", "getChannelModelByKey",
-        "serviceKey", "operationKey", "actionDefinitionKey", "templateKey", "processTemplate",
-        "agentDefinitionKey", "getServiceDefinitionModelByKey", "getServiceDefinitionByKey",
-        "getActionDefinitionModelByKey", "getActionDefinitionByKey", "getPolicyModelByKey",
-        "taskFormKey", "formKey", "key", "operation", "messageName", "signalEventReceived",
-        "signalEventReceivedAsync", "messageEventReceived", "messageEventReceivedAsync",
-    )
+    // A literal compared with something — `"X".equals(k)`, `k.equals("X")`, `case "X":`, Kotlin's `"X" ->`
+    private val EQUALS_LIT_RE = Regex(""""([^"\\\n]{2,80})"\s*\.\s*equals(?:IgnoreCase)?\s*\(|\.equals(?:IgnoreCase)?\s*\(\s*"([^"\\\n]{2,80})"\s*\)""")
+    private val CASE_LIT_RE = Regex("""\bcase\s+"([^"\\\n]{2,80})"\s*[:,-]|^\s*"([^"\\\n]{2,80})"\s*(?:,\s*"[^"\n]*"\s*)*->""", RegexOption.MULTILINE)
+    // The same position holding a constant instead of a literal — `startProcessInstanceByKey(MAIN_CASE)`,
+    // `.caseDefinitionKey(ModelConstants.MAIN_CASE)`: an UPPER_SNAKE name, optionally qualified. Resolved
+    // against the project's `static final String` constants once every source is read (a generated
+    // model-keys class is the usual home); one real project's whole Java layer is written this way and
+    // had no code → model edge at all.
+    private val IDENT_CTX_RE = Regex("""\b(\w+)\s*\(\s*((?:\w+\.)*[A-Z][A-Z0-9_]{2,})\s*[,)]""")
+    /**
+     * Engine and platform methods whose (first) String argument is a model key, with the model types that
+     * key can name — an empty set for the untyped `key(…)`. The type is what keeps the reference honest:
+     * `caseDefinitionKey("X")` names the case `X`, not the process or form that happens to share the key
+     * (a key shared by two types is common). Signal and message names, and operation keys, are no model
+     * keys at all and are not listed: `signalEventReceived("X")` was a clean reference to a process `X`.
+     */
+    private val KEY_API_KINDS: Map<String, Set<String>> = buildMap {
+        fun put(kinds: Set<String>, vararg methods: String) = methods.forEach { put(it, kinds) }
+        put(setOf("process"), "startProcessInstanceByKey", "startProcessInstanceByKeyAndTenantId",
+            "processDefinitionKey", "processDefinitionKeyLike", "processDefinitionKeyLikeIgnoreCase")
+        put(setOf("case"), "caseDefinitionKey", "caseDefinitionKeyLike", "caseDefinitionKeyLikeIgnoreCase")
+        put(setOf("decision"), "decisionKey")
+        put(setOf("form", "page"), "formDefinitionKey", "getFormModelByKey", "getFormModelWithVariablesByKey",
+            "getFormInstanceModelByKey", "taskFormKey", "formKey")
+        put(setOf("dataObject", "masterData"), "definitionKey", "dataObjectDefinitionKey")
+        put(setOf("event"), "eventDefinitionKey", "getEventModelByKey")
+        put(setOf("channel"), "channelDefinitionKey", "getChannelModelByKey")
+        put(setOf("service"), "serviceKey", "getServiceDefinitionModelByKey", "getServiceDefinitionByKey")
+        put(setOf("action"), "actionDefinitionKey", "getActionDefinitionModelByKey", "getActionDefinitionByKey")
+        put(setOf("template"), "templateKey", "processTemplate", "mainContentTemplate")
+        put(setOf("agent"), "agentDefinitionKey")
+        put(setOf("securityPolicy"), "getPolicyModelByKey")
+        put(setOf("user"), "userDefinitionKey")
+        put(emptySet(), "key")
+    }
+
     // Flowable data-object runtime builder chain: `.definitionKey(<expr>) … .operation("<literal>")`.
     private val DEFINITION_KEY_RE = Regex("""\.definitionKey\(\s*([^)]+?)\s*\)""")
-    private val OPERATION_CALL_RE = Regex("""\.operation\(\s*"([^"]+)"\s*\)""")
+    // The operation as written — a literal or a constant (`.operation(Ops.FIND_ALL)`), resolved by the caller.
+    private val OPERATION_CALL_RE = Regex("""\.operation\(\s*("[^"]+"|(?:\w+\.)*[A-Z][A-Z0-9_]*)\s*\)""")
+    // Service-registry invocations: `createServiceInvocationBuilder().serviceKey(<expr>).operationKey("op")`.
+    private val SERVICE_KEY_CALL_RE = Regex("""\.serviceKey\(\s*([^)]+?)\s*\)""")
+    private val OPERATION_KEY_CALL_RE = Regex("""\.operationKey\(\s*("[^"]+"|(?:\w+\.)*[A-Z][A-Z0-9_]*)\s*\)""")
     // External-worker subscriptions/queries: `.topic("orders")` — links the class to the topic node.
-    private val TOPIC_CALL_RE = Regex("""\.topic\(\s*"([^"]+)"\s*\)""")
+    // An external worker's topic: the job acquire builder's `topic(name, lockDuration)` or the Spring
+    // client's `@FlowableWorker(topic = …)`. A one-argument `.topic("x")` is any other builder's — a Kafka
+    // channel's — and made that class the external worker of the BPMN task with that topic.
+    private val TOPIC_CALL_RE = Regex("""\.topic\(\s*"([^"]+)"\s*,""")
+    private val WORKER_ANN_RE = Regex("""@FlowableWorker\s*\([^)]*?\btopic\s*=\s*"([^"]+)"""")
 
+    private val FLOWABLE_LISTENER_INTERFACES = setOf(
+        "ExecutionListener", "TaskListener", "TransactionDependentExecutionListener",
+        "TransactionDependentTaskListener", "PlanItemInstanceLifecycleListener", "CaseInstanceLifecycleListener",
+        "FlowableEventListener", "AbstractFlowableEventListener", "AbstractFlowableEngineEventListener",
+        "FlowableEngineEventListener",
+    )
     private val CONTROL_KEYWORDS = setOf("if", "for", "while", "switch", "catch", "synchronized", "return", "new")
     private val DELEGATE_INTERFACES = setOf(
         "JavaDelegate", "PlanItemJavaDelegate", "JavaDelegatePlanItem",
@@ -81,66 +158,582 @@ object JavaParser {
         "AbstractServiceTask", "JavaDelegatePlanItem", "FlowableEventListener",
     )
 
+    /** Whether [at] lies in the parenthesised arguments of an annotation on the same statement. */
+    private fun insideAnnotationArgs(text: String, at: Int): Boolean {
+        var depth = 0; var i = at - 1
+        while (i >= 0) {
+            val c = text[i]
+            when (c) {
+                ')' -> depth++
+                '(' -> if (depth == 0) return ANNOTATION_HEAD_RE.containsMatchIn(text.substring(maxOf(0, i - 80), i)) else depth--
+                ';', '{', '}' -> return false
+            }
+            i--
+        }
+        return false
+    }
+    private val ANNOTATION_HEAD_RE = Regex("""@[\w.]+\s*$""")
+
     private fun decap(name: String): String = if (name.isEmpty()) name else name[0].lowercaseChar() + name.substring(1)
 
-    /** Replace comment bodies with spaces (newlines preserved) so scans skip commented-out code. */
-    private fun blankComments(text: String): String =
-        COMMENT_RE.replace(text) { m -> NON_NEWLINE.replace(m.value, " ") }
+    /**
+     * Replace comment bodies with spaces (newlines preserved) so scans skip commented-out code.
+     *
+     * A scanner, not a regex: string and character literals are stepped over, so the block-comment
+     * opener inside a mapping like `"/files/` + `**"` or the `//` in `"http://svc"` does not open a
+     * comment that swallows the mappings, beans and key literals after them. Text blocks and Kotlin raw strings (`"""…"""`) have no
+     * escapes; a Kotlin `${…}` template holding a quote is rare enough to read as a plain string.
+     */
+    internal fun blankComments(text: String): String {
+        val out = StringBuilder(text)
+        val n = text.length
+        var i = 0
+        fun blank(from: Int, to: Int) { for (k in from until to) if (text[k] != '\n') out.setCharAt(k, ' ') }
+        while (i < n) {
+            val c = text[i]
+            when {
+                c == '/' && i + 1 < n && text[i + 1] == '/' -> {
+                    val end = text.indexOf('\n', i).let { if (it < 0) n else it }
+                    blank(i, end); i = end
+                }
+                c == '/' && i + 1 < n && text[i + 1] == '*' -> {
+                    val end = text.indexOf("*/", i + 2).let { if (it < 0) n else it + 2 }
+                    blank(i, end); i = end
+                }
+                c == '"' && text.startsWith("\"\"\"", i) -> {
+                    val end = text.indexOf("\"\"\"", i + 3)
+                    i = if (end < 0) n else end + 3
+                }
+                c == '"' || c == '\'' -> {
+                    var k = i + 1
+                    while (k < n && text[k] != c && text[k] != '\n') k += if (text[k] == '\\') 2 else 1
+                    i = k + 1
+                }
+                else -> i++
+            }
+        }
+        return out.toString()
+    }
 
-    private fun mappingPath(args: String?): String {
-        if (args.isNullOrEmpty()) return ""
-        val m = VALUE_PATH_RE.find(args) ?: ANY_STR_RE.find(args)
-        return m?.groupValues?.get(1) ?: ""
+    /** Marks a constant a mapping path names that this file does not declare; the resolver has the
+     *  project's constants and replaces it, or flags the endpoint `pathUnresolved`. */
+    const val PATH_CONST = '\u0001'
+
+    /**
+     * The paths a mapping annotation's arguments name: the unnamed first argument or `value =`/`path =`,
+     * one per element of an array, each a literal or a `+` of literals and constants. A constant this file
+     * declares is resolved here; another file's is left marked ([PATH_CONST]). `produces = "…"` and the other
+     * attributes name no path — reading the first string of the arguments made one `/application/json`.
+     */
+    private fun mappingPaths(args: String?, consts: Map<String, String>, ownTypes: Collection<String>): List<String> {
+        if (args.isNullOrBlank()) return listOf("")
+        val parts = topLevel(args, ',')
+        val expr = parts.firstNotNullOfOrNull { p -> PATH_ATTR_RE.matchEntire(p.trim())?.groupValues?.get(1) }
+            ?: parts.firstOrNull()?.trim()?.takeIf { topLevel(it, '=').size == 1 && it.isNotEmpty() }
+            ?: return listOf("")
+        val e = expr.trim()
+        val elements = if (e.length >= 2 && (e.first() == '{' && e.last() == '}' || e.first() == '[' && e.last() == ']')) {
+            topLevel(e.substring(1, e.length - 1), ',').map { it.trim() }.filter { it.isNotEmpty() }
+        } else listOf(e)
+        return elements.map { el ->
+            topLevel(el, '+').joinToString("") { piece ->
+                val t = piece.trim()
+                when {
+                    t.length >= 2 && t.first() == '"' && t.last() == '"' -> t.substring(1, t.length - 1)
+                    // the file's own constant by its bare name; anything qualified is for the resolver, which
+                    // knows which class the qualifier is
+                    CONST_REF_RE.matches(t) -> (if ('.' !in t || t.substringBeforeLast('.').substringAfterLast('.') in ownTypes)
+                        consts[t.substringAfterLast('.')] else null) ?: "$PATH_CONST$t$PATH_CONST"
+                    else -> "${PATH_CONST}?$PATH_CONST"
+                }
+            }
+        }.ifEmpty { listOf("") }
+    }
+
+    /** [s] split at every [sep] outside quotes, braces, brackets and parentheses. */
+    private fun topLevel(s: String, sep: Char): List<String> {
+        val out = ArrayList<String>()
+        var depth = 0; var quote: Char? = null; var start = 0; var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '(' || c == '{' || c == '[' -> depth++
+                c == ')' || c == '}' || c == ']' -> depth--
+                c == sep && depth == 0 -> { out.add(s.substring(start, i)); start = i + 1 }
+            }
+            i++
+        }
+        out.add(s.substring(start))
+        return out
+    }
+
+    /** The index of the `}` closing the `{` at [open], skipping string and char literals; the text's end
+     *  when it never closes. */
+    private fun closingBrace(text: String, open: Int): Int {
+        var depth = 0; var i = open; var quote: Char? = null
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '{' -> depth++
+                c == '}' -> { depth--; if (depth == 0) return i }
+            }
+            i++
+        }
+        return text.length
+    }
+
+    // ---- What a handler takes: its signature read parameter by parameter.
+
+    /** Spring's binding annotations: where on the wire a handler parameter's value comes from. */
+    private val PARAM_SOURCES = mapOf(
+        "PathVariable" to "path", "RequestParam" to "query", "RequestHeader" to "header", "CookieValue" to "cookie",
+        "RequestBody" to "body", "RequestPart" to "part", "ModelAttribute" to "query", "MatrixVariable" to "matrix",
+    )
+    /** Values the server supplies itself — a request or session attribute, the authenticated user, a
+     *  property. A caller sends none of them, so they are no parameter of the endpoint. */
+    private val SERVER_SIDE_PARAM_ANNOTATIONS = setOf(
+        "RequestAttribute", "SessionAttribute", "AuthenticationPrincipal", "CurrentSecurityContext", "Value",
+    )
+    /** Types Spring hands an unannotated parameter from the request or the framework, not from a value the
+     *  caller names. An unannotated `Map` is the MVC model, not the query string (that needs `@RequestParam`). */
+    private val FRAMEWORK_PARAM_TYPES = setOf(
+        "HttpServletRequest", "HttpServletResponse", "ServletRequest", "ServletResponse", "HttpSession",
+        "WebRequest", "NativeWebRequest", "ServerWebExchange", "ServerHttpRequest", "ServerHttpResponse",
+        "Principal", "Authentication", "Locale", "TimeZone", "ZoneId", "Model", "ModelMap", "Map",
+        "BindingResult", "Errors", "SessionStatus", "RedirectAttributes", "UriComponentsBuilder",
+        "InputStream", "OutputStream", "Reader", "Writer", "HttpMethod", "HttpHeaders",
+    )
+    /** An unannotated `HttpEntity<T>` is the request body as a `T`, with its headers. */
+    private val BODY_WRAPPER_TYPES = setOf("HttpEntity", "RequestEntity")
+    /** Parameter types that take every query parameter at once — none of them is required by name. */
+    private val MAP_PARAM_TYPES = setOf("Map", "MultiValueMap", "HashMap", "LinkedHashMap", "HttpHeaders")
+    // `{id}`, `{id:\d+}`, `{*rest}` — a `${…}` placeholder is stripped before this runs
+    private val PATH_VAR_RE = Regex("""\{\*?([A-Za-z_][\w-]*)(?::[^}]*)?}""")
+    private val SPRING_PLACEHOLDER_RE = Regex("""\$\{[^}]*}""")
+    private val JAVA_PARAM_DECL_RE = Regex("""^(.*?)\s*\b([A-Za-z_$][\w$]*)$""", RegexOption.DOT_MATCHES_ALL)
+
+    /** The index of the `)` closing the `(` at [open], skipping string and char literals; the text's end
+     *  when it never closes. */
+    private fun closingParen(text: String, open: Int): Int {
+        var depth = 0; var i = open; var quote: Char? = null
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '(' -> depth++
+                c == ')' -> { depth--; if (depth == 0) return i }
+            }
+            i++
+        }
+        return text.length
+    }
+
+    /**
+     * The end of the annotation starting at [at] — `@Name`, `@a.b.Name`, Kotlin's `@param:Name`, and its
+     * argument list balanced however deep it nests — or [at] when no annotation starts there.
+     * [ANNOTATION_RE] stops at the first `)`, which `@PreAuthorize("hasRole('A')")` and an OpenAPI
+     * `@Operation(responses = {@ApiResponse(…)})` both have long before their own end.
+     */
+    private fun annotationEnd(s: String, at: Int): Int {
+        if (at >= s.length || s[at] != '@') return at
+        var i = at + 1
+        while (i < s.length && (s[i].isLetterOrDigit() || s[i] == '_' || s[i] == '$' || s[i] == '.' || s[i] == ':')) i++
+        if (i == at + 1) return at
+        var j = i
+        while (j < s.length && s[j].isWhitespace()) j++
+        return if (j < s.length && s[j] == '(') closingParen(s, j) + 1 else i
+    }
+
+    /** The method declared at [from] — past its annotations, modifiers, type parameters and return type — as
+     *  its name and the text between its parentheses; null when a `;`, `{`, `}` or `=` comes first. */
+    private fun handlerSignature(text: String, from: Int): Pair<String, String>? {
+        var i = from; var angle = 0
+        while (i < text.length) {
+            val c = text[i]
+            when (c) {
+                '@' -> { val e = annotationEnd(text, i); if (e > i) { i = e; continue } }
+                '<' -> angle++
+                '>' -> angle--
+                '(' -> if (angle <= 0) {
+                    var k = i
+                    while (k > from && text[k - 1].isWhitespace()) k--
+                    var s = k
+                    while (s > from && (text[s - 1].isLetterOrDigit() || text[s - 1] == '_' || text[s - 1] == '$')) s--
+                    return text.substring(s, k) to text.substring(i + 1, closingParen(text, i).coerceAtMost(text.length))
+                }
+                ';', '{', '}', '=' -> return null
+            }
+            i++
+        }
+        return null
+    }
+
+    /** A parameter list split at its top-level commas. Unlike [topLevel] it counts `<>` as brackets too,
+     *  so `Map<String, List<String>> all` stays one parameter. */
+    private fun splitParams(s: String): List<String> {
+        val out = ArrayList<String>()
+        var depth = 0; var quote: Char? = null; var start = 0; var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '(' || c == '{' || c == '[' || c == '<' -> depth++
+                c == ')' || c == '}' || c == ']' || c == '>' -> depth--
+                c == ',' && depth == 0 -> { out.add(s.substring(start, i)); start = i + 1 }
+            }
+            i++
+        }
+        out.add(s.substring(start))
+        return out.map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    private fun unquote(v: String?): String? {
+        val t = v?.trim() ?: return null
+        return if (t.length >= 2 && t.first() == '"' && t.last() == '"') t.substring(1, t.length - 1) else null
+    }
+
+    /**
+     * One handler parameter as the caller sees it: the name it sends (an annotation's `value`/`name`, else
+     * the parameter's own), where it goes (`path`, `query`, `header`, `cookie`, `body`, `part`, `matrix`),
+     * its type, and — only when they apply — `required`, `default` and `implicit` (no annotation: Spring
+     * binds it from the query string or form data by name). Null for what the caller does not send: a
+     * servlet request, the principal, a session attribute.
+     *
+     * Required follows Spring: a path variable, a body or a part unless `required = false`; a query
+     * parameter, header or cookie also not with a `defaultValue`, an `Optional`, a Kotlin `T?` or a Kotlin
+     * default value — and never an unannotated one, a model attribute or a map that takes them all.
+     */
+    private fun handlerParam(
+        raw: String, kotlin: Boolean, consts: Map<String, String>, secretLiterals: MutableSet<String>,
+    ): Map<String, Any?>? {
+        val anns = ArrayList<Pair<String, String?>>()
+        val rest = StringBuilder()
+        var i = 0
+        while (i < raw.length) {
+            if (raw[i] == '"') {   // a Kotlin default value: an `@` in it starts no annotation
+                var k = i + 1
+                while (k < raw.length && raw[k] != '"') k += if (raw[k] == '\\') 2 else 1
+                rest.append(raw, i, minOf(k + 1, raw.length)); i = k + 1; continue
+            }
+            val e = annotationEnd(raw, i)
+            if (e > i) {
+                val head = raw.substring(i + 1, e)
+                val name = head.takeWhile { it.isLetterOrDigit() || it == '_' || it == '$' || it == '.' || it == ':' }
+                val args = head.substring(name.length).trim().takeIf { it.startsWith("(") }?.removePrefix("(")?.removeSuffix(")")
+                anns.add(name.substringAfterLast(':').substringAfterLast('.') to args)
+                rest.append(' '); i = e; continue
+            }
+            rest.append(raw[i]); i++
+        }
+        if (anns.any { it.first in SERVER_SIDE_PARAM_ANNOTATIONS }) return null
+        val decl = rest.toString().trim().replace(Regex("""^(?:(?:final|vararg|val|var)\s+)+"""), "")
+        val pname: String; var type: String; var kotlinDefault: String? = null
+        if (kotlin) {
+            val colon = decl.indexOf(':').takeIf { it > 0 } ?: return null
+            pname = decl.substring(0, colon).trim()
+            val tail = topLevel(decl.substring(colon + 1), '=')
+            type = tail[0].trim()
+            if (tail.size > 1) kotlinDefault = tail.drop(1).joinToString("=").trim()
+        } else {
+            val m = JAVA_PARAM_DECL_RE.find(decl) ?: return null
+            pname = m.groupValues[2]; type = m.groupValues[1].trim()
+        }
+        if (pname.isEmpty() || type.isEmpty()) return null
+        type = type.replace(Regex("""\s+"""), " ").replace(Regex("""\s*([<>,])\s*"""), "$1").replace(",", ", ")
+        val simple = type.substringBefore('<').removeSuffix("?").substringAfterLast('.').trim()
+        val bind = anns.firstOrNull { it.first in PARAM_SOURCES }
+        val attrs = LinkedHashMap<String, String>()
+        var unnamed: String? = null
+        bind?.second?.let { args ->
+            for (part in topLevel(args, ',')) {
+                val kv = topLevel(part, '=')
+                if (kv.size >= 2) attrs[kv[0].trim()] = kv.drop(1).joinToString("=").trim()
+                else if (part.isNotBlank() && unnamed == null) unnamed = part.trim()
+            }
+        }
+        val source: String
+        var implicit = false
+        var wrapped = false   // an HttpEntity may arrive without a body; Spring does not insist on one
+        when {
+            bind != null -> source = PARAM_SOURCES.getValue(bind.first)
+            simple in FRAMEWORK_PARAM_TYPES -> return null
+            simple in BODY_WRAPPER_TYPES -> { source = "body"; wrapped = true; type = type.substringAfter('<', "").substringBeforeLast('>', "").ifEmpty { "?" } }
+            else -> { source = "query"; implicit = true }
+        }
+        // The name on the wire: a literal, or a constant this file declares; a constant from elsewhere is
+        // most likely the parameter's own name spelt out, and the parameter's name is what is left.
+        val named = attrs["value"] ?: attrs["name"] ?: unnamed
+        val wire = unquote(named) ?: named?.trim()?.takeIf { CONST_REF_RE.matches(it) }?.let { consts[it.substringAfterLast('.')] }
+        // a Kotlin `= null` says the same as its `T?`, which already makes the parameter optional
+        val default = unquote(attrs["defaultValue"]) ?: kotlinDefault?.takeIf { it != "null" }?.let { unquote(it) ?: it }
+        val optional = simple == "Optional" || type.endsWith("?")
+        val off = attrs["required"]?.trim() == "false"
+        val required = when (source) {
+            "path", "body", "part", "matrix" -> !off && !optional && !wrapped
+            else -> !implicit && !off && !optional && default == null && bind?.first != "ModelAttribute" && simple !in MAP_PARAM_TYPES
+        }
+        val rec = linkedMapOf<String, Any?>("name" to (if (source == "body") pname else wire ?: pname), "in" to source, "type" to type)
+        if (required) rec["required"] = true
+        // A credential the handler falls back to would sit on the endpoint page in plain text — and in the
+        // class's string lists, which is why the masked value is handed back to the caller.
+        default?.let { d ->
+            val shown = SecretScan.redactParamDefault(rec["name"].toString(), source, d)
+            if (shown != d) secretLiterals.add(d)
+            rec["default"] = shown
+        }
+        if (implicit) rec["implicit"] = true
+        return rec
+    }
+
+    /**
+     * A handler's parameters against one of its paths: every `{variable}` of the path first, in the path's
+     * order and required — typed by the `@PathVariable` that takes it, untyped when none does (the URL needs
+     * it all the same) — then the others as declared. A required path variable the path does not name is
+     * kept and marked `notInPath`, since Spring fails every such request; an optional one belongs to another
+     * of the handler's paths and is left out of this one. Idempotent: the resolver runs it again once a
+     * constant in the path is resolved, and only rows with a type (the declared ones) carry over.
+     */
+    fun withPathVariables(path: String?, params: List<Map<String, Any?>>): List<Map<String, Any?>> {
+        val declared = params.filter { it["type"] != null }.map { LinkedHashMap(it).apply { remove("notInPath") } }
+        val p = path.orEmpty()
+        val known = PATH_CONST !in p && "\${" !in p
+        val vars = PATH_VAR_RE.findAll(SPRING_PLACEHOLDER_RE.replace(p, "")).map { it.groupValues[1] }.distinct().toList()
+        val used = HashSet<Int>()
+        val out = ArrayList<Map<String, Any?>>()
+        for (v in vars) {
+            val at = declared.indexOfFirst { it["in"] == "path" && it["name"] == v }
+            if (at >= 0) {
+                used.add(at)
+                out.add(LinkedHashMap(declared[at]).apply { put("required", true) })
+            } else out.add(linkedMapOf("name" to v, "in" to "path", "required" to true))
+        }
+        declared.forEachIndexed { k, d ->
+            if (k in used) return@forEachIndexed
+            if (d["in"] == "path" && known) {
+                if (d["required"] != true) return@forEachIndexed
+                d["notInPath"] = true
+            }
+            out.add(d)
+        }
+        return out
+    }
+
+    /**
+     * Where the body of the type declared up to [from] opens and closes, or null when it has none — a
+     * Kotlin `data class X(val a: Int)` ends at its parameter list, and the next brace belongs to the next
+     * declaration ([until] is where that one starts) or to a top-level function. Only a `{` outside the
+     * constructor's parentheses counts: a Kotlin default value may be a lambda.
+     */
+    private fun typeBody(text: String, from: Int, until: Int): IntRange? {
+        var parens = 0
+        var i = from
+        while (i < until) {
+            val c = text[i]
+            when {
+                c == '(' -> parens++
+                c == ')' -> parens--
+                parens > 0 -> {}
+                c == '{' -> return i..closingBrace(text, i)
+                // a statement or a member, not a header: the type ended without a body
+                c == ';' || c == '=' || c == '"' -> return null
+                c.isJavaIdentifierStart() -> {
+                    var k = i
+                    while (k < until && text[k].isJavaIdentifierPart()) k++
+                    if (text.substring(i, k) in KT_MEMBER_KEYWORDS) return null
+                    i = k - 1
+                }
+            }
+            i++
+        }
+        return null
+    }
+    private val KT_MEMBER_KEYWORDS = setOf("fun", "val", "var")
+
+    /**
+     * The brace depth at each of [positions] (ascending), or -1 for one inside a string or character
+     * literal. Comments are already blanked; literals are stepped over as [blankComments] does, so a `{`
+     * in `'{'` or in a log message does not count.
+     */
+    private fun braceDepths(text: String, positions: List<Int>): IntArray {
+        val out = IntArray(positions.size)
+        val n = text.length
+        var depth = 0
+        var i = 0
+        var p = 0
+        while (p < positions.size && i < n) {
+            if (positions[p] == i) { out[p++] = depth; continue }
+            val c = text[i]
+            val end = when {
+                c == '"' && text.startsWith("\"\"\"", i) -> text.indexOf("\"\"\"", i + 3).let { if (it < 0) n else it + 3 }
+                c == '"' || c == '\'' -> {
+                    var k = i + 1
+                    while (k < n && text[k] != c && text[k] != '\n') k += if (text[k] == '\\') 2 else 1
+                    minOf(k + 1, n)
+                }
+                else -> { if (c == '{') depth++ else if (c == '}') depth--; i + 1 }
+            }
+            while (p < positions.size && positions[p] < end) out[p++] = -1
+            i = end
+        }
+        while (p < positions.size) out[p++] = depth
+        return out
     }
 
     fun parseJava(rawText: String, ffile: String): Map<String, Any?> {
         val text = blankComments(rawText)
+        val kotlin = ffile.lowercase().endsWith(".kt")
         fun lineOf(idx: Int): Int = text.substring(0, idx).count { it == '\n' } + 1
 
         val pkg = PKG_RE.find(text)?.groupValues?.get(1) ?: ""
-        val types = TYPE_RE.findAll(text).map { it.groupValues[2] }.toList()
-        val primary = types.firstOrNull() ?: ffile.substringAfterLast('/').substringBeforeLast('.')
+        val typeDecls = TYPE_RE.findAll(text).toList()
+        val types = typeDecls.map { it.groupValues[2] }
+        // Every type the file declares, where, and inside which other one: a nested `@Component` and the
+        // second class of a Kotlin file are beans and `flowable:class` targets like any other, and the file
+        // being one record (named after its primary type) used to make them resolve to that type's header,
+        // or not at all. `nestedIn` is the `$`-joined chain of enclosing types — the binary name Flowable
+        // loads a `flowable:class` by is `pkg.Outer$Inner`.
+        val typeLines = LinkedHashMap<String, Int>()
+        val nestedIn = LinkedHashMap<String, String>()
+        val topLevel = ArrayList<String>()
+        val bodies = arrayOfNulls<IntRange>(typeDecls.size)
+        val chains = arrayOfNulls<String>(typeDecls.size)
+        val depths = braceDepths(text, typeDecls.map { it.range.first })
+        typeDecls.forEachIndexed { i, m ->
+            val at = m.range.first
+            // `sb.append("class Position {\n")` in a generated model's toString is no declaration
+            if (depths[i] < 0) return@forEachIndexed
+            val around = (0 until i).filter { bodies[it]?.let { b -> at in b } == true }
+            // A declaration deeper than the types around it sits in a method, an initializer or a top-level
+            // function: a local class nothing outside can name (and `object instanceof Foo` in a method
+            // body is no type at all). Read as a member, it was an alias for a name that does not exist.
+            if (depths[i] != around.size) return@forEachIndexed
+            bodies[i] = typeBody(text, m.range.last + 1, typeDecls.getOrNull(i + 1)?.range?.first ?: text.length)
+            // the innermost type around it: the one whose body opens last
+            val outer = around.maxByOrNull { bodies[it]!!.first }
+            chains[i] = outer?.let { o -> chains[o]?.let { "$it$${types[o]}" } ?: types[o] }
+            // the first declaration of a name is the one its line and its nesting both describe
+            if (typeLines.putIfAbsent(types[i], lineOf(at)) == null) {
+                val chain = chains[i]
+                if (chain != null) nestedIn[types[i]] = chain else topLevel.add(types[i])
+            }
+        }
 
         val beanNames = LinkedHashSet<String>()
+        // bean name → the type its stereotype annotates, which need not be the file's primary type
+        val beanOwners = LinkedHashMap<String, String>()
         for (m in BEAN_ANN_RE.findAll(text)) {
-            beanNames.add(m.groupValues[2].ifEmpty { decap(primary) })
+            val after = ANNOTATION_RE.replace(text.substring(m.range.last + 1, minOf(m.range.last + 1 + 300, text.length)), " ").trimStart()
+            // the type it annotates — which need not be the file's first (a nested component)
+            val type = TYPE_DECL_START_RE.find(after)?.groupValues?.get(1) ?: continue
+            val name = BEAN_NAME_ARG_RE.find(m.groupValues[2])?.groupValues?.get(1) ?: decap(type)
+            beanNames.add(name)
+            beanOwners.putIfAbsent(name, type)
+        }
+        for (m in REPOSITORY_RE.findAll(text)) decap(m.groupValues[1]).let { beanNames.add(it); beanOwners.putIfAbsent(it, m.groupValues[1]) }
+
+        val ctlAnn = CONTROLLER_RE.find(text)
+        val ctlDecl = ctlAnn?.let { TYPE_RE.find(text, it.range.last + 1) }
+        // The file's own type: the one named like the file (Java's rule for a public type, Kotlin's
+        // convention), else the top-level type a stereotype or controller annotation sits on, else the first
+        // top-level one. The first alone made a Kotlin `data class OrderDto` written above the `@Component`
+        // class the file is about the bean's class — and the delegate.
+        val baseName = ffile.substringAfterLast('/').substringAfterLast('!').substringBeforeLast('.')
+        val primary = topLevel.firstOrNull { it == baseName }
+            ?: (beanOwners.values + listOfNotNull(ctlDecl?.groupValues?.get(2))).firstOrNull { it in topLevel }
+            ?: topLevel.firstOrNull() ?: types.firstOrNull() ?: baseName
+        // Factory beans: the method after the annotation (other annotations in between skipped), and the
+        // type it returns — the bean *is* that type. Without it the bean resolved to the configuration
+        // class, which then "declared" every method a model called on the bean (53 phantom methods on the
+        // real projects) and was labelled a delegate.
+        val beanMethods = LinkedHashMap<String, Int>()
+        val beanTypes = LinkedHashMap<String, String>()
+        for (m in BEAN_METHOD_ANN_RE.findAll(text)) {
+            val tail = ANNOTATION_RE.replace(text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length)), " ")
+            val method = FIRST_CALLABLE_RE.find(tail)?.groupValues?.get(1)
+                ?.takeIf { it !in CONTROL_KEYWORDS } ?: continue
+            val name = m.groupValues[1].ifEmpty { method }
+            beanNames.add(name)
+            beanMethods.putIfAbsent(name, lineOf(m.range.first))
+            val type = (if (kotlin) KT_RETURN_RE.find(tail)?.takeIf { it.groupValues[1] == method }?.groupValues?.get(2)
+                        else JAVA_RETURN_RE.find(tail)?.takeIf { it.groupValues[2] == method }?.groupValues?.get(1))
+            type?.takeIf { it != "void" }?.let { beanTypes.putIfAbsent(name, it) }
+        }
+        // what a simple type name in this file means: an explicit import, else a wildcard's package
+        val imports = LinkedHashMap<String, String>()
+        val wildcardImports = ArrayList<String>()
+        val staticImports = ArrayList<String>()
+        for (m in IMPORT_RE.findAll(text)) {
+            val target = m.groupValues[2]
+            // `import static a.b.Keys.MAIN` / `a.b.Keys.*` — where a bare constant name comes from
+            if (m.groups[1] != null) { staticImports.add(target + (m.groups[3]?.value ?: "")); continue }
+            if (m.groups[3] != null) wildcardImports.add(target)
+            else imports[m.groups[4]?.value ?: target.substringAfterLast('.')] = target
         }
         val interfaces = LinkedHashSet<String>()
-        for (m in IMPLEMENTS_RE.findAll(text)) {
-            for (it in m.groupValues[1].split(",")) {
-                interfaces.add(Regex("<.*?>").replace(it, "").trim().substringAfterLast('.'))
+        val supertypeLists = IMPLEMENTS_RE.findAll(text).map { it.groupValues[1] } +
+            (if (kotlin) KT_SUPERTYPES_RE.findAll(text).map { it.groupValues[1] } else emptySequence())
+        for (list in supertypeLists) {
+            for (it in list.split(",")) {
+                // `AbstractServiceTask()` — a Kotlin superclass constructor call — is the type without the parens
+                interfaces.add(Regex("<.*?>").replace(it, "").replace("()", "").trim().substringAfterLast('.'))
             }
         }
 
         val isController = CONTROLLER_RE.containsMatchIn(text)
-        val classDeclIdx = text.indexOf("class ")
         val endpoints = ArrayList<Map<String, Any?>>()
-        if (isController) {
-            var base = ""
+        // Literals kept out of the class's string lists: a handler's credential default (see handlerParam)
+        // and, further down, the value of a constant named like a secret.
+        val secretLiterals = HashSet<String>()
+        // The controller is the type declared after the annotation, its base mapping sits between the two,
+        // and its handlers are the mappings inside that type's body. Taking the file's first `class ` as the
+        // boundary let a data class or an enum before the controller swallow the base mapping, which then
+        // served `ANY /base` as a handler of its own while every real handler lost its base.
+        // (`ctlAnn` / `ctlDecl` are found above, with the primary type.)
+        if (isController && ctlAnn != null && ctlDecl != null) {
+            val consts = stringConstants(rawText)
+            val bases = MAPPING_RE.findAll(text.substring(ctlAnn.range.first, ctlDecl.range.first))
+                .firstOrNull { it.groupValues[1] == "Request" }
+                ?.let { mappingPaths(it.groups[2]?.value, consts, types) } ?: listOf("")
+            val open = text.indexOf('{', ctlDecl.range.last + 1)
+            val close = if (open < 0) text.length else closingBrace(text, open)
             for (m in MAPPING_RE.findAll(text)) {
-                if (classDeclIdx != -1 && m.range.first < classDeclIdx && m.groupValues[1] == "Request") {
-                    base = mappingPath(m.groupValues.getOrNull(2)); break
-                }
-            }
-            for (m in MAPPING_RE.findAll(text)) {
-                if (classDeclIdx != -1 && m.range.first < classDeclIdx) continue
+                if (m.range.first < open || m.range.first > close) continue
                 val verb = m.groupValues[1]
                 val args = m.groups[2]?.value
                 var http = if (verb == "Request") "ANY" else verb.uppercase()
                 if (verb == "Request" && !args.isNullOrEmpty()) {
                     http = REQUEST_METHOD_RE.find(args)?.groupValues?.get(1) ?: "ANY"
                 }
-                val path = mappingPath(args)
+                // the handler is the method after the mapping — past any other annotation on it, however deep
+                // its arguments nest (`@PreAuthorize("hasRole('A')")` ended the regex at its first `)`, and the
+                // handler was `hasRole`)
+                val sig = handlerSignature(text, m.range.last + 1)
                 val tail = text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length))
-                val handler = HANDLER_RE.find(tail)?.groupValues?.get(1) ?: "?"
-                val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
-                endpoints.add(linkedMapOf("http" to http, "path" to full, "handler" to handler, "line" to lineOf(m.range.first)))
+                val handler = sig?.first?.takeIf { it.isNotEmpty() && it !in CONTROL_KEYWORDS }
+                    ?: HANDLER_RE.findAll(ANNOTATION_RE.replace(tail, " ")).map { it.groupValues[1] }
+                        .firstOrNull { it !in CONTROL_KEYWORDS } ?: "?"
+                // what the handler takes — one signature for all of its paths, each held against its own path;
+                // absent, not empty, when the signature cannot be read, so an empty list is a fact
+                val declared = sig?.let { splitParams(it.second).mapNotNull { p -> handlerParam(p, kotlin, consts, secretLiterals) } }
+                for (base in bases) for (path in mappingPaths(args, consts, types)) {
+                    val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
+                    val ep = linkedMapOf<String, Any?>("http" to http, "path" to full, "handler" to handler,
+                        "line" to lineOf(m.range.first), "controller" to ctlDecl.groupValues[2])
+                    if (declared != null) ep["params"] = withPathVariables(full, declared)
+                    endpoints.add(ep)
+                }
             }
         }
 
         val methods = ArrayList<Map<String, Any?>>()
         val seenM = HashSet<String>()
-        for (m in METHOD_RE.findAll(text)) {
+        for (m in (if (kotlin) KT_METHOD_RE else METHOD_RE).findAll(text)) {
             val nm = m.groupValues[1]
             if (nm in CONTROL_KEYWORDS) continue
             val params = m.groupValues[2].trim()
@@ -151,11 +744,16 @@ object JavaParser {
         }
 
         val deps = LinkedHashSet<String>()
-        FIELD_RE.findAll(text).forEach { deps.add(it.groupValues[1]) }
-        val ctorRe = Regex("""(?:public|protected)\s+""" + Regex.escape(primary) + """\s*\(([^)]*)\)""")
-        val ctorParamRe = Regex("""\b([A-Z]\w+)(?:<[^>]*>)?\s+\w+""")
-        for (cm in ctorRe.findAll(text)) {
-            ctorParamRe.findAll(cm.groupValues[1]).forEach { deps.add(it.groupValues[1]) }
+        if (kotlin) {
+            // properties and primary-constructor parameters alike: `val repo: ScoreRepo`
+            KT_PROP_RE.findAll(text).forEach { deps.add(it.groupValues[1]) }
+        } else {
+            FIELD_RE.findAll(text).forEach { deps.add(it.groupValues[1]) }
+            val ctorRe = Regex("""(?:public|protected)\s+""" + Regex.escape(primary) + """\s*\(([^)]*)\)""")
+            val ctorParamRe = Regex("""\b([A-Z]\w+)(?:<[^>]*>)?\s+\w+""")
+            for (cm in ctorRe.findAll(text)) {
+                ctorParamRe.findAll(cm.groupValues[1]).forEach { deps.add(it.groupValues[1]) }
+            }
         }
 
         val roles = LinkedHashSet<String>()
@@ -165,7 +763,8 @@ object JavaParser {
         if (Regex("""@Configuration\b""").containsMatchIn(text)) roles.add("configuration")
         if (Regex("""@Component\b""").containsMatchIn(text)) roles.add("component")
         if (interfaces.any { it in DELEGATE_INTERFACES }) roles.add("delegate")
-        if (interfaces.any { it.endsWith("Listener") }) roles.add("listener")
+        // Flowable's listener interfaces only — a Spring `ApplicationListener` listens to something else
+        if (interfaces.any { it in FLOWABLE_LISTENER_INTERFACES }) roles.add("listener")
         var botKey: String? = null
         if (interfaces.any { it == "BotService" || it.endsWith("Bot") || it.endsWith("BotService") }) {
             roles.add("bot")
@@ -175,9 +774,23 @@ object JavaParser {
         if (roles.isEmpty()) roles.add("other")
 
         // literals whose call context is a known key-taking Flowable API — confident model refs
+        // and the model types each can name (`keyedKinds`, empty for the untyped `key(…)`)
         val keyedStrings = LinkedHashSet<String>()
+        val keyedKinds = LinkedHashMap<String, MutableSet<String>>()
         for (m in STR_CTX_RE.findAll(text)) {
-            if (m.groupValues[1] in KEY_API_METHODS) keyedStrings.add(m.groupValues[2])
+            val kinds = KEY_API_KINDS[m.groupValues[1]] ?: continue
+            keyedStrings.add(m.groupValues[2])
+            keyedKinds.getOrPut(m.groupValues[2]) { sortedSetOf() }.addAll(kinds)
+        }
+        // constants at the same positions, by simple name — the resolver has the values
+        val keyedIdents = LinkedHashSet<String>()
+        val keyedIdentKinds = LinkedHashMap<String, MutableSet<String>>()
+        for (m in IDENT_CTX_RE.findAll(text)) {
+            val kinds = KEY_API_KINDS[m.groupValues[1]] ?: continue
+            // as written — `LibKeys.MAIN` is `LibKeys`'s constant, not whatever the project calls `MAIN`
+            val ident = m.groupValues[2]
+            keyedIdents.add(ident)
+            keyedIdentKinds.getOrPut(ident) { sortedSetOf() }.addAll(kinds)
         }
 
         // Variable accesses, split by verb. `vars` stays the union so every existing consumer is
@@ -193,30 +806,87 @@ object JavaParser {
             }
             bucket.add(m.groupValues[2])
         }
+        val handedOff = VARS_HANDOFF_RE.findAll(text)
+            .flatMap { h -> IDENT_ARG_RE.findAll(h.groupValues[1].trim()).map { it.groupValues[1] } }.toSet()
+        for (map in handedOff) {
+            for (m in Regex("""\b${Regex.escape(map)}\s*\.\s*put\(\s*"([A-Za-z_]\w*)"""").findAll(text)) varWrites.add(m.groupValues[1])
+        }
         // Names an embedded EL expression reads. `${vars:get(flagReturn)}` names its variable as a bare
         // identifier, not as a quoted argument, so nothing else picks it up.
-        for (m in JAVA_EL_RE.findAll(text)) {
-            for (r in EL_ROOT_RE.findAll(m.groupValues[1])) {
+        fun readEl(body: String, at: Int) {
+            // `@Value("${flamingo.mail.from}")` is a property placeholder: `flamingo` is no variable
+            if (Constants.isJavaConfigPlaceholder(body)) return
+            // anything inside an annotation's arguments is Spring configuration (`@Value("${timeout}")`),
+            // not evaluated against a process scope
+            if (insideAnnotationArgs(text, at)) return
+            for (r in EL_ROOT_RE.findAll(body)) {
                 val name = r.groupValues[1]
                 if (name !in Constants.FLOWABLE_CONTEXT && name !in Constants.JAVA_LITERALS) varReads.add(name)
             }
         }
+        for (m in JAVA_EL_RE.findAll(text)) {
+            // `#{…}` in Java is Spring's SpEL — not evaluated against a process scope either
+            if (text[m.range.first] == '#') continue
+            // In Kotlin an unescaped `${…}` is the language's own string template, filled in by the compiler
+            // and never seen by Flowable: `"Order total ${total}"` read a Kotlin local as a process variable,
+            // and a template naming a variable nothing else reads made unusedVars fall silent. A literal
+            // `${` is spelled `\${` in a Kotlin string.
+            if (kotlin && !escapedDollar(text, m.range.first)) continue
+            readEl(m.groupValues[1], m.range.first)
+        }
+        // …and `${'$'}{…}` in a Kotlin raw string, where a backslash escapes nothing
+        if (kotlin) for (m in KOTLIN_RAW_EL_RE.findAll(text)) readEl(m.groupValues[1], m.range.first)
 
-        return linkedMapOf(
+        // The value of a constant named like a secret (`static final String API_KEY = "…"`) never names a
+        // model, nor does a handler's credential default, so reference resolution loses nothing without them
+        // — and every string literal of a class is part of graph.json, where the key would otherwise sit in
+        // plain text.
+        STRING_CONST_RE.findAll(text)
+            .filter { SecretScan.isSecretKey(it.groupValues[1]) && SecretScan.isLiteral(it.groupValues[2]) }
+            .mapTo(secretLiterals) { it.groupValues[2] }
+        val out = linkedMapOf<String, Any?>(
             "file" to ffile, "package" to pkg, "primary" to primary,
             "fqn" to (if (pkg.isNotEmpty()) "$pkg.$primary" else primary),
-            "types" to types, "beanNames" to beanNames, "interfaces" to interfaces, "roles" to roles,
+            // A list, not the set it is collected in: the record is read as JSON-shaped data downstream, where
+            // a list reader sees a Set as nothing — the overview said `implements []` for every delegate.
+            "types" to types, "beanNames" to beanNames, "interfaces" to interfaces.toList(), "roles" to roles,
             "isController" to isController, "isGlue" to interfaces.any { it in GLUE_INTERFACES },
             "endpoints" to endpoints, "methods" to methods, "deps" to deps, "botKey" to botKey,
             "vars" to (varWrites + varReads + varsUndecided).toSortedSet().toList(),
             "varWrites" to varWrites.toList(), "varReads" to varReads.toList(),
             "varsUndecided" to varsUndecided.toList(),
             "readsAllVariables" to JAVA_VARS_ALL_RE.containsMatchIn(text),
-            "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
+            "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.filter { it !in secretLiterals }.toCollection(LinkedHashSet()),
+            // What says a literal might name a model: the methods it is the first argument of, and whether a
+            // constant holds it or a comparison tests it. A log line, a map key or an annotation value that
+            // happens to equal a model key says nothing, and used to draw a (suspect) reference all the same.
+            "literalCalls" to STR_CTX_RE.findAll(text).filter { it.groupValues[2] !in secretLiterals }
+                .groupBy({ it.groupValues[2] }, { it.groupValues[1] })
+                .mapValues { (_, v) -> v.toSortedSet().toList() },
+            "literalFacts" to (STRING_CONST_RE.findAll(text).map { it.groupValues[2] } +
+                EQUALS_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } } +
+                CASE_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } }).filter { it !in secretLiterals }.toSortedSet().toList(),
             "keyedStrings" to keyedStrings,
-            "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
-            "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
+            "keyedKinds" to keyedKinds,
+            "keyedIdents" to keyedIdents,
+            "keyedIdentKinds" to keyedIdentKinds,
+            "topics" to (TOPIC_CALL_RE.findAll(text) + WORKER_ANN_RE.findAll(text)).map { it.groupValues[1] }.toSortedSet().toList(),
+            "line" to (typeLines[primary] ?: text.indexOf("class ").let { if (it != -1) lineOf(it) else 1 }),
         )
+        // The other types the file declares, by line, and the beans whose stereotype sits on one of them —
+        // what lets a reference land on the type it names. Only what differs from the primary type is
+        // carried: the record is part of graph.json, and a one-type file (nearly every Java file) says
+        // nothing new.
+        if (typeLines.keys.any { it != primary }) out["typeLines"] = typeLines
+        if (nestedIn.isNotEmpty()) out["nestedIn"] = nestedIn
+        beanOwners.filterValues { it != primary }.takeIf { it.isNotEmpty() }?.let { out["beanOwners"] = it }
+        // bean name → line of its @Bean factory method, so a reference lands on the method, not the class
+        if (beanMethods.isNotEmpty()) out["beanMethods"] = beanMethods
+        if (beanTypes.isNotEmpty()) out["beanTypes"] = beanTypes
+        if (imports.isNotEmpty()) out["imports"] = imports
+        if (wildcardImports.isNotEmpty()) out["wildcardImports"] = wildcardImports
+        if (staticImports.isNotEmpty()) out["staticImports"] = staticImports
+        return out
     }
 
     /** A `static final String NAME = "value"` constant declared in the source (name → value). */
@@ -226,10 +896,10 @@ object JavaParser {
         return out
     }
 
-    /** Flowable data-object operation invocations: each `.operation("op")` paired with the nearest
-     *  preceding `.definitionKey(expr)` in the same statement (no `;` between). `def` is kept raw — a
-     *  quoted literal or a constant reference (e.g. a generated model-keys class field) — for the caller
-     *  to resolve to a model key. Returns `{def, op}` maps. */
+    /** Flowable data-object operation invocations: each `.operation(op)` paired with the nearest
+     *  preceding `.definitionKey(expr)` in the same statement (no `;` between). `def` and `op` are kept
+     *  raw — a quoted literal or a constant reference (e.g. a generated model-keys class field) — for the
+     *  caller to resolve. Returns `{def, op}` maps. */
     fun dataObjectOpCalls(rawText: String): List<Map<String, String>> {
         val text = blankComments(rawText)
         val defKeys = DEFINITION_KEY_RE.findAll(text).map { it.range.first to it.groupValues[1].trim() }.toList()
@@ -242,41 +912,180 @@ object JavaParser {
         return out
     }
 
-    private val SCHEME_HOST_RE = Regex("""^[a-z]+://[^/]+""")
-    private val PLACEHOLDER_RE = Regex("""[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}""")
-
-    private fun normPath(url: String?): List<String> {
-        var p = SCHEME_HOST_RE.replace(url ?: "", "")
-        p = p.substringBefore("?")
-        p = PLACEHOLDER_RE.replace(p, "*")
-        return p.lowercase().split("/").filter { it.isNotEmpty() }
+    /**
+     * Service-registry invocations in the source: every `.serviceKey(expr)` and `.operationKey(expr)`
+     * argument, raw — a quoted literal or a constant, for the caller to resolve. Per class, not per
+     * statement: a helper usually builds the invocation with its service key and a lambda elsewhere in the
+     * class names the operation — `request(SERVICE_KEY, b -> b.operationKey("getContact"))`.
+     */
+    fun serviceInvocations(rawText: String): Pair<List<String>, List<String>> {
+        val text = blankComments(rawText)
+        val keys = SERVICE_KEY_CALL_RE.findAll(text).map { it.groupValues[1].trim() }.distinct().toList()
+        val ops = OPERATION_KEY_CALL_RE.findAll(text).map { it.groupValues[1] }.distinct().toList()
+        return keys to ops
     }
 
-    /** REST endpoints whose path matches [url]. A segment-suffix match (placeholders `*` match any
-     *  segment) is a confident hit; the legacy shared-last-literal-segment rule still matches but is
-     *  annotated `loose=true` so the graph flags the edge as suspect instead of presenting it clean. */
-    fun matchRest(url: String?, codeEndpoints: List<Map<String, Any?>>): List<Map<String, Any?>> {
-        val target = normPath(url)
-        if (target.isEmpty()) return emptyList()
-        fun segsMatch(ep: List<String>, tail: List<String>): Boolean =
-            ep.size == tail.size && ep.indices.all { ep[it] == "*" || tail[it] == "*" || ep[it] == tail[it] }
-        val matches = ArrayList<Map<String, Any?>>()
-        for (ep in codeEndpoints) {
-            val epSegs = normPath(ep["path"] as? String)
-            if (epSegs.isEmpty()) continue
-            val suffix = target.size >= epSegs.size &&
-                segsMatch(epSegs, target.subList(target.size - epSegs.size, target.size))
-            // A model URL that begins with a variable segment (`${base}`/`{{base}}` → "*") may stand for
-            // a multi-segment base, so the endpoint's trailing segments still identify it even when the
-            // model path is shorter than the endpoint path (the leading "*" absorbs the extra base segs).
-            val varBase = !suffix && target.first() == "*" && target.size in 2..epSegs.size &&
-                segsMatch(epSegs.subList(epSegs.size - (target.size - 1), epSegs.size), target.subList(1, target.size))
-            val lits = epSegs.filter { it != "*" }
+    private val SCHEME_HOST_RE = Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*://([^/?#]*)""")
+    private val PLACEHOLDER_RE = Regex("""[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}""")
+    private val PLATFORM_ENDPOINT_RE = Regex("""\{\{\s*endpoints\.([A-Za-z0-9_$]+)\s*\}\}/*""")
+    private val LOCAL_HOST_RE = Regex("""(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1])(?::\d+)?""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The REST roots Flowable Work's frontend resolves `{{endpoints.<id>}}` to — `defaultWorkEndpoints` in
+     * the platform's `flowable-work-api/endpoints.ts`. A model URL built on one of them calls Flowable's own
+     * API (`{{endpoints.idm}}/users/{{$id}}` is `idm-api/users/…`), never a controller of the project, and
+     * resolving the placeholder is what lets the matcher see that. Read as a mere placeholder it matched
+     * any project endpoint ending in a variable — 24 forms of one real project "called" five unrelated
+     * controllers through `{{endpoints.idm}}/users?…`.
+     */
+    private val PLATFORM_ENDPOINTS = mapOf(
+        "action" to "action-api", "engage" to "engage-api", "form" to "form-api", "idm" to "idm-api",
+        "report" to "platform-api/reports", "cmmn" to "cmmn-api", "core" to "core-api", "license" to "core-api",
+        "process" to "process-api", "platform" to "platform-api", "agent" to "agent-api",
+        "design" to "platform-design-api", "login" to "auth/login", "logout" to "auth/logout", "auth" to "auth",
+        "content" to "content-api", "dmn" to "dmn-api", "dataobject" to "dataobject-api", "audit" to "platform-api",
+        "actuator" to "actuator", "template" to "template-api", "tutorial" to "tutorial-api", "inspect" to "inspect-api",
+    )
+
+    /** The first path segment of every Flowable REST API — a context path never looks like one. */
+    private val PLATFORM_ROOTS = PLATFORM_ENDPOINTS.values.map { it.substringBefore('/') }.toSet() + "hub-api"
+
+    /**
+     * What a model URL calls, as path segments — a literal, or `null` for a segment a placeholder fills —
+     * plus whether a context path may precede the endpoint's own path. `null` when the URL cannot be shown
+     * to reach this project: a client-side route (`#/…`), an absolute URL on a host other than the local
+     * one, or a URL built on a base nothing names (`${crmUrl}/…`, a custom `{{endpoints.x}}`, a placeholder
+     * host). Every such base on the real projects was another system; matched by its path it looked like a
+     * call of the project's own endpoint of that shape. `{{endpoints.baseUrl}}` is the application itself.
+     */
+    private class CallPath(val segs: List<String?>, val prefixAllowed: Boolean)
+
+    /** What a placeholder becomes before the URL is cut up: one mark, so a `?` or `#` inside `{{c ? a : b}}`
+     *  is not taken for the query string or the fragment. */
+    private const val PH = "\u0002"
+
+    private fun callPath(url: String?): CallPath? {
+        var u = url?.trim().orEmpty()
+        if (u.isEmpty()) return null
+        u = PLATFORM_ENDPOINT_RE.replace(u) { m ->
+            val id = m.groupValues[1]
             when {
-                suffix || varBase -> matches.add(ep)
-                lits.isNotEmpty() && lits.last() in target -> matches.add(ep + mapOf("loose" to true))
+                id == "baseUrl" -> ""
+                id in PLATFORM_ENDPOINTS -> PLATFORM_ENDPOINTS.getValue(id) + "/"
+                else -> m.value
             }
         }
-        return matches
+        u = PLACEHOLDER_RE.replace(u, PH)
+        if (u.startsWith("#") || "#/" in u) return null
+        var prefixAllowed = u.startsWith("/")
+        SCHEME_HOST_RE.find(u)?.let { m ->
+            if (!LOCAL_HOST_RE.matches(m.groupValues[1])) return null
+            u = u.substring(m.range.last + 1)
+            prefixAllowed = true
+        }
+        u = u.substringBefore('?').substringBefore('#')
+        val raw = u.split('/').filter { it.isNotEmpty() }
+        if (raw.firstOrNull()?.contains(PH) == true) return null
+        return CallPath(raw.map { if (PH in it) null else it }, prefixAllowed)
     }
+
+    /** True when [url] calls Flowable's own REST API: a platform `{{endpoints.<id>}}` base, or a URL whose
+     *  path starts at one of its roots (`platform-api/…`). A custom `{{endpoints.x}}` is not one of them. */
+    fun callsFlowableApi(url: String?): Boolean =
+        callPath(url)?.segs?.firstOrNull()?.let { it in PLATFORM_ROOTS } == true
+
+    /** Where a model's REST call goes, as [callTarget] reads it. */
+    enum class CallTarget {
+        /** The application itself: a relative or rooted path, `{{endpoints.baseUrl}}`, the local host. */
+        PROJECT,
+        /** Flowable's own REST API ([callsFlowableApi]). */
+        FLOWABLE_API,
+        /** Anything else: a client-side route, another host, a base nothing in the project names. */
+        ELSEWHERE,
+    }
+
+    /**
+     * Which of the three a URL calls — by the same rule [matchRest] applies, so a report that says "no
+     * endpoint of this project serves it" says it only where the graph would have looked for one. Only a
+     * [CallTarget.PROJECT] call that matches nothing can be a missing controller: Flowable's API and other
+     * systems never had one here to find.
+     */
+    fun callTarget(url: String?): CallTarget = when {
+        callsFlowableApi(url) -> CallTarget.FLOWABLE_API
+        callPath(url) == null -> CallTarget.ELSEWHERE
+        else -> CallTarget.PROJECT
+    }
+
+    /** An endpoint path as segments, `null` for a path variable (`{id}`, `{id:\d+}`, a `*` pattern). */
+    private fun endpointPath(path: String?): List<String?> =
+        path.orEmpty().substringBefore('?').split('/').filter { it.isNotEmpty() }
+            .map { if ('{' in it || '*' in it) null else it }
+
+    /**
+     * REST endpoints whose path matches [url].
+     *
+     * A call reaches an endpoint when the endpoint's path is the tail of the call's path, segment by
+     * segment: an endpoint literal needs the same literal in the call, an endpoint path variable takes any
+     * one segment. What went before the tail is a context path — allowed only where the URL is rooted or
+     * absolute on the local host, never a relative URL (`api/x` is resolved against the application
+     * itself), and never one of Flowable's own REST roots (`platform-api/audit-trail` is not the project's
+     * `/audit-trail`). At least one literal has to agree, so a URL that is nothing but placeholders matches
+     * nothing, and a URL on an unnamed base matches nothing at all (see [callPath]).
+     *
+     * A placeholder in the call is not evidence for an endpoint literal: `/api/orders/{{n}}` is not
+     * `POST /api/orders/archive`, though `n` might be `archive` at run time. Treating it as a wildcard
+     * turned `{{base}}/{{x}}` into a clean match of every endpoint with two segments, and a `#/…/case/{{id}}`
+     * route into a call of every one-segment endpoint. The shared-last-literal-segment fallback is gone for
+     * the same reason: on the real projects it only ever linked a call to the wrong endpoint.
+     *
+     * Among the hits, a handler whose path spells out more of the URL's literal segments wins, as it does
+     * in Spring's routing: `/orders/archive` is served by `POST /orders/archive`, not by `GET /orders/{id}`
+     * whose variable would also take `archive`.
+     *
+     * With a [method] the caller states for certain, a handler for another verb is not a match. A path hit
+     * with the wrong verb is dropped when a handler with the right verb also matches, and otherwise kept
+     * with `loose=true, methodMismatch=true` — the call does reach that path, and a PUT against a POST-only
+     * handler is a defect worth seeing. The method is unknown when it is null, blank, `?` or an expression;
+     * a handler mapped to `ANY` takes every verb.
+     */
+    fun matchRest(url: String?, codeEndpoints: List<Map<String, Any?>>, method: String? = null): List<Map<String, Any?>> {
+        val call = callPath(url) ?: return emptyList()
+        if (call.segs.isEmpty()) return emptyList()
+        val hits = ArrayList<Pair<Map<String, Any?>, Int>>()
+        for (ep in codeEndpoints) {
+            // a path a constant or a property decides that nothing in the project resolves is unknown
+            if (ep["pathUnresolved"] == true) continue
+            val e = endpointPath(ep["path"] as? String)
+            if (e.isEmpty() || e.size > call.segs.size) continue
+            val prefix = call.segs.subList(0, call.segs.size - e.size)
+            if (prefix.isNotEmpty() && (!call.prefixAllowed || prefix.any { it == null || it in PLATFORM_ROOTS })) continue
+            val tail = call.segs.subList(call.segs.size - e.size, call.segs.size)
+            var literals = 0
+            val fits = e.indices.all { i ->
+                val want = e[i]
+                when {
+                    want == null -> true
+                    tail[i] == want -> { literals++; true }
+                    else -> false
+                }
+            }
+            if (fits && literals > 0) hits.add(ep to literals)
+        }
+        val verb = knownVerb(method)
+        fun fits(ep: Map<String, Any?>): Boolean { val hv = knownVerb(ep["http"] as? String); return verb == null || hv == null || hv == verb }
+        // the verb first — a GET call is not answered by the POST handler that happens to spell more of the
+        // path — then, among the handlers for the right verb, the most literal path
+        val right = hits.filter { fits(it.first) }
+        val best = right.maxOfOrNull { it.second }
+        if (right.isNotEmpty()) return right.filter { it.second == best }.map { it.first }
+        val bestOther = hits.maxOfOrNull { it.second }
+        return hits.filter { it.second == bestOther }.map { it.first + mapOf("loose" to true, "methodMismatch" to true) }
+    }
+
+    /** An HTTP verb stated for certain, upper-cased — null for none, `?`, `ANY` or an expression. */
+    private fun knownVerb(m: String?): String? {
+        val v = m?.trim()?.uppercase() ?: return null
+        return if (VERB_RE.matches(v) && v != "ANY") v else null
+    }
+    private val VERB_RE = Regex("[A-Z]+")
 }

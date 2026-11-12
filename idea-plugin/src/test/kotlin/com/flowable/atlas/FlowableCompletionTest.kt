@@ -335,6 +335,30 @@ class FlowableCompletionTest : BasePlatformTestCase() {
         )
     }
 
+    fun testServiceDataIsCheckedAgainstTheOperationsInputs() {
+        myFixture.addFileToProject(
+            "com/flowable/serviceregistry/api/runtime/ServiceInvocationBuilder.java",
+            "package com.flowable.serviceregistry.api.runtime; " +
+                "public interface ServiceInvocationBuilder { " +
+                "ServiceInvocationBuilder serviceKey(String key); " +
+                "ServiceInvocationBuilder operationKey(String key); " +
+                "ServiceInvocationBuilder serviceData(String name, Object value); }",
+        )
+        myFixture.addFileToProject(
+            "models/service-DEMO-S011.service",
+            """{"key":"DEMO-S011","operations":[{"key":"getContact","inputParameters":[{"name":"emailAddress","type":"string"}]}]}""",
+        )
+        myFixture.enableInspections(FlowableValueFieldInspection::class.java)
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(com.flowable.serviceregistry.api.runtime.ServiceInvocationBuilder b) { " +
+                "b.serviceKey(\"DEMO-S011\").operationKey(\"getContact\").serviceData(\"emailAddress\", \"\").serviceData(\"email\", \"\"); } }",
+        )
+        val warnings = myFixture.doHighlighting().mapNotNull { it.description }.filter { it.contains("is not an input value") }
+        assertEquals("only the misspelled input is flagged: $warnings", 1, warnings.size)
+        assertTrue(warnings.single().contains("email"))
+    }
+
     fun testValueFieldInspectionAcceptsValidField() {
         addFlowableStubs()
         myFixture.addFileToProject(

@@ -9,18 +9,22 @@ click through and query. An IntelliJ IDEA plugin and a command-line tool, sharin
 ./atlas /path/to/your-flowable-project
 ```
 
-That writes five artifacts to `./atlas-output/<project>/` and opens the explorer in your browser:
+That writes six artifacts to `atlas-output/<project>/` beside the launcher — seven for a project with database tables — and opens the explorer in your browser:
 
 | Artifact | What it is |
 |---|---|
 | `<project>.explorer.html` | A self-contained, offline, interactive explorer. Open by double-click; click through every relationship in both directions. |
+| `<project>.erd.html` | The ER diagram designer, for a project with tables: drag them onto a canvas, search every column, relate them (a count at each end), add databases and tables of your own by hand, gather them in named frames, arrange them, export the picture. Small whatever the project's size (`--erd` writes it alone). |
 | `<project>.summary.md` | A compact (~few KB) LLM-first overview: apps, inventory, entry points, integrations, hotspots, health. |
 | `<project>.overview.md` | The full human report — every model in execution order, the access map, the data layer, every finding with `file:line`. |
 | `<project>.graph.json` | The traversable model↔code graph, for agents to **query** rather than read: every node carries `usedBy`, and a `_schema` key documents the shape and ships `jq` recipes. |
-| `<project>.CLAUDE.md` | Drop-in context for AI agents — a Flowable primer plus this project's discovered facts. Copy it to your repo root as `CLAUDE.md`. |
+| `<project>.CLAUDE.md` | Context for AI agents: a Flowable primer, this project's conventions, wiring examples and known issues, and the complete expression/script catalogs. Copy it to your repo root as `CLAUDE.md`, or write the output into the project (`./atlas <project> <project>/atlas-output`, or the IDE's default output folder) and import it from your own `CLAUDE.md` with the `@atlas-output/<project>.CLAUDE.md` line its header prints. |
+| `<project>.playwright.md` + `<project>.playwright-map.md` | The agent's guide to driving **Flowable Work** in a browser (Playwright MCP or a script): how Work's UI behaves, from 3.x to 2026.x, how to read a case's state over REST, and an index of this project's cases and processes with their start links. The project map beside it holds the details — each case's stage bar in Work's order, what starts each stage, the tasks, required fields, outcomes and button conditions. Doubles as a Claude Code skill; `--playwright` writes it alone, as one file. |
+| `flow.json` | With `--flow`, on its own: the storylines the explorer shows — each process and case as nested steps, a gateway holding its branches, a called process opened one level deep — as JSON for a script or an agent. |
+| `<project>.changes.md` | With `--baseline <base checkout or archive>`: what a change did — the models added, removed and changed, with the tasks, flows and fields that came, went or changed in each, the references, and the findings it brought and resolved. For reviewing a pull request whose models sit in a binary `.zip`; `--changes` writes it alone. |
 
 It resolves the relationships a Flowable repository does not state: app → models, process → the case,
-decision or form it calls, `${bean.method()}` → the **Java class and method** with `file:line`, form →
+decision or form it calls, `${bean.method()}` → the **Java or Kotlin class and method** with `file:line` (a `@Bean` factory method included), form →
 REST endpoint → controller, action → bot, data object → service → Liquibase table, and who can start
 what. Whatever cannot be resolved is listed separately, so a real gap stands out.
 
@@ -34,11 +38,16 @@ Both artifacts are attached to every
   `https://github.com/kle-dev/flw-atlas/releases/latest/download/updatePlugins.xml`, then install
   **Flowable Atlas** from the *Marketplace* tab. The URL always resolves to the newest release.
 - **IntelliJ plugin, by hand** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins →
-  ⚙ → Install Plugin from Disk…* and restart. Installs on IDEA 2026.1+, verified on 2026.2. See
+  ⚙ → Install Plugin from Disk…* and restart. Needs IDEA 2026.2+, which is also what it is verified on. See
   [`idea-plugin/dist/README.md`](idea-plugin/dist/README.md).
-- **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
-  `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See
-  [`lib/README.md`](lib/README.md).
+- **CLI** — download `atlas` and `cli-<version>-all.jar` into one folder and run `./atlas <project>` (in
+  this clone, put the jar in `lib/`), or `java -jar cli-<version>-all.jar <project> --all`, which writes to
+  `./atlas-output/<project>/` as well (`-o <dir>` for another folder). Needs only a JRE 21+. See
+  [`lib/README.md`](lib/README.md). In CI, add `--fail-on error` and the job fails on any error-level
+  finding while the artifacts are still written — or `--fail-on defects` to fail on everything that is
+  wrong now and stay green on advice; `--baseline <base checkout>` narrows the gate to what a change adds
+  and writes what it changed beside the artifacts, and `--junit <file>` writes the findings as a JUnit
+  report for the CI system's test view.
 
 `SHA256SUMS.txt` in each release carries the checksums; releases are signed when a signing key is
 configured. Building from source instead: `./gradlew :idea-plugin:buildPlugin :cli:shadowJar`.
@@ -56,30 +65,23 @@ explorer you can click through:
 | [The Atlas explorer](https://kle-dev.github.io/flw-atlas/explorer/) | Every view, the search grammar, the keyboard map |
 | [Generated artifacts](https://kle-dev.github.io/flw-atlas/artifacts/) | What each file is for, and `jq` recipes for the graph |
 | [CLI reference](https://kle-dev.github.io/flw-atlas/cli/) | Every flag, the launcher, exit codes |
-| [Health checks](https://kle-dev.github.io/flw-atlas/checks/) | All thirteen, and what each one detects |
-| [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, and which to use when |
+| [Health checks](https://kle-dev.github.io/flw-atlas/checks/) | All twenty-six, and what each one detects |
+| [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, which to use when, the guide for driving Flowable Work, and what a change did to the models for reviewing it |
 | [Development](https://kle-dev.github.io/flw-atlas/develop/) | Build, tests, goldens, the compatibility gate, CI |
 
 ## Development
-
-The short version — the [development page](https://kle-dev.github.io/flw-atlas/develop/) has the rest.
 
 A Gradle multi-module JVM project: `:core` (the pure-Kotlin engine), `:cli` (the fat-jar `./atlas`
 runs) and `:idea-plugin` (which consumes `:core` in-process). Needs a **JDK 21+** to build.
 
 ```bash
-./gradlew build                      # goldens, unit tests, CLI contracts, browser tests, the plugin ZIP
-./gradlew :core:updateGoldens        # re-baseline the goldens and every generated file, then review the diff
+./gradlew build                      # goldens, unit tests, CLI contracts, browser tests, site check, plugin ZIP
 ./gradlew :idea-plugin:verifyPlugin  # the compatibility gate — run it before every release
-./gradlew site                       # build the documentation site into build/site
 ```
 
-- The explorer frontend is `core/src/main/resources/frontend/explorer.{html,css,js}` — plain files
-  read at render time and inlined into the generated page.
-- `CHANGELOG.md` is the source of truth for the release history; the plugin descriptor's
-  `<change-notes>` is generated from it by `:core:updateGoldens`.
-- The documentation site lives in `site/`. Nothing it generates is committed — the screenshots and the
-  live demo are built on every deploy by `.github/workflows/pages.yml`.
+The [development page](https://kle-dev.github.io/flw-atlas/develop/) covers the modules, the goldens,
+the browser tests, the site build and CI; [`AGENTS.md`](AGENTS.md) is the rule list every change has to
+satisfy, and [`CONTRIBUTING.md`](CONTRIBUTING.md) the contribution policy.
 
 ## Requirements
 
@@ -98,3 +100,7 @@ Copyright (c) 2026 Flowable AG. All rights reserved.
 Proprietary — source available, **no license granted**. The source is published for visibility and for
 use by Flowable AG and its authorized users; publication grants no right to use, copy, modify or
 redistribute it. See [LICENSE](LICENSE) for the full terms and for licensing enquiries.
+
+The bundled third-party components — the Geist font, the Lucide icons, the BPMN, CMMN and DMN schemas
+and, in the CLI jar, the Kotlin standard library — are listed with their licences in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

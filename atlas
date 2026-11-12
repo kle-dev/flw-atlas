@@ -4,14 +4,19 @@
 #
 #   ./atlas <project-dir-or-zip> [output-dir]
 #
-# Analyzes any Flowable project (models + Java) and writes 5 artifacts into the
-# output dir (default: ./atlas-output/<project>/), then opens the HTML explorer.
+# Analyzes any Flowable project (models + Java) and writes 6 artifacts into the
+# output dir (default: atlas-output/<project>/ beside this script, not inside the
+# analysed project), then opens the HTML explorer.
 #
 #   <project>.explorer.html   interactive, human-friendly explorer (opens automatically)
 #   <project>.summary.md      compact LLM-first overview (~few KB)
 #   <project>.overview.md     full human/LLM Markdown report
 #   <project>.graph.json      full traversable model+code graph
 #   <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts)
+#   <project>.playwright.md   AI-agent guide to driving Flowable Work in a browser (Playwright)
+#   <project>.playwright-map.md   …and its project map: stages, tasks, forms (read on demand)
+#   <project>.erd.html        ER diagram designer (projects with tables)
+#   <project>.diagrams/       one SVG per model that can be drawn
 #
 # This runs the standalone Kotlin CLI fat-jar (the successor to flowable_atlas.py).
 # Pass any extra flags after the paths to override (e.g. --no-open, see below).
@@ -32,17 +37,22 @@ Examples:
   ./atlas ~/projects/my-flowable-app ./reports
   ./atlas /path/to/app.zip --no-open
 
-Outputs (in the output dir, default ./atlas-output/<project>/):
+Outputs (in the output dir; default atlas-output/<project>/ beside this launcher):
   <project>.explorer.html   interactive explorer (opens automatically)
   <project>.summary.md      compact LLM overview
   <project>.overview.md     full Markdown report
   <project>.graph.json      traversable graph to query (minified; --pretty to indent)
   <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts + findings)
+  <project>.playwright.md   AI-agent guide to driving Flowable Work with Playwright (rules, index)
+  <project>.playwright-map.md   its project map: each case's stages, tasks, buttons and forms
+  <project>.erd.html        ER diagram designer (projects with tables)
+  <project>.diagrams/       one SVG per model that can be drawn
 
 Advanced (run the fat-jar directly for single artifacts):
   $JAVA -jar <cli-all.jar> <project> --summary --stdout
   $JAVA -jar <cli-all.jar> <project> --json -o graph.json
   $JAVA -jar <cli-all.jar> <project> --claude        # writes CLAUDE.md
+  $JAVA -jar <cli-all.jar> <project> --playwright --stdout   # the Work browser guide alone, map inline
   $JAVA -jar <cli-all.jar> <project> --slice process:myProcess --stdout   # one node, both directions
   $JAVA -jar <cli-all.jar> --claude-template         # the generic Flowable primer, no project needed
 EOF
@@ -54,18 +64,30 @@ if ! command -v "$JAVA" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Locate the self-contained Shadow fat-jar. Search order lets an offline/foreign machine run Atlas
-# with just Java 21 + a copied jar (no Gradle/Maven/network): an explicit $ATLAS_JAR, a jar shipped
-# next to this script or under ./lib/, then the local Gradle build output.
+# Locate the self-contained Shadow fat-jar, so an offline/foreign machine runs Atlas with just Java 21
+# + a copied jar (no Gradle/Maven/network). An explicit $ATLAS_JAR wins; otherwise the NEWEST *-all.jar
+# by modification time across three places — beside this script (a launcher downloaded from a release,
+# with its jar), lib/ and the local Gradle build output. Deliberately one race rather than an ordered
+# search: in a clone that has both, a fresh `./gradlew :cli:shadowJar` must beat an older download in lib/.
 find_jar() {
   if [[ -n "${ATLAS_JAR:-}" && -e "${ATLAS_JAR:-}" ]]; then echo "$ATLAS_JAR"; return; fi
   ls -t "$SCRIPT_DIR"/*-all.jar "$SCRIPT_DIR"/lib/*-all.jar "$SCRIPT_DIR"/cli/build/libs/*-all.jar 2>/dev/null | head -n 1
 }
 JAR="$(find_jar || true)"
 if [[ -z "${JAR:-}" ]]; then
-  # No jar found: build it (convenient on a dev machine with network). Set ATLAS_NO_BUILD=1 to skip
-  # the build on a locked-down/offline machine, where `./gradlew` would otherwise hang trying to
-  # reach Maven Central / the Gradle Plugin Portal. There, download the jar from the GitHub Releases
+  # A launcher downloaded from a release has no Gradle build beside it to fall back on, so the build
+  # below could only fail on a missing ./gradlew — say what to download instead. Checked before
+  # ATLAS_NO_BUILD, whose message sends a clone's user to lib/ and lib/README.md, neither of which a
+  # download has.
+  if [[ ! -x "$SCRIPT_DIR/gradlew" ]]; then
+    echo "error: no Atlas CLI jar found beside this launcher ($SCRIPT_DIR)." >&2
+    echo "  Download cli-<version>-all.jar from the GitHub Releases page into the same folder," >&2
+    echo "  or set ATLAS_JAR=/path/to/cli-all.jar." >&2
+    exit 1
+  fi
+  # In a clone with no jar: build it (convenient on a dev machine with network). Set ATLAS_NO_BUILD=1
+  # to skip the build on a locked-down/offline machine, where `./gradlew` would otherwise hang trying
+  # to reach Maven Central / the Gradle Plugin Portal. There, download the jar from the GitHub Releases
   # page into lib/ instead — it is no longer committed to the repository (see lib/README.md).
   if [[ "${ATLAS_NO_BUILD:-0}" == "1" ]]; then
     echo "error: no Atlas CLI jar found and ATLAS_NO_BUILD=1 is set." >&2
@@ -98,7 +120,15 @@ if [[ $# -ge 1 && "${1:0:1}" != "-" ]]; then
   OUTDIR="$1"; shift
 fi
 
-NAME="$(basename "${TARGET%/}")"; NAME="${NAME%.*}"
+# The name the jar gives the artifacts (Fmt.artifactName): the real directory's name — `.` and `..` name the
+# folder they are, not an empty name that put every such project into atlas-output/ itself — with its last
+# extension cut — as Python's splitext does it, leading dots are no extension (`.DEMO-solution` stays whole).
+# From the physical working directory, as the JVM resolves a relative path: inside a symlinked folder, `.` is
+# the real folder's name to the jar, not the link's.
+if [[ -d "$TARGET" ]]; then NAME="$(basename "$(CDPATH= cd -P . && CDPATH= cd -- "$TARGET" && pwd)")"; else NAME="$(basename "$TARGET")"; fi
+STEM="${NAME#"${NAME%%[!.]*}"}"   # the name without its leading dots
+if [[ "$STEM" == *.* ]]; then NAME="${NAME%.*}"; fi
+if [[ -z "$NAME" || "$NAME" == "/" ]]; then NAME=project; fi
 OUTDIR="${OUTDIR:-$SCRIPT_DIR/atlas-output/$NAME}"
 
 OPEN_FLAG="--open"

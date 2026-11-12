@@ -18,10 +18,11 @@
         deployment.</p>
 
         <p>Zero configuration: open a project that contains the Flowable models you exported from Design
-        (the app <code>.zip</code> / deployment <code>-bar</code>, holding
-        <code>.bpmn / .cmmn / .dmn / .form / .data / .service / …</code>) or the Flowable Design
-        <code>*-models</code> workspace, and start typing. The plugin indexes every model and puts that
-        knowledge to work across three areas.</p>
+        (the app <code>.zip</code> / deployment <code>.bar</code>, holding
+        <code>.bpmn / .cmmn / .dmn / .form / .data / .service / …</code>) and start typing. The plugin
+        indexes every model and puts that knowledge to work across four areas. A Flowable Design
+        <code>*-models</code> workspace checked in as loose JSON is one checkbox away, in
+        <i>Settings → Tools → Flowable Atlas</i>.</p>
 
         <h3>1 &middot; Model-key intelligence</h3>
         <ul>
@@ -39,21 +40,32 @@
           <li><b>More than keys</b> — completion for message &amp; signal names, process variables,
               task-definition keys and activity IDs, <b>scoped</b> to the
               <code>processDefinitionKey</code> / <code>caseDefinitionKey</code> in the same query chain
-              when present, so you see only that model's ids.</li>
+              when present, so you see only that model's ids. Ctrl/Cmd-click lands on the
+              <code>&lt;signal&gt;</code> or <code>&lt;userTask&gt;</code> that declares one, and a message or
+              signal no model declares is flagged — an unknown message throws at run time, an unknown signal
+              reaches nobody.</li>
           <li><b>Model &rarr; model references in BPMN/CMMN XML</b> — the keys that live inside the models
               themselves (<code>callActivity calledElement</code>, <code>flowable:formKey</code>,
               <code>decisionRef</code>, CMMN <code>caseRef</code> / <code>processRef</code>) get the same
               completion, Ctrl/Cmd-click navigation and broken-key inspection as Java call sites — so a
               <code>calledElement</code> pointing at a missing process is caught before deployment.</li>
-          <li><b>Broken-key inspection</b> — an unknown key (in Java or model XML) is flagged inline with a
+          <li><b>Broken-key inspection</b> — an unknown key (in Java, in model XML, or inside a JSON model:
+              a form's subform, a data object's backing service, an app's models) is flagged inline with a
               <i>"did you mean …?"</i> quick-fix to the closest real key.</li>
           <li><b>Navigation &amp; Find Usages</b> — Ctrl/Cmd-click a key literal to jump straight to the
               model file; hover for its type, name and location. Find Usages on a delegate class or an
               <code>${bean.method()}</code> expression lists the model files that reference it.</li>
+          <li><b>Gutter icons, both ways</b> — on a class or method a model uses, a bot class, a REST handler
+              a model calls, each listing those models; beside a model key, the model with its diagram.</li>
+          <li><b>Go to Model… and Find in Models…</b> — one search over every model key, the elements inside
+              the models and their full text, paths inside <code>.bar</code> / <code>.zip</code> archives
+              included; also the <i>Flowable Model</i> tab of Search Everywhere.</li>
           <li><b>Code generation</b> — generate a typed Java constants class
               (<code>FlowableModelKeys.Process.ORDER_FULFILMENT</code>, model name in Javadoc) that stays
-              in sync as models are added, renamed or removed; or, with Alt/Option-Enter on a data-object
-              <code>definitionKey("…")</code>, a typed Java bean built from the model's field mappings.</li>
+              in sync as models are added, renamed or removed; typed Java DTOs from one data object
+              (Alt/Option-Enter on its <code>definitionKey("…")</code>) or from whole apps; and Liquibase
+              changelogs from a data object or from the apps, with the plan shown before anything is
+              written.</li>
           <li><b>Liquibase aware</b> — inside a changelog it completes <code>&lt;column&gt;</code> names
               and <code>tableName</code> from the backing service model, and flags columns that no
               backing Flowable model defines.</li>
@@ -78,40 +90,82 @@
               bundled in every IDEA; JavaScript lights up on Ultimate. JUEL or unknown script formats
               keep the plain expression injection. Atlas additionally runs its own dependency-free
               structural script check (unterminated strings/comments, unbalanced brackets,
-              <code>scriptFormat</code> typos) in the CLI and the explorer's Checks tab.</li>
-          <li><b>Expression Playground</b> (the <i>Flowable Expressions</i> tool window) — type an
+              <code>scriptFormat</code> typos) in the CLI and the explorer's Checks page.</li>
+          <li><b>Flowable environments</b> — define your DEV/QA/UAT/PROD servers once for the whole IDE
+              instead of once per repository, and pick them from a list. Each environment holds any of a
+              Flowable Design connection, a Flowable Work connection and the Flowable Control and Hub
+              addresses, which Atlas only opens in a browser (Tools → Flowable Atlas → <i>Open Environment in
+              Browser</i>); the Design pull and the
+              Atlas Playground point independently, so running against QA while models still come from
+              DEV1 is an ordinary way to work. Mark an environment <i>Protected</i> and Atlas asks before
+              pulling from it or evaluating against it. Passwords and tokens stay in the IDE password
+              safe.</li>
+          <li><b>Atlas Playground</b> (a tool window) — type an
               expression, pick backend or frontend, and get instant validation and completion; scope
               completion to one model; evaluate a frontend expression live against a pasted JSON payload;
-              or evaluate a backend expression against a running app through the Flowable Inspect REST API
-              (connection auto-detected from the project's Spring configuration).</li>
+              or evaluate a backend expression against a running app through the Flowable Inspect REST API.
+              Which app it runs against is one of your <b>environments</b>, and the fastest way to switch is
+              to paste a Work URL: the environment, the scope and the instance id all fill in from the
+              link.</li>
           <li><b>Script Playground</b> (the <i>Scripts</i> tab of the same tool window) — paste or
               write a Groovy/JavaScript/Python script: the IDE's real language editing (completion,
               coloring) where the language plugin is available, live structural validation with
               squiggles and clickable problem rows (the same checks the CLI and the explorer's Checks
-              tab run), the scope variables the script touches as chips, and a picker that loads any
-              script task / listener / action-bot script straight from the project's models.</li>
+              page runs), the scope variables the script touches as chips, a picker that loads any
+              script task / listener / action-bot script straight from the project's models, and a
+              library of worked examples — a complete, commented script for every context and
+              language, to start from rather than from an empty editor.</li>
         </ul>
 
         <h3>3 &middot; Atlas explorer &amp; hub</h3>
         <ul>
           <li><b>Atlas Hub</b> — a tool window (right stripe) that is the plugin's control center:
-              model-index status with per-type counts and one-click rebuild, every generated explorer
-              page (double-click to open), and the Flowable Design sync state — kept up to date live.</li>
-          <li><b>Map your whole project</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer…</i>
+              which Flowable project Atlas is about, how many models it knows and how fresh that is, a
+              health row with the last analysis's defects and advice, one attention line when something
+              needs a hand, and four blocks — the generated explorer, the models opened last, the Flowable
+              Design pull, the playground's runtime — each with its actions beside its state, kept up to
+              date live.</li>
+          <li><b>Atlas Findings</b> — a tool window (bottom stripe) listing every defect of the project from
+              the same in-process analysis as the explorer, by check, advice on request, each with why it
+              matters and what to do; double-click opens the finding at its line, and <i>Accept…</i> records a
+              reason in the output folder's <code>waivers.json</code>, the file the explorer and the CLI's
+              gate read. Swing, so it works under Remote Development.</li>
+          <li><b>Map your whole project</b> — Tools → Flowable Atlas → Generate → <i>Atlas Explorer…</i>
               turns your models + Java + Liquibase into a single self-contained, offline, interactive
               HTML page. Save it into the project and open it in your browser or right inside the IDE
               (embedded viewer), then click through every relationship in both directions. In
-              Settings → Generation you pick exactly which artifacts are written — summary &amp;
-              overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents.
-              Generation runs entirely in-process — no external tools required — and honours the
-              project's expression allowlist.</li>
+              Settings → Tools → Flowable Atlas → Generation you pick exactly which artifacts are written — summary &amp;
+              overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents,
+              and a Playwright guide that lets an agent drive Flowable Work in a browser, with this
+              project's stage bars, tasks, required fields and button conditions. Generation runs
+              entirely in-process — no external tools required — and honours the project's expression
+              allowlist.</li>
+          <li><b>An ER diagram designer</b> — tick <i>ER diagram designer (HTML)</i> under Settings →
+              Tools → Flowable Atlas → Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
+              onto a canvas, show their columns and types, search across every table and column, draw named
+              1:1 / 1:n / n:m relations, colour them and let Atlas arrange them — for explaining a data model
+              to the business — with SVG/PNG export and a diagram file you can commit; Tools → Flowable Atlas opens it
+              in an editor tab in the IDE's theme. It carries only the tables, so it stays small however large
+              the project is.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
-              (switching restyles live) and carries a toolbar with <i>Regenerate</i>, <i>Reload</i>
-              and <i>Open in Browser</i>.</li>
+              (switching restyles live) and carries a toolbar with <i>Regenerate Atlas Explorer</i>,
+              <i>Reload</i>, <i>Open Atlas Playground</i> and <i>Open in Browser</i>.</li>
           <li><b>Reopen without regenerating</b> — <i>Open Atlas Explorer</i> (Atlas Hub, or Tools →
               Flowable Atlas) opens an already-generated <code>*.explorer.html</code> — including
               one written by the standalone <code>atlas</code> CLI into the configured output folder — as a
               center editor tab (like a DB table), so you never have to leave the IDE for a browser.</li>
+        </ul>
+
+        <h3>4 &middot; Models in the IDE</h3>
+        <ul>
+          <li><b>Text and picture side by side</b> — a process, case, decision, form or page opens with its
+              diagram, decision table or form wireframe beside the text; click an element in the picture to
+              land on its declaration.</li>
+          <li><b>App archives, opened</b> — a <code>.bar</code> or <code>.zip</code> expands in the Project view,
+              and every model inside it is indexed, navigable and searchable without unpacking.</li>
+          <li><b>Compare Model with Archive</b> — a model generated into the project folder against its
+              entry in the app export, side by side in the IDE's diff viewer, both laid out first so a
+              minified export still compares line by line.</li>
         </ul>
 
         <h3>How it feels</h3>
@@ -129,411 +183,420 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        <h3>0.14.0</h3>
+        <h3>0.31.2</h3>
         <ul>
-          <li><b>Atlas can update itself</b> — with no Marketplace listing, nothing ever told you a new
-              version existed; the ZIP you installed months ago just kept running, silently old. Every
-              release now publishes a custom plugin repository, so adding one URL under <i>Settings →
-              Plugins → ⚙ → Manage Plugin Repositories…</i> puts Atlas in the normal update flow — update
-              badge, one click, no download. The URL always resolves to the newest release, and the
-              compatibility range in it is read out of the built plugin rather than written by hand, so it
-              cannot advertise a version the IDE would then refuse to install.</li>
-          <li><b>Cancelling is no longer reported as a failure</b> — pressing <i>Cancel</i> on a running
-              Atlas action told you it had broken. Generating the explorer or the artifact set said
-              <i>"Failed to generate the Atlas explorer"</i>, a Design pull or connection test said
-              <i>"Design request failed"</i>, and an Inspect evaluation reported an empty error. All three
-              were the cancellation itself being caught and dressed up as an error. Eleven places that catch
-              broadly now let a cancellation through untouched. The same bug had a quieter form in the
-              editor: when a background scan was cancelled mid-inspection, the <i>implicit usage</i> check
-              read that as "no index", and a class referenced only from a model could be greyed out as
-              unused.</li>
-          <li><b>Find Usages no longer blocks typing</b> — invoking <i>Find Usages</i> on a delegate class
-              or bean while the model index was cold built the whole index while holding the read lock, so
-              every keystroke and file refresh queued behind a full model scan. The lookup now reads the PSI
-              under a short lock, builds the index outside it, and takes the lock again only to report
-              results. The index service had always split itself this way internally; this one caller had
-              been wrapping the whole thing back up again.</li>
-          <li><b>Stricter XML parsing</b> — model files are treated as untrusted input, and the parser said
-              so, but only <i>external</i> DTDs and entities were actually refused. An internal DTD subset
-              still expanded, which is the shape a decompression-bomb document takes. A <code>DOCTYPE</code>
-              is now rejected outright — real model files never carry one. The parser also gets one instance
-              per thread instead of one shared across the IDE's index scan and the CLI's walk, where neither
-              class is specified as thread-safe.</li>
-          <li><b>Releases can be signed</b> — Atlas installs by side-loading a ZIP, with no Marketplace
-              vouching for it, so nothing distinguished our build from a substituted one. Release artifacts
-              are now signed when a key is configured, and the signature is verified before publishing.
-              <code>SHA256SUMS.txt</code> alone could never establish this: whoever can replace the download
-              can replace its checksum line in the same breath.</li>
-          <li><b>Attribution for the embedded typeface</b> — the explorer HTML embeds the Geist font, which
-              ships under the SIL Open Font License and obliges its notice to travel with the font. Because
-              a generated <code>.explorer.html</code> is a redistribution with no repository attached, the
-              notice now lives inside the generated stylesheet as well as in the new
-              <code>THIRD-PARTY-NOTICES.md</code>. The repository <code>LICENSE</code> had also claimed that
-              everything in it was Flowable AG's property, which stopped being true the day the font was
-              embedded; it now carves out the two third-party components and says in plain words that the
-              source is readable, not usable.</li>
-          <li><b><code>SECURITY.md</code> and <code>CONTRIBUTING.md</code></b> — a security problem now has
-              somewhere to go that is not a public issue, together with the design decisions worth knowing
-              before reporting one (Atlas transmits nothing on its own, credentials live in the
-              PasswordSafe, generated artifacts contain your project's data by construction).
-              <code>CONTRIBUTING.md</code> is honest about what the licence permits and documents the build,
-              the release gates and which files are generated rather than written.</li>
-          <li><b>Placeholder keys everywhere</b> — every example model key, namespace and table name in the
-              code, tests and documentation is a <code>DEMO-*</code> placeholder. Some had been carried over
-              from a real project, and this repository is public.</li>
+          <li><b>A table grown over many changelog files is listed once.</b> Every changelog carried every
+              column of every table it touches, as the table stands once its run is over. An application
+              that grows a table by one changelog file per release therefore listed a table of four hundred
+              columns eighty times: the Liquibase part of <code>graph.json</code> and of the explorer's page
+              grew with files × columns, and on a real project it was 121 MB of a 172 MB
+              <code>graph.json</code>. A table that several changelogs of one run shape is now listed under
+              one of them — the one a service reads the table from, else the one that created it — and the
+              others name that changelog in <code>columnsIn</code>; in the explorer their pages link there.
+              Which file added a column is still on the column, and what a file did is in its change sets. A
+              project whose tables are each built by one changelog is unchanged. A <code>--changes</code>
+              run against a <code>graph.json</code> written by an earlier version lists the changelogs that
+              now point elsewhere as changed once.</li>
         </ul>
-        <h3>0.13.0</h3>
+        <h3>0.31.1</h3>
         <ul>
-          <li><b>Report a problem straight from the error dialog</b> — an Atlas exception used to reach the
-              IDE's generic "Report to JetBrains" dialog, which discards third-party plugin reports, so the
-              only way to hand one over was to dig <code>idea.log</code> out of <i>Help → Show Log</i>. The
-              dialog now offers <b>Report Flowable Atlas Problem…</b>: it assembles the environment (Atlas
-              and IDE version, verified platform range, OS, JRE) plus the stack traces, copies that to the
-              clipboard and opens the issue tracker. Nothing is transmitted by the plugin itself — a trace
-              can carry model keys and file paths from your project, so you see the text before it
-              moves.</li>
-          <li><b>Failures leave a trail</b> — around forty places swallowed their exception silently. The
-              worst were the credential stores: typing a Design or Inspect password and hitting <i>Apply</i>
-              could fail to write it to the PasswordSafe (locked keychain, "do not save passwords" mode) and
-              say nothing, so the next pull asked again for no visible reason. Those now log, as do a failed
-              Design pull, custom-function extraction (whose failure made the inspection flag your own
-              <code>flw.*</code> functions as unknown), sub-project detection and explorer discovery. Hot
-              paths log at debug or once, never per file, so <code>idea.log</code> stays readable.</li>
-          <li><b>The Atlas Hub states what was actually verified</b> — its footer reads <i>"verified on
-              2026.2"</i> and flags the running IDE whenever it falls outside that, in either direction.
-              Atlas installs on 2026.1 and later on purpose: it ships as a ZIP with no update channel, so a
-              tight <code>until-build</code> would make it vanish on the day you upgrade the IDE rather than
-              prompt for an update. That makes the range it <i>installs</i> on wider than the range it is
-              <i>verified</i> on, so a 2026.1 install is flagged as untested too — "it loads" is no longer
-              confused with "it was tested".</li>
-          <li><b>A CHANGELOG in the repository</b> — the release history only existed inside the plugin
-              descriptor, where the IDE's plugin manager shows it, leaving CLI users and anyone reading the
-              repo on GitHub with no way to see what changed. <code>CHANGELOG.md</code> is now generated
-              from these very notes, so the two cannot drift.</li>
-          <li><b>Removed a platform API scheduled for deletion</b> — three combo/list renderers used a
-              <code>SimpleListCellRenderer.create</code> overload JetBrains has marked for removal, which
-              would have broken the plugin on a future IDE. Replaced with the supported
-              <code>textListCellRenderer</code>. JetBrains' Plugin Verifier now reports no
-              scheduled-for-removal usage at all.</li>
-          <li><b>Fixed two gates that were not gating</b> — the tests that keep
-              <code>CLAUDE.template.md</code> and <code>CHANGELOG.md</code> in step with their generators
-              compare files outside the module's source sets, which Gradle could not see: hand-editing
-              either left <code>./gradlew build</code> green on exactly the drift those tests exist to
-              catch. They are declared inputs now, verified by injecting a change and watching the build
-              fail. Also added the repository's <code>LICENSE</code>.</li>
+          <li><b><code>graph.json</code> is smaller, and a nested form no longer grows with its depth.</b> A
+              key whose value would be <code>null</code> is not written: <code>.file</code> and
+              <code>.resultVariable</code> answer <code>null</code> either way, so a <code>jq</code> query
+              that tests a value reads the same, and one that tests <code>has(...)</code> should test the
+              value instead. A form field names only the nearest container that can hide, disable or ignore
+              it, as <code>containerGate</code>, and that container names the next one out;
+              <code>containerGates</code>, the list of every container around a field, is gone. And a model
+              that sits in the project twice, in an app archive and beside it, no longer gives its variables
+              each parameter mapping and script site twice. Together that is 3 to 6 % on the projects it was
+              measured on and a third on a form nested ten panels deep. A <code>--changes</code> run against
+              a <code>graph.json</code> written by 0.31.0 lists the forms with gated fields as changed once,
+              until the baseline is regenerated.</li>
+          <li><b>A case's plan tree says what each plan item waits for, by name.</b> A criterion read
+              <code>entry on planItemprocessTask14</code>: a plan item's id, which no line of the tree
+              carries, without the transition the sentry waits for. It now reads <code>entry on complete
+              "Assessment" if …</code>. A name that repeats in the case is said with its stage, or with its
+              id where a sibling carries the same one. The line says how its parts combine: the on-parts of
+              one sentry are joined by <i>and</i>, a second criterion of the same kind starts with
+              <i>or</i>. A sentry with neither an event nor a condition reads <i>at once</i> where it
+              printed a bare <code>entry</code>, <code>(triggerMode=onEvent)</code> marks a sentry whose
+              event and condition have to coincide, and an exit that completes its stage says so
+              (<code>exitEventType=forceComplete</code>). In the overview and in <code>--slice</code>.</li>
+          <li><b>A task says what it hands over and what it assigns.</b> A process or case task in a case
+              carries its in and out mappings, as a call activity does: <code>in(orderId→reviewedOrder)
+              in("express"→priority) out(total→total)</code>. A quoted source is a literal, a bare one a
+              variable, an expression is a code span, and a mapping without a source keeps its arrow where
+              it printed <code>None→target</code>. A task that initializes variables lists its assignments,
+              in a case and in a process: <code>set(approved=false) set(stage="Intake")</code>. Its line
+              used to end at the delegate expression every such task shares.</li>
+          <li><b>A variable's slice says who sets it, who reads it and what a mapping assigns.</b> <i>Used
+              by</i> listed a model that only ever sets the variable beside the ones that read it; each
+              model now carries <i>sets</i>, <i>reads</i> or <i>sets and reads</i>. <i>Set by</i> and
+              <i>Read by</i> show the other end of a mapping: the value an assignment sets, the variable of
+              the called model an out-parameter copies, the variable a read is copied to.</li>
+          <li><b>A form's slice lists every field, and a shared data source is listed once.</b> The overview
+              stops at 40 fields and points at the graph; a slice is the page of that one form and sent its
+              reader there for the last few. Nine selects on one URL were nine identical lines and are one,
+              with <code>×9</code>.</li>
+          <li><b>The generated <code>CLAUDE.md</code> offers the slice for every kind of node.</b> It showed
+              <code>--slice process:&lt;key&gt;</code> alone, so an agent given a form, a case or a Java
+              class had to guess that the slice takes it, and one asked about a variable read the graph
+              instead. The step names <code>case:</code>, <code>form:</code>, <code>variable:</code> and
+              <code>java:</code> ids, and says how to take one step, plan item or field out of a large
+              slice: its line is complete in itself, so <code>| grep -i '&lt;its name&gt;'</code> is the
+              answer. The graph step says where a model body of another type lives and that a body can run
+              to tens of kilobytes.</li>
+          <li><b>A literal in a form binding is no variable.</b> <code>{{true}}</code>,
+              <code>{{false}}</code> and <code>{{null}}</code> — what a script button assigns, what a hidden
+              field is set to — gave a project three variables of those names, each used by every form that
+              binds the literal. A word of JavaScript (<code>{{Math.max(a, b)}}</code>), a call
+              (<code>{{round(total)}}</code>) and the namespace of one of the project's own frontend
+              functions are no variables either.</li>
         </ul>
-        <h3>0.12.2</h3>
+        <h3>0.31.0</h3>
         <ul>
-          <li><b>Runs on IntelliJ IDEA 2026.2</b> — one ZIP for 2026.1 and 2026.2, both checked with
-              JetBrains' Plugin Verifier. 2026.2 moved JCEF (the Atlas Hub, the explorer editor, the Inspect
-              sign-in browser) out of the platform core into the bundled <i>Web Browser (JCEF)</i> plugin;
-              Atlas now declares that plugin as an <i>optional</i> dependency, so the same build picks it up
-              on 2026.2 and ignores it on 2026.1.</li>
-        </ul>
-        <h3>0.12.1</h3>
-        <ul>
-          <li><b>DTO class names come from a pattern</b> — <i>Generate → Data-Object DTOs</i> names its
-              classes the way the Liquibase dialog names its changelog files: a token pattern (<code>{name}
-              {shortName} {key} {app} {suffix}</code>) plus an optional regex rename, rendered live into the
-              preview's <i>Class name</i> and <i>Target file</i> columns. The default
-              <code>{name}{suffix}</code> is the name you got before, a class name typed into the table
-              outranks the pattern for that row, and the Alt-Enter intention proposes the same name the bulk
-              dialog would. Pattern and rename are remembered per project (and per sub-project) under
-              <i>Settings → Flowable Atlas → Generation</i>.</li>
-          <li><b>Class names without the model key</b> — Design model names usually carry their key
-              (<code>DEMO-D009 Pod Member</code>), which the derived class name repeated as noise:
-              <code>DEMOD009PodMemberDto</code>. <code>{shortName}</code> drops it — the key itself when the
-              name starts with it, otherwise a leading capitals-and-digits run before the first word, so a
-              key written differently from the key model (<code>DEMO-D9</code> against
-              <code>DEMO-D009</code>) also shortens while an acronym (<code>IBANCheck</code>) is left
-              intact. <code>{shortName}{suffix}</code> is the one-token way to
-              <code>PodMemberDto</code>.</li>
-        </ul>
-        <h3>0.12.0</h3>
-        <ul>
-          <li><b>A "Flowable Model" tab in Search Everywhere</b> — open it from <i>Tools → Flowable Atlas →
-              Search Models…</i>, from the Atlas Hub's <i>Model Index</i> row, or by pressing Shift twice
-              and tabbing across to it, and search <i>only</i> Flowable models, without your project's
-              classes, files and symbols mixed in. Models are matched on their <b>key</b> and on their
-              <b>file path</b>, and every row names where it came from: <code>app.zip →
-              processes/invoice.bpmn</code>. Model keys stay searchable in the Symbols tab as before — the
-              new tab is a second, focused way in, not a replacement.</li>
-          <li><b>Your archives are searchable at last</b> — a model packed in a <code>.bar</code>/
-              <code>.zip</code> is invisible to IntelliJ: it appears in neither the Files tab nor Find in
-              Files, because an archive is not part of any content or library root. The new tab searches
-              those entries — by name <i>and</i> by content — so you no longer unpack an archive by hand to
-              find out which process references a variable.</li>
-          <li><b>Full text, live</b> — from two characters on, the tab also greps the content of every
-              model, with each occurrence its own row showing the matched line and its line number; Enter
-              jumps straight there. The scan is cancelled on the next keystroke and its results are cached,
-              so it stays responsive on large repositories. It runs only while the tab is selected, never in
-              the general "All" results.</li>
-          <li><b>Models open with their content</b> — <code>.bpmn</code>, <code>.cmmn</code> and
-              <code>.dmn</code> are now recognised as XML, and the remaining JSON model types
-              (<code>.data</code>, <code>.service</code>, <code>.agent</code>, <code>.event</code>,
-              <code>.query</code>, <code>.app</code>, …) as JSON. Previously IntelliJ classified them as
-              unknown and showed a "file type not associated" placeholder instead of the file — most visibly
-              for an entry opened out of an archive.</li>
-        </ul>
-        <h3>0.11.3</h3>
-        <ul>
-          <li><b>Unused variables, on their own page</b> — the Explorer gains a <i>Variables → Unused
-              variables</i> tab listing every variable something <b>writes</b> that nothing <b>reads</b>.
-              Two findings: a variable no model reads anywhere, and one <b>mapped into a called model that
-              never reads it</b> — the dead <code>flowable:in</code>, where the caller's own use of the name
-              says nothing about the callee. Each row names the write to delete in Design's words (<i>Result
-              variable "Calculate total"</i>, <i>Decision output</i>, <i>In parameter "Fulfil"</i>), links
-              the model and jumps to the element on its diagram.</li>
-          <li><b>The variable graph now knows read from write</b> — it recorded only that a name occurred
-              somewhere. Direction is now tracked for every kind of evidence: <code>setVariable</code> vs
-              <code>getVariable</code>, a decision's inputs vs its outputs, each side of every in/out
-              mapping, a process-level <code>&lt;dataObject&gt;</code> declaration, and a form field as
-              <i>both</i> (a field is prefilled from the variable and writes it back). A variable's page
-              gains a <b>Written / read</b> list, so the finding can be checked rather than trusted.</li>
-          <li><b>The check would rather say nothing than guess</b> — it stays silent wherever a read could
-              exist out of view: a construct whose direction Flowable does not fix, a value consumed outside
-              the models (an action's response payload, an extracted variable a query indexes, a form's
-              outcome variable, a loop counter), a name written into a container object, a bare-EL
-              Init-Variables value, a name the <code>{{…}}</code> harvester ignores, a name passed as a
-              string literal, any scope whose script or Java code reads the whole variable map at once, and
-              a mapping into a model outside the project. The page says how many variables it declined to
-              judge, and why.</li>
-          <li><b>Also newly visible</b> — a process's <code>&lt;dataObject&gt;</code> variable declarations
-              and legacy <code>&lt;flowable:formProperty&gt;</code> fields are parsed into the graph, an
-              event task's <code>eventInParameter</code> source is recorded at all (both sides used to be
-              dropped), and a Java class evaluating Flowable EL from a string (<code>resolveValue(task,
-              "${vars:get(flagReturn)}")</code>) counts as reading that variable.</li>
-        </ul>
-        <h3>0.11.2</h3>
-        <ul>
-          <li><b>The diagram icon follows a key held in a constant or variable</b> — it used to appear only
-              on an inline literal, so extracting the key (<code>String key = "DEMO-P039";</code> …
-              <code>.processDefinitionKey(key)</code>) or using the generated model constants
-              (<code>.processDefinitionKey(ModelKeys.ONBOARDING)</code>) lost it. The compile-time value is
-              now resolved at every Flowable key call site, and the icon sits on the call line.</li>
-          <li><b>Action keys are labelled with the action's name</b> — an inline hint after a string literal
-              that is an <code>.action</code> key, so a constants class of <code>DEMO-Annn</code> reads as
-              what each one starts. The counterpart of the data-object table-name hint; toggle under
-              <i>Settings → Editor → Inlay Hints → Values</i> or <i>Settings → Tools → Flowable Atlas →
-              Inline Hints</i>.</li>
-          <li><b>Decision tables open as tables</b> — a Design decision table has no canvas and therefore no
-              DMN layout to draw, so clicking the diagram icon on a decision key reported "no diagram
-              layout" for nearly every decision. Atlas now paints the <b>decision table</b> itself: hit
-              policy, input band (label plus the expression it evaluates), output band, one numbered row per
-              rule with its annotation. A decision requirement diagram still renders from its layout, and
-              the Explorer keeps showing rules as its own searchable table.</li>
-        </ul>
-        <h3>0.11.1</h3>
-        <ul>
-          <li><b>The diagram's element card can be expanded over the whole page</b> — it starts docked to
-              the diagram's top-right corner, where its resize handle has nothing left to grow into: in a
-              narrow tool window you could not drag it past the drawing. <b>⤢</b> in the header (or a
-              double-click on the header) now lifts it out of the corner into a centered overlay across the
-              entire app — dimmed behind, above even the full-screen diagram, as tall as its content needs
-              and still resizable. Clicking the backdrop or <code>Esc</code> shrinks it back to the corner,
-              a second <code>Esc</code> closes it, and the expanded and docked sizes are remembered
-              separately, so clicking through elements stays in the mode you chose.</li>
-        </ul>
-        <h3>0.11.0</h3>
-        <ul>
-          <li><b>The generated artifacts say what Atlas actually knows</b> — the Markdown/JSON artifacts had
-              been frozen since the Python port while the engine grew, so everything learned in 0.10.x lived
-              only in the explorer and the IDE. Now: <b>processes are listed in execution order</b>, each
-              step naming its successors and branch conditions (gateways, receive tasks and sub-processes
-              are rendered at all for the first time, and an element no sequence flow reaches is marked as
-              unreachable instead of looking sequenced); <b>CMMN criteria show their sentry's condition</b>;
-              <b>DMN rule rows</b>, <b>service operation in/out contracts</b> and the <b>data layer</b>
-              (service ↔ Liquibase table ↔ data object, with the gaps named) are included; <b>variables
-              carry their provenance</b> — scope, where set, where read, and a mark when the name is only
-              inferred from a script; expressions are grouped by callee with the invalid ones flagged.</li>
-          <li><b>Health findings are computed once, for every surface</b> — the eleven checks
-              (invalid/suspect expressions, script syntax, unparseable files, missing model references,
-              orphan/superseded changelogs, schema gaps, unused forms/operations/custom functions,
-              script-inferred variables) were JavaScript inside the explorer, so no other artifact could
-              state a single one. They are now <code>findings</code>/<code>checks</code> in
-              <code>:core</code>, feeding the summary's Health block, the overview's Findings section (with
-              <code>file:line</code> and the offending source line), a "known issues — do not copy these
-              patterns" list in <code>CLAUDE.md</code>, <code>graph.json</code>, the CLI status line and the
-              explorer's Checks tab. One definition, one number everywhere.</li>
-          <li><b>CLAUDE.md tells an agent what it may call</b> — a new cheatsheet, generated from the same
-              catalogs the expression and script validators use: every backend EL namespace and its
-              functions, the frontend <code>flw.</code> members, what each script context binds, the
-              platform beans, and the project's own discovered functions. Atlas used to report that
-              <code>${vars:bogus()}</code> is wrong while never saying what is right.</li>
-          <li><b>graph.json is half the size and queryable</b> — a model body is stored once in its bucket
-              and its node points there via <code>data.dataIn</code>, output is minified
-              (<code>--pretty</code> to indent), every node carries a <code>usedBy</code> reverse index, and
-              a <code>_schema</code> key documents the shape and ships <code>jq</code> recipes. 4.8 MB → 2.5
-              MB on a large real project.</li>
-          <li><b><code>--slice &lt;type:key&gt;</code></b> — one node with its full context in both
-              directions (what it uses, who uses it, the findings touching it): the tier between a few-KB
-              summary and megabytes of graph, for when the task is about one model.</li>
-          <li><b>Truth fixes</b> — the overview no longer signs itself "Generated by
-              flowable_project_overview.py"; Python <code>repr</code> output (<code>{'kind': 'rest',
-              …}</code>, <code>['total']</code>, <code>None</code>) no longer reaches the page (a test now
-              fails if it does); the summary prints the real variable scopes instead of the words "process /
-              form / case / java"; pointers name sibling files instead of CLI flags or explorer tabs;
-              <code>CLAUDE.template.md</code> is generated from the same source as the primer, so the two
-              can no longer drift; Gradle projects get their Flowable version detected; and a naming
-              convention is only claimed when it generalises.</li>
-        </ul>
-        <h3>0.10.17</h3>
-        <ul>
-          <li><b>Choose what "Pull from Design" fetches — in the Hub</b> — the Atlas Hub's <i>Flowable
-              Design</i> section now lists the workspace's apps with checkboxes, pre-ticked from the
-              configured default. Ticking differently is a <b>personal override</b>: stored
-              workspace-locally, never in the VCS-shared settings file, marked <i>(personal selection)</i>
-              in the status line, with <i>Reset to configured</i> to go back. The Hub link and the toolbar
-              action both pull that effective selection, and app names/versions load on demand so the Hub's
-              own refresh never calls Design. The Connections settings keep the shared team default (and the
-              first-time setup).</li>
-          <li><b>Generate data-object DTOs in bulk</b> — Tools → Flowable Atlas → Generate → <i>Data-Object
-              DTOs</i> → <i>From App(s)…</i> / <i>From Data Object…</i>: a preview table of exactly what
-              will be written — key, editable class name, owning app, field count, target file, and whether
-              it is new or overwrites — for a whole app at once or for hand-picked data objects. Target
-              source root, package, an optional <i>sub-package per app</i> and the class-name suffix
-              (default <code>Dto</code>) live in Settings → Flowable Atlas → <i>Generation</i>. Each class
-              is the same POJO the Alt-Enter action emits: typed fields, a <code>fromContainer(…)</code>
-              mapper and a fluent builder.</li>
-          <li><b>The DTO quick action finds the key</b> — Alt-Enter now recognises a data object behind a
-              <b>constant</b> (<code>definitionKey(ModelKeys.CUSTOMER)</code> — what <i>Generate Model
-              Constants</i> produces), not just an inline literal, and beyond API call sites it offers
-              itself on <b>any</b> string literal or constant whose value is an indexed data-object key.
-              Availability is a plain index lookup, so it no longer parses model files during highlighting;
-              resolving the fields moved into a cancellable progress that reports when a key has no model or
-              no field mappings instead of doing nothing.</li>
-        </ul>
-        <h3>0.10.16</h3>
-        <ul>
-          <li><b>Platform beans in the script catalog</b> — Work scripts resolve any Spring bean by name, so
-              the platform's default services (<code>dataObjectRuntimeService</code>,
-              <code>contentService</code>, <code>templateService</code>, <code>sequenceService</code>,
-              <code>platformIdentityService</code>, <code>actionRuntimeService</code>, ~25 more) come with
-              generated method surfaces: completion with signatures (typed as <i>Spring bean</i>),
-              member-typo checks and hover documentation — the sandbox strict-mode caveat is documented on
-              hover.</li>
-          <li><b>Script Playground chips, redesigned and clickable</b> — the info strip under the editor is
-              now a two-column layout (Variables · Reads · Bindings · Beans) with soft pill chips that wrap
-              instead of clipping, a click-to-expand <i>+N more</i> per row — and every chip inserts its
-              name at the caret when clicked (undoable, focus returns to the editor).</li>
-          <li><b>Explorer: work through search hits in bulk</b> — list rows support multi-selection
-              (⇧-arrows, ⌘/Ctrl-click, ⇧-click ranges, ⌘/Ctrl-A) and Enter opens every marked row as its own
-              detail tab; detail tabs remember scroll and search term, open in the background with
-              ⌘/Ctrl-click, and switch with Alt+1…9.</li>
-        </ul>
-        <h3>0.10.15</h3>
-        <ul>
-          <li><b>Design access tokens</b> — "Pull from Flowable Design" can authenticate with a Flowable
-              Design <i>personal access token</i> (<code>Authorization: Bearer …</code>) instead of a
-              username and password: the scheme Flowable's own CLI uses, and the only one that works when
-              Design sits behind SSO/OAuth2 (where basic auth is switched off). Pick the mode under Settings
-              → Tools → Flowable Atlas → <i>Connections</i>; workspace list, app list and app export all go
-              through it, and "Refresh Workspaces" still doubles as the connection test.</li>
-          <li><b>Mint a token without leaving the IDE</b> — <i>Create Token…</i> signs in once with your
-              username/password, creates a named token with a chosen validity and drops it straight into the
-              field, so afterwards <b>no password has to stay in the keychain</b>. <i>Manage in Design…</i>
-              opens Design's own token page. Password and token are stored as two separate IDE PasswordSafe
-              entries, never in a file, so switching auth modes back and forth loses neither.</li>
-          <li><b>Sharper sign-in errors</b> — an HTTP 401 now says which credential to fix: "check
-              username/password" in password mode, "the access token is invalid or expired" in token mode. A
-              blank token fails immediately instead of producing a pointless request.</li>
-        </ul>
-        <h3>0.10.14</h3>
-        <ul>
-          <li><b>Script Playground</b> — the Flowable Expressions tool window gains a <i>Scripts</i> tab:
-              paste or write a Groovy/JavaScript/Python script and get real-language completion and coloring
-              (where the IDE plugin is available), live structural validation with squiggles, clickable
-              problem rows and an error stripe, the scope variables the script touches as chips (API writes
-              vs ≈ heuristic reads), and <i>Load Script from Model…</i> to pull any script task, listener
-              script or action-bot script out of the project's models for inspection.</li>
-          <li><b>Real script-task validation</b> — BPMN/CMMN script tasks, listener scripts and action-bot
-              scripts get the IDE's own Groovy (bundled) / JavaScript (Ultimate) language injected inline:
-              compiler-grade syntax errors, highlighting and Alt-Enter fragment editing right in the model
-              file. GString <code>${…}</code> interpolation no longer double-injects the expression language
-              inside script bodies.</li>
-          <li><b>Script syntax checks everywhere</b> — a dependency-free structural validator (unterminated
-              strings/comments, unbalanced brackets, unclosed <code>${…}</code> interpolation,
-              <code>scriptFormat</code> typos with a did-you-mean) runs over every script during generation:
-              findings land in the explorer's Checks tab (new "Script syntax" card), as ⚠ badges in the
-              Script tasks tab and model detail panels, in the Markdown reports and the CLI status
-              line.</li>
-          <li><b>Script binding validation</b> — a catalog transcribed from the Flowable engine and platform
-              sources knows what each script context really binds (<code>execution</code> in BPMN script
-              tasks, only <code>task</code> in task-listener scripts,
-              <code>planItemInstance</code>/<code>caseInstance</code> in CMMN,
-              <code>flw</code>/<code>flwActionContext</code> in action bots) and the full API of those
-              objects: member typos get a did-you-mean (<code>setTransientVariabel</code> →
-              <i>setTransientVariable</i>), a root used in the wrong context is explained, EL-only
-              <code>flw.*</code> namespaces and case-sensitive <code>scriptFormat</code> values are flagged,
-              and a CMMN lifecycle listener with a script — which the engine silently ignores — gets a
-              warning. The Script Playground gains a context picker and shows the bound root objects as
-              chips.</li>
-          <li><b>Binding-aware script completion</b> — after <code>execution.</code> /
-              <code>flw.time.</code> the catalog offers the context's real API with parameter signatures
-              (<code>setTransientVariable(variableName, value)</code>), in the Script Playground and inside
-              injected script bodies in model files; the root bindings complete at the top level. The
-              Groovy/JS "unresolved" noise on those dynamic bindings (gray <code>execution</code>, <i>No
-              candidates found for method call</i>) is suppressed exactly inside Flowable script
-              bodies.</li>
-        </ul>
-        <h3>0.10.12</h3>
-        <ul>
-          <li><b>No more multi-second UI freezes while the model index builds</b> — the scan now only holds
-              the read lock to collect candidate files; parsing and regex work run lock-free, so typing and
-              VFS refreshes are never queued behind it.</li>
-          <li><b>Quieter shutdown</b> — the index scan stops when the project closes and the embedded
-              explorer editor no longer touches the VFS after disposal (no more AlreadyDisposedException
-              warnings in the log).</li>
-        </ul>
-        <h3>0.10.11</h3>
-        <ul>
-          <li><b>Schema gaps tab</b> — the dashboard's "Schema gaps" number unfolded into a view of its own
-              (sidebar, next to Overview): every service with Liquibase → Service → Data object coverage,
-              its unmapped columns front and center, fully-mapped services collapsed to a chip row. The
-              dashboard card now routes there.</li>
-          <li><b>Movable, resizable diagram info card</b> — the element card docks to the top-right of the
-              diagram (stable while clicking through elements), can be dragged by its header and resized via
-              the corner grip; width and position are remembered.</li>
-          <li><b>Entry/exit criteria show their condition</b> — in the plan-model tree (entry ◇ / exit ◆
-              chips), in the Sentries section (named "entry of Review" instead of a raw sentry id) and on
-              the diagram: criterion diamonds are rendered properly (entry hollow, exit filled) and clicking
-              one shows the guarded plan item and its sentry condition.</li>
-        </ul>
-        <h3>0.10.10</h3>
-        <ul>
-          <li><b>Legacy Design exports are no longer invisible</b> — the "typed-directory" export format
-              (<code>form-models/</code>, <code>service-models/</code>, <code>action-models/</code>, … with
-              each model wrapped in <code>{key, name, editorJson}</code>) is now unwrapped and parsed, from
-              a zip or a loose workspace directory. Services, data objects, actions, events, channels,
-              queries and policies go through their full parsers; old Oryx-editor forms/pages are at least
-              registered by key so references resolve and their <code>{{…}}</code> bindings are indexed; the
-              root app wrapper becomes the app node with <i>contains</i> membership.</li>
-          <li><b>Model data that was parsed but never shown</b> — new collapsible detail sections: a
-              form/page's <i>Fields</i> (id → variable link, label, type, required, bound value) and <i>Data
-              sources</i>; a process's <i>User tasks</i> (form, candidate groups, assignee, due
-              date/priority), <i>Script tasks</i> (with the script body), <i>Events &amp; timers</i>,
-              <i>Multi-instance</i>, <i>Flow conditions</i> and <i>Listeners</i>; a case's <i>Plan model</i>
-              tree (stages, milestones, tasks — each linking to the form/process/case/decision it uses),
-              <i>Sentries</i> and <i>Event listeners &amp; timers</i>; a security policy's
-              <i>Permissions</i> (roles link to groups); an agent's <i>Tools</i> and <i>Operations</i> (with
-              prompts); an app's <i>Variables</i> and <i>Pages</i>; an action's <i>Bot script</i>.</li>
-          <li><b>More links between the datasets</b> — form field ids and DMN decision inputs/outputs join
-              the variable graph (a variable page now shows the forms and decision tables that touch it);
-              events link to the channels that carry them and the data-dictionary types of their payload;
-              agents' service tools count as uses of the exact operation; services link to the services
-              their column relations join to; case-view/case-page <code>static-*-key</code> references and
-              create-instance buttons resolve to their process/case/form/decision; watcher / participant /
-              manual-activation / event-listener group permissions and form-button
-              <code>permissionGroups</code> feed the Access view.</li>
-          <li><b>Hover explanations now work in the IDE</b> — every <code>title=</code> tooltip (Design
-              vocabulary hints, copy buttons, badges) and the neighborhood graph's labels are served by the
-              Explorer's own tooltip bubble, which renders in the embedded JCEF viewer where native tooltips
-              never show.</li>
-          <li><b>Small things</b> — zero counts are no longer shown as rows; a decision service is labelled
-              as such; CMMN tasks reuse the BPMN task-type vocabulary (<i>Data object task</i>, not <i>task
-              · data-object</i>); search also matches form field ids/labels, app variables, agent tools,
-              policy permissions and dictionary types; user tasks pick up due date / priority /
-              category.</li>
+          <li><b>A gateway flow that can never be taken is a finding.</b> The new defect
+              <code>shadowedFlow</code> reports the default, and every flow listed after it, when an
+              exclusive gateway has a flow without a condition ahead of them: the engine takes the first
+              flow whose condition holds, and a flow without one always holds. An unconditional flow written
+              last works as an implicit default and is not reported. The sample project shows one, and Atlas
+              now runs twenty-six checks.</li>
+          <li><b><code>--baseline</code> gates what a change adds, not the backlog.</b> Most real projects
+              fail <code>--fail-on defects</code> on their first run. With <code>--baseline
+              &lt;path&gt;</code>, <code>--fail-on</code> matches only findings the baseline does not have.
+              The path can be a <code>graph.json</code> from an earlier run, or the target branch's checkout
+              or archive, which is analysed in the same run. An archive is read under any name: <code>git
+              show "$BASE:apps/app.zip" &gt; base.zip</code> is the quick way to get the base of a pull
+              request, and a file that fails to parse in both versions is not called new. Findings are
+              compared by check, model, element and subject, so a reworded message does not count as new.
+              Every report still lists every finding, and the verdict says how many it left to the
+              baseline.</li>
+          <li><b>What a change did to the models, for reviewing a pull request.</b> Git shows a commit to an
+              app archive as a binary change, so a reviewer sees nothing of what it does to a process.
+              <code>--changes --baseline &lt;base&gt;</code> writes <code>APP_OVERVIEW.changes.md</code>, or
+              prints it with <code>--stdout</code>, and <code>--all</code> with <code>--baseline</code>
+              writes <code>&lt;project&gt;.changes.md</code> beside the other artifacts. The report lists
+              every model added, removed or changed, with the tasks, flows, form fields and rules that came,
+              went or changed in each. It also lists the references added and removed, and the findings the
+              change brought and the ones it resolved. It is short enough for a pull-request comment or a CI
+              step summary. A model kept in two files, such as a Design export beside its
+              <code>-bar.zip</code>, counts as changed when either copy changes, and the report names the
+              file when only the copy Atlas does not show changed (<code>graph.json</code> lists such models
+              under <code>modelCopies</code>).</li>
+          <li><b>A red <code>--fail-on</code> run names the findings that made it red.</b> The log used to
+              show only counts per check. After the count line it now lists the matching findings, worst
+              first and one per line: severity, check, file and line (or node id), model and element, and
+              message. It lists the first 50, then says where to read all of them.</li>
+          <li><b><code>--annotate github</code> puts those findings on the pull request.</b> The same
+              findings are printed as GitHub Actions workflow commands on stdout, which GitHub shows as
+              annotations on the run and on the pull request's files. Paths are relative to the working
+              directory, so run the job from the checkout's root. A model inside an archive gets no line
+              number, because GitHub can only point at the archive.</li>
+          <li><b><code>--junit &lt;file&gt;</code> writes the findings as a JUnit report for CI test
+              views.</b> GitLab's merge-request widget, Jenkins, Azure DevOps and GitHub test reporters show
+              one suite per check and one testcase per finding. A finding keeps the same name from run to
+              run. A finding the gate matches is a failure that says why it matters and what to do. Waived,
+              ungated and baselined findings are skipped, each with its reason.</li>
+          <li><b>A CLAUDE.md the CLI writes tells an agent how to check its model edit.</b> Its start-here
+              procedure now ends with the command that reruns Atlas with <code>--baseline</code> against the
+              generated <code>graph.json</code> and <code>--fail-on defects</code>. An agent sees each
+              defect its change added before it reports done.</li>
+          <li><b>A waiver file that waives less than it seems to now says why.</b> A syntax error is
+              reported with the file's name, line and column, not as "waivers.json is not a JSON object". A
+              rule naming a check Atlas does not know is reported with the nearest check id, and the rule is
+              kept. A top-level key nothing reads is reported, because the explorer's Save would drop it.
+              Above all this is <code>rules</code>, which is what <code>graph.json</code> calls them. A
+              <code>waivers</code> or <code>notes</code> that is not a list is reported too. A
+              <code>--waivers</code> path that does not exist is now said on stderr; before, it waived
+              nothing without a word.</li>
+          <li><b>A finding opens on the line it is about.</b> Each finding now carries the line of its
+              element's declaration, of the reference that names a missing model, of the expression, or of
+              the script line a script problem is on. A script problem used to give its line within the
+              script as a line of the model. The explorer's open button, the IDE's Findings panel and the
+              overview's <code>file:line</code> now land on that line, inside archives too.</li>
+          <li><b>A missing model says who references it.</b> A <code>missingRefs</code> finding names the
+              model that references the missing key, and how many more do, and opens on that reference. It
+              used to name only the missing key.</li>
+          <li><b>An expression finding names the models that hold the expression.</b> The summary,
+              <code>CLAUDE.md</code> and the overview say which models contain an invalid or suspect
+              expression. The finding opens there when a single model holds it, and a model's
+              <code>--slice</code> now lists the problems of its expressions.</li>
+          <li><b>A task whose every outgoing flow is conditional needs a default too.</b>
+              <code>gatewayNoDefault</code> now also reports a task, event or subprocess that leaves only
+              through conditional flows and has no default flow. When none of the conditions holds, the
+              engine throws "no outgoing sequence flow" there, just as it does at a gateway. The count line
+              now reads <i>choices with no way out</i>.</li>
+          <li><b>Two flows that are exact opposites always leave a way out.</b>
+              <code>${x}</code>/<code>${!x}</code>, <code>${a == b}</code>/<code>${a != b}</code> and
+              <code>vars:isEmpty</code>/<code>vars:isNotEmpty</code> are no longer reported by
+              <code>gatewayNoDefault</code>. <code>== true</code>/<code>== false</code> still are, because
+              both are false when the value is unset.</li>
+          <li><b>An error boundary counts only when it can catch the failure.</b> Only a BPMN error reaches
+              an error boundary event or an error event subprocess. A mail or HTTP task behind one is
+              therefore reported by <code>unguardedTasks</code> unless it maps its failure with
+              <code>flowable:mapException</code>, and the messages and the suggested fix now say so.</li>
+          <li><b>An HTTP task with <code>handleStatusCodes</code> is no longer treated as handled.</b> The
+              engine turns those status codes into the BPMN error <code>HTTP&lt;code&gt;</code>, which fails
+              the instance when nothing catches it. The task is now reported until an error boundary or an
+              error event subprocess is there to catch it, even when <code>ignoreException</code> is
+              set.</li>
+          <li><b>A task that only ever runs inside a timer's or an async step's job is no longer told its
+              exceptions reach a caller.</b> <code>unguardedTasks</code> now treats a synchronous task like
+              an async one when every path to it starts at a timer or an async step with no wait state in
+              between.</li>
+          <li><b>A <code>vars:</code> call with the wrong number of arguments is an invalid expression.</b>
+              <code>${vars:get('route', 'A')}</code> makes the engine read <code>'route'</code> as the
+              variable container and fail at runtime, and <code>${vars:equals(x)}</code> is an argument
+              short. Both are now <code>invalidExpr</code> errors in the reports, and the IDE's expression
+              inspection flags them too. <code>${vars:get(execution, 'x')}</code> stays valid.</li>
+          <li><b>Models the platform ships are no longer reported as missing.</b> A reference to one of the
+              platform's default forms, permission decisions, templates, documents, actions or security
+              policies now resolves to a platform-provided model. That includes the
+              <code>F07-deactivateUser</code> form that a copied <code>deactivate-user.action</code> keeps,
+              which used to be a <code>missingRefs</code> error and failed <code>--fail-on error</code>. A
+              misspelt key, or the same key used for another kind of model, is still reported, and the IDE's
+              broken-key inspections draw the same line.</li>
+          <li><b>A repository without service models no longer reports its changelogs as orphans.</b> When a
+              project defines no service and no data object, its models are deployed from elsewhere. A
+              changelog that names a service the project lacks is then no longer a
+              <code>changelogIssues</code> finding.</li>
+          <li><b>A script may use <code>task</code> or <code>execution</code> as its own variable names.</b>
+              Closure, loop, <code>catch</code>, function and arrow parameters now shadow the engine's
+              bindings the same way a declaration does. So <code>tasks.any { task -&gt; … }</code> in a
+              script task is no longer reported as using a <code>task</code> that the context does not
+              bind.</li>
+          <li><b>Calls to the methods of the engine's own objects are no longer typos.</b> A script may call
+              any method of the entity the engine binds, such as
+              <code>execution.getRootProcessInstance()</code> or <code>caseInstance.setName(…)</code>, and
+              <code>scriptIssues</code> no longer suggests the nearest documented method instead. Completion
+              still offers only the documented interface.</li>
+          <li><b>A script service operation's body is checked.</b> The script of a script-type service
+              operation (<code>config.script</code>) runs only when something calls the operation, and Atlas
+              did not look at it, so a body that could never run was found by its first caller. It is now
+              validated in its own context — the <code>flw</code> API and the operation's inputs, by name,
+              and no execution — reported as <code>scriptIssues</code> on the operation, shown on the
+              operation's card on the service's page, where the finding opens it, and listed on the
+              explorer's Scripts page under <i>Service scripts</i>. The Script Playground offers the context
+              too, with an example.</li>
+          <li><b>A TODO in a BPMN, CMMN or DMN file names the element it sits in.</b> The finding jumps to
+              that element, and a sentry is shown by the diamond of its criterion. A TODO with nothing after
+              it is identified by that element and what carries it (<code>sentry2/documentation</code>)
+              instead of by its line, so accepting it survives an edit above it.</li>
+          <li><b>A broken palette, dashboard component, user definition or tenant setup is a parse
+              issue.</b> A truncated <code>.palette</code> or <code>.dashboardcomponent</code> came out as a
+              record with no key that nothing could show. An unparseable <code>.user.json</code>, tenant
+              setup or master-data rows file was dropped, and so was one above the 32 MB limit. None of this
+              was reported, although the platform fails to deploy or start on a broken one. Each is now
+              reported like any other model that does not parse: a <code>parse</code> diagnostic and a
+              <code>parseIssues</code> error naming the file. An oversized one is a <code>skip</code>
+              warning, like an oversized model.</li>
+          <li><b>A malformed XML file is reported with its line, and <code>-q</code> stays quiet.</b> A
+              BPMN, CMMN or DMN model or a Liquibase changelog that was not well-formed made the XML parser
+              print its own <code>[Fatal Error] :2:3: …</code> to stderr, even under <code>-q</code>, and
+              the parse issue named the file but not the line. Nothing is printed now. The
+              <code>parseIssues</code> finding carries the line, so the explorer and the IDE open the file
+              there, and <code>-v</code> prints <code>path:line</code>.</li>
+          <li><b>Alt+Enter opens the explorer page of a Java class, method or REST handler.</b> On the name
+              of a class or method a model uses, or of a REST handler, <i>Open in Atlas Explorer</i> opens
+              its class, method or endpoint page: roles and bean names, the models using it, an endpoint's
+              callers and parameters. The gutter marks only list the models.</li>
+          <li><b>A broken model key inside a JSON model is flagged in the editor.</b> A form component's
+              subform, a data object's backing service, an app's models or a channel's event that names no
+              model used to deploy without a word, although the report calls it a missing reference. The new
+              inspection <i>Unknown Flowable model key (model JSON)</i> flags it, with a fix to the nearest
+              key.</li>
+          <li><b>Messages, signals and task keys in Java are links, and an unknown one is flagged.</b>
+              Ctrl+click on <code>signalEventReceived("…")</code>,
+              <code>startProcessInstanceByMessage("…")</code>, <code>taskDefinitionKey("…")</code> or
+              <code>activityId("…")</code> lands on the <code>&lt;signal&gt;</code>,
+              <code>&lt;message&gt;</code> or <code>&lt;userTask&gt;</code> that declares it, and Ctrl-Q
+              names the model. The new inspection <i>Unknown Flowable message, signal or task name</i> flags
+              a message or signal that no model declares: an unknown message throws at run time, and an
+              unknown signal reaches nobody. It flags a task key or activity id only when the chain names
+              its process. A bare <code>signalRef</code>, or a signal a case's event listener waits for,
+              counts as a name the engine uses. A name a model computes at run time gets no verdict.</li>
+          <li><b>Event keys the platform ships are no longer flagged in model XML.</b>
+              <code>_flowableMailEvent</code> and its siblings are not missing models, as the report already
+              says. A form key that names a page, or a data-object key that names master data, also counts,
+              as it does at run time.</li>
+          <li><b>Atlas Findings opens every finding where it is.</b> A double-click or Enter did nothing for
+              a finding with no file of its own, and opened most of the rest at the top of the file. A
+              finding now opens at its line. Without a line (in a minified form, or for a column or a config
+              path) it opens at its element or at what it names. A variable, a service operation or an
+              expression that several models hold opens in the model it lives in, and the window asks which
+              one when there are several. The detail pane's <i>Where:</i> row names that model and how many
+              more there are.</li>
+          <li><b>Accepting a finding in Atlas Findings updates the explorer too.</b> Accept now regenerates
+              the explorer pages in the folder of the <code>waivers.json</code> it wrote, and an open page
+              reloads where you were reading. The window, the Hub and the page then show the same counts.
+              Before, the page still counted the accepted finding as open. While the pages are regenerated,
+              the window says it is analyzing.</li>
+          <li><b>An accepted finding stays accepted when the explorer was generated outside the output
+              folder.</b> Accept writes <code>waivers.json</code> next to that page, but the next analysis
+              read the one in the configured output folder, so the finding came back as open. The analysis
+              now reads the file Accept wrote.</li>
+          <li><b>The Hub's "Analyze findings" link runs the analysis.</b> After a sub-project switch or a
+              failed run, the link only brought up Atlas Findings, which read <i>No analysis yet</i> and
+              needed a second click. Now the link runs the analysis and opens the window on it.</li>
+          <li><b>A Design pull that removed model keys offers "Find broken references".</b> The action runs
+              the <i>Unknown Flowable model key</i> inspection over the Flowable project, so Java that still
+              uses a removed key shows in the Inspection Results window. It also analyzes the project again
+              in Atlas Findings, where <i>Missing model refs</i> lists every removed key that a model still
+              uses, including models inside archives. Each row names the first model that uses the key and
+              how many more do.</li>
+          <li><b>Generate Atlas Explorer on another Flowable project's folder generates that project.</b> In
+              a monorepo, the Project-view entry ignored the folder that was right-clicked. On a folder of
+              another detected project it now reads <i>Generate Atlas Explorer for apps/billing…</i> and
+              makes that project the active one first, so its settings apply.</li>
+          <li><b>The model-constants class stays with the Flowable project it was generated in.</b> In a
+              monorepo, picking another project in the Atlas Hub used to rewrite the shared constants class
+              with that project's keys and naming, so code compiling against it broke. The class is now kept
+              in sync only while its own project is active, and switching back brings it up to date. In a
+              repository with several Flowable projects, the Model Constants settings page names the one it
+              follows.</li>
+          <li><b>Generate Model Constants works while the model index is still being built.</b> Right after
+              opening a project or saving a model, the action ended in a "NullPointerException" balloon and
+              wrote nothing. It now waits for the index behind its progress dialog, which you can
+              cancel.</li>
+          <li><b>Generate Model Constants leaves its sync setting as you set it.</b> Generating the class by
+              hand ticked <i>Keep the generated class in sync</i> again, and the class was then rewritten on
+              every model change.</li>
+          <li><b>Generate → Liquibase builds a data object's table from its service's columns.</b> When a
+              data object had no bundled changelog, its changelog was built from its field names, none of
+              which are columns its service reads, and it had no primary key. It is now built the way
+              Flowable Design builds it: the service's column names, the lookup id as the primary key and a
+              join table per relation. Field names are used only as a labelled guess when there is no
+              database service. A table your own Liquibase changelogs already create is shown as <i>Already
+              created by</i> that file, cannot be ticked and is not written again.</li>
+          <li><b>Generate → Liquibase no longer freezes typing while it prepares its preview.</b> On a cold
+              index it scanned every model, walked the project and decompressed every app export in one read
+              action, holding the editor's read lock the whole time. The model scan and the decompression
+              now run without it, and the walk takes it only in a short read action of its own.</li>
+          <li><b>Generated data-object DTOs handle JSON fields and awkwardly named fields.</b> A JSON field
+              was read as a String and threw a ClassCastException for every instance that set it. It is now
+              a Jackson <code>JsonNode</code>, the type the platform keeps it as. A field named after a Java
+              keyword, such as <code>default</code> or <code>case</code>, or named <code>bean</code>,
+              produced a class that did not compile. A keyword field now gets an escaped identifier and
+              keeps its getter <code>getDefault()</code>.</li>
+          <li><b>The Atlas Hub no longer stays on "scanning…" after a sub-project switch during a scan.</b>
+              Switching sub-project or saving a model while the index was being built threw that build away
+              without starting the next one, so the Hub, the editor's markers and the model-constants class
+              waited for some unrelated event. The new build now starts at once, and a failure of the
+              discarded build no longer blocks it.</li>
+          <li><b>A model index that could not be built no longer rebuilds in a loop while the Atlas
+              Playground is open.</b> The playground retried the failed build on every index event: a full
+              rescan every few hundred milliseconds, each one an IDE error report. It now waits for a model
+              change or <i>Rebuild Model Index</i>.</li>
+          <li><b>Find Usages into models no longer blocks typing, and Cancel stops it.</b> The search held
+              the editor's read lock while it read every model file and archive entry. It now reads them
+              without it, takes the lock only for a file with a hit, and stops at the next file when you
+              cancel.</li>
+          <li><b>The editor reads your custom functions from the same place as the explorer.</b> With a
+              sub-project active, the editor resolved the <i>Customization source</i> against the repository
+              root, missed it and read every app's functions instead. Changing the custom-function settings
+              or switching sub-project also only took effect once a frontend file changed or the IDE
+              restarted. The editor now resolves the source the way generation does and reads the functions
+              again as soon as either changes.</li>
+          <li><b>Helm templates, systemd units and Java policy files are no longer opened as JSON.</b> Atlas
+              mapped <code>.tpl</code>, <code>.service</code>, <code>.policy</code>, <code>.data</code> and
+              other model extensions to JSON in every project of the IDE. Those extensions are now JSON only
+              when the file holds a JSON object, whether in a folder or inside an archive.</li>
+          <li><b>Without the embedded browser, the explorer opens in your browser, not as source.</b> In an
+              IDE without JCEF, the Open action, the auto-open after Generate, the balloon, the Alt+Enter
+              intention, Atlas Findings and Recent Models opened the generated page's megabytes of HTML in
+              the text editor and dropped the page you asked for. They now open it in your browser, on the
+              page you asked for where your system's launcher passes the route on, or say that neither is
+              possible here.</li>
+          <li><b>Open in Atlas Explorer on a model Atlas does not read says why.</b> On a model in another
+              Flowable project than the active one, in a build folder, or with no readable key, the
+              Project-view entry used to do nothing at all. A balloon now names the reason.</li>
+          <li><b>Regenerate and the stale line work when no explorer page is selected.</b> A project that
+              generates only CLAUDE.md, the graph or the Playwright guide got "No Atlas Explorer yet" from
+              Regenerate, no Regenerate after a Design pull, and no warning that those files were stale. An
+              old page left from the default selection also kept a stale line that Regenerate could never
+              clear. Regenerate, the pull balloon and the Hub now go by the selected artifacts, and the line
+              reads <i>changed since the Atlas artifacts</i>.</li>
+          <li><b>The plugin names a dot-prefixed project's files the way the CLI does.</b> For a folder like
+              <code>.DEMO-solution</code>, the plugin wrote <code>project.*</code>, while the CLAUDE.md and
+              the Playwright guide it wrote alongside pointed at <code>.DEMO-solution.*</code>, which did
+              not exist.</li>
+          <li><b>The plugin manager's description covers what the plugin does today.</b> It now names Atlas
+              Findings, Go to Model and the Search Everywhere tab, the text-and-picture model editor,
+              archive browsing, Compare Model with Archive, the gutter icons and the DTO and Liquibase
+              generators. It gives menu and settings paths as the IDE shows them. The settings page no
+              longer calls the IDE-wide environments per project.</li>
+          <li><b>The ER designer proposes the relations Design keeps in join tables.</b> A database
+              service's <code>object-relation</code> or <code>list-relation</code> is not a column of its
+              table. Design keeps it in a join table of two columns, the owning row's lookup id and the
+              referenced row's, and the runtime joins through that table. The designer understood only a
+              column relation that Design never writes. On a real project it proposed a relation only where
+              a data object named one: between the two tables, without columns, and mostly as a strict
+              <code>1:1</code>. Every join table sat unconnected. When a changelog creates the join table,
+              the designer now proposes two relations from it, over exactly its columns: one to the owning
+              table and one to the table it refers to. When none does, it proposes one relation between the
+              two tables. When the relation names no service, the table it refers to is found through the
+              data object field of the same name, as the runtime finds it. A data object's one-to-one is now
+              proposed as <code>0..n:0..1</code> instead of a strict <code>1:1</code>: the field holds one
+              object, but nothing in the schema makes it unique.</li>
+          <li><b>A table's panel in the ER designer names the tables the models relate it to.</b> A proposal
+              shows only once both of its tables are on the canvas, and nothing said which table to add. A
+              table's panel, and its (i) in the list, now list the related tables. Through a join table, the
+              list names the table beyond it. Each row says whether the relation is proposed, drawn or
+              dismissed. <i>add</i> puts the missing tables on the canvas beside it, with the proposals
+              between them, and <i>add all</i> adds every one in a single undo step.</li>
+          <li><b>A dismissed proposal can come back.</b> <i>Diagram → Show N dismissed proposals again</i>
+              brings them all back in one undoable step, and <i>show again</i> in a table's related list
+              brings back one at a time. Before, once the undo history was gone, a mis-click on × was
+              permanent.</li>
+          <li><b>A browser copy of a project diagram no longer hides a teammate's change to the file.</b> A
+              copy undone back to the file, or one whose export the file now holds, follows the file again.
+              A copy edited before the file changed keeps your work and says the file has changed in the
+              project since, with <i>Revert</i> to show it. Before, it invited an export that would write
+              over the teammate's change.</li>
+          <li><b>Schema coverage no longer lists a relation mapping as a column Liquibase lacks.</b> A
+              relation is kept in a join table of its own, so its mapping has no column in the service's
+              table. Every service that related to another used to show the relation's name as mapped by the
+              service but in no changelog, in the explorer's coverage table and in the overview.</li>
+          <li><b>ER designer panels fit on a short page.</b> The table, relation and table-editor panels
+              were placed before they were filled. When one opened low on the page, its last button (Remove,
+              Delete) ran off the bottom, out of reach. Panels are now placed once filled, and they scroll
+              inside themselves when they grow.</li>
+          <li><b>Tables added without a drop land beside what is already drawn.</b> +, Enter, a search
+              result and a new hand-made table now put the card in the nearest free place where you are
+              looking, clear of other cards and frames. Before, they piled up on top of each other, and the
+              sixth landed exactly on the first.</li>
+          <li><b><code>+</code> in the ER designer's table list no longer also zooms the canvas.</b> The
+              list also keeps its focus after + or Enter, so the arrow keys still move through it.</li>
+          <li><b>A relation dropped onto the other table's key starts as many to one.</b> Dropped onto a
+              table's one-column primary key, a new relation is a lookup and starts as <code>0..n:1</code>.
+              Anywhere else it still starts as <code>1:0..n</code>.</li>
+          <li><b>A slice now shows what a model contains, and who uses a variable.</b> <code>--slice</code>
+              on a process, case, decision, form or page adds its <i>Contents</i> exactly as the overview
+              lists them (the steps in execution order with what follows each, the plan tree, the rule rows,
+              the fields) and its <i>Variables</i>, each with the elements that set and read it. The slice
+              of a variable, an expression or a service operation names the models that use it, and a
+              variable's slice lists under <i>Set by</i> and <i>Read by</i> the element and how. Before,
+              these slices said "Nothing references this node".</li>
+          <li><b><code>--slice</code> accepts what you actually have in hand.</b> Besides
+              <code>&lt;type&gt;:&lt;key&gt;</code> and a bare key, it now matches the key in a different
+              case, a model's file path (<code>processes/order.bpmn</code>, or its absolute path), a Java
+              class's simple name and a label, and says which one it matched. A miss suggests the nearest
+              ids (<code>did you mean: process:orderProcess</code>) instead of an example id that does not
+              exist.</li>
+          <li><b>The summary and CLAUDE.md name the defects their headline counts.</b> Their lists picked
+              error-level findings only, so a project whose defects were all warnings, such as a gateway
+              with no way out, announced "2 defects" and named neither. The summary now lists up to five
+              open defects, errors first. CLAUDE.md lists up to three, one per check, so they name three
+              different problems. Every finding in graph.json carries its check's <code>kind</code>, and the
+              "what is broken" recipes select open defects by kind.</li>
+          <li><b>CLAUDE.md states a key convention only when most keys follow it.</b> Before, the most
+              frequent pattern was stated whatever its share: one app's prefix in a six-app project, or
+              Design's default <code>decision#</code> on four keys of nine. A pattern now needs at least two
+              keys and at least half of them. Where each app prefixes its own keys, the pattern reads
+              <code>&lt;APP&gt;-P#</code> and names the prefixes seen; a project whose own prefix holds
+              nearly every key keeps it. Test fixtures no longer count towards a convention or appear under
+              <i>Where to write</i>, and more than three archives in one folder are named by that folder and
+              a count.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
@@ -544,19 +607,19 @@
     <depends>com.intellij.modules.xml</depends>
     <!-- JSON PSI for form-model {{…}} expression injection and the .form → JSON association. -->
     <depends>com.intellij.modules.json</depends>
-    <!-- JCEF (Atlas Hub, the explorer editor, the Inspect sign-in browser). Up to 2026.1 (build 261)
-         JCEF sits in the platform core; 2026.2 (262) moved it into the bundled "Web Browser (JCEF)"
-         plugin (id com.intellij.modules.jcef). Declared *optional* so one artifact covers both: on
-         262 it wires that plugin's classloader in, on 261 the id doesn't exist and the dependency is
-         simply skipped. Every JCEF call site is already guarded by JBCefApp.isSupported(), so a
-         remote-dev / no-JCEF IDE keeps working without it. -->
+    <!-- JCEF (Atlas Hub, the explorer editor, the Inspect sign-in browser). Up to 2026.1 JCEF sat in the
+         platform core; 2026.2 (build 262, the floor since the 2026.2 move) has it in the bundled
+         "Web Browser (JCEF)" plugin (id com.intellij.modules.jcef), which is also why :idea-plugin has to
+         put that plugin on its compile classpath. Still declared *optional*: someone who disables the
+         bundled plugin, or an IDE without JCEF at all (remote dev), should lose the browser panels rather
+         than the whole plugin — every call site is guarded by JBCefApp.isSupported() for exactly that. -->
     <depends optional="true" config-file="flowable-atlas-jcef.xml">com.intellij.modules.jcef</depends>
 
     <resource-bundle>messages.FlowableAtlasBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Services (FlowableModelIndexService, ModelConstantsService/Settings) are @Service — no registration needed. -->
-        <!-- Settings tree: an app-level root page (core toggles) with three project-level children.
+        <!-- Settings tree: an app-level root page (core toggles) with project-level children.
              parentId chaining across levels is supported — the settings tree merges them by ID. -->
         <applicationConfigurable
                 parentId="tools"
@@ -577,11 +640,29 @@
                 key="configurable.atlas.generation"
                 instance="com.flowable.atlas.settings.GenerationConfigurable"/>
         <projectConfigurable
-                parentId="com.flowable.atlas.settings"
-                id="com.flowable.atlas.settings.connections"
+                parentId="com.flowable.atlas.settings.generation"
+                id="com.flowable.atlas.settings.generation.constants"
                 bundle="messages.FlowableAtlasBundle"
-                key="configurable.atlas.connections"
-                instance="com.flowable.atlas.settings.ConnectionsConfigurable"/>
+                key="configurable.atlas.generation.constants"
+                instance="com.flowable.atlas.settings.GenerationConstantsConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings.generation"
+                id="com.flowable.atlas.settings.generation.liquibase"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.generation.liquibase"
+                instance="com.flowable.atlas.settings.GenerationLiquibaseConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings.generation"
+                id="com.flowable.atlas.settings.generation.dto"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.generation.dto"
+                instance="com.flowable.atlas.settings.GenerationDtoConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings"
+                id="com.flowable.atlas.settings.environments"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.environments"
+                instance="com.flowable.atlas.settings.EnvironmentsConfigurable"/>
         <completion.contributor
                 language="JAVA"
                 implementationClass="com.flowable.atlas.completion.FlowableJavaCompletionContributor"/>
@@ -610,6 +691,15 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.flowable.atlas.inspection.FlowableBrokenKeyInspection"/>
+        <!-- Java: a message, signal, task key or activity id no model declares (a runtime failure or a no-op). -->
+        <localInspection
+                language="JAVA"
+                shortName="FlowableUnknownName"
+                displayName="Unknown Flowable message, signal or task name"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.atlas.inspection.FlowableUnknownNameInspection"/>
         <!-- BPMN/CMMN model XML: an unknown model key at a cross-reference attribute (broken deployment). -->
         <localInspection
                 language="XML"
@@ -619,6 +709,15 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.flowable.atlas.inspection.FlowableXmlBrokenKeyInspection"/>
+        <!-- JSON models (forms, data objects, apps, …): an unknown model key at a reference site — the CLI's missingRefs. -->
+        <localInspection
+                language="JSON"
+                shortName="FlowableJsonBrokenKey"
+                displayName="Unknown Flowable model key (model JSON)"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.atlas.inspection.FlowableJsonBrokenKeyInspection"/>
         <!-- Ctrl-click a key literal → jump to the model file; Find Usages works too. -->
         <psi.referenceContributor
                 language="JAVA"
@@ -627,9 +726,22 @@
         <psi.referenceContributor
                 language="XML"
                 implementation="com.flowable.atlas.navigation.FlowableXmlKeyReferenceContributor"/>
+        <!-- Ctrl-click a model key in a JSON model (a data object's backing service, a form component's subform,
+             data object, service or action, a document's forms, an app's models, …) → the model file. The sites are
+             :core's JsonKeySites, shared with the parsers. -->
+        <psi.referenceContributor
+                language="JSON"
+                implementation="com.flowable.atlas.navigation.FlowableJsonKeyReferenceContributor"/>
         <!-- Hover / Ctrl-Q on a key literal → model type, name and file. -->
         <lang.documentationProvider
                 language="JAVA"
+                implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
+        <!-- …and on a key inside a model file: a cross-reference or the file's own key. -->
+        <lang.documentationProvider
+                language="XML"
+                implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
+        <lang.documentationProvider
+                language="JSON"
                 implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
         <!-- Search Everywhere / Go to Symbol: every model key (→ model file) and every bot key
              (→ the BotService class and the actions that invoke it). -->
@@ -656,6 +768,15 @@
             <className>com.flowable.atlas.intention.GenerateDataObjectBeanIntention</className>
             <category>Flowable</category>
         </intentionAction>
+        <!-- Alt-Enter on a model key — in Java, or inside a model file — → the model's page in the Atlas
+             Explorer (the reverse of the page's "open in IDE" button). No language filter: the intention
+             itself answers only in Java and model files. -->
+        <intentionAction>
+            <className>com.flowable.atlas.intention.OpenInAtlasExplorerIntention</className>
+            <category>Flowable</category>
+        </intentionAction>
+        <!-- Find Usages on a model's key, in its own file → every model and every Java call site that names it. -->
+        <findUsagesHandlerFactory implementation="com.flowable.atlas.usage.ModelKeyFindUsagesHandlerFactory"/>
         <!-- Don't report Java referenced from models (delegates, ${bean.method()}, listeners) as unused. -->
         <implicitUsageProvider implementation="com.flowable.atlas.usage.FlowableImplicitUsageProvider"/>
         <!-- Find Usages / Ctrl-B on a delegate class or ${bean.method()} shows the model files that use it. -->
@@ -673,10 +794,18 @@
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider"/>
         <!-- Gutter icon on a model-key expression — a literal or a constant/local reference at a key
-             call site — whose model has a diagram (bundled Design .svg, or rendered from its DI layout)
-             → open it in the IDE's built-in image/SVG viewer. No diagram (e.g. a form BAR) → no marker. -->
+             call site — whose model has a picture (a diagram rendered from its DI layout, a decision
+             table, or a form/page drawn as its grid) → open the model beside its picture. No picture
+             (e.g. an action) → no marker. -->
         <codeInsight.lineMarkerProvider
                 language="JAVA"
+                implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
+        <!-- …and inside a model file: on the file's own key and on every process/case/decision/form reference. -->
+        <codeInsight.lineMarkerProvider
+                language="XML"
+                implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
+        <codeInsight.lineMarkerProvider
+                language="JSON"
                 implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
         <!-- Inline hint: the physical table name after a string literal that is a data-object key. -->
         <codeInsight.declarativeInlayProvider
@@ -698,17 +827,41 @@
                 bundle="messages.FlowableAtlasBundle"
                 nameKey="inlay.actionName.name"
                 descriptionKey="inlay.actionName.description"/>
+        <!-- Inline hint inside a model file: the referenced model's name after the key that names it. -->
+        <codeInsight.declarativeInlayProvider
+                language="XML"
+                implementationClass="com.flowable.atlas.hint.FlowableModelNameInlayProvider"
+                isEnabledByDefault="true"
+                group="VALUES_GROUP"
+                providerId="com.flowable.atlas.modelName.xml"
+                bundle="messages.FlowableAtlasBundle"
+                nameKey="inlay.modelName.name"
+                descriptionKey="inlay.modelName.description"/>
+        <codeInsight.declarativeInlayProvider
+                language="JSON"
+                implementationClass="com.flowable.atlas.hint.FlowableModelNameInlayProvider"
+                isEnabledByDefault="true"
+                group="VALUES_GROUP"
+                providerId="com.flowable.atlas.modelName.json"
+                bundle="messages.FlowableAtlasBundle"
+                nameKey="inlay.modelName.name"
+                descriptionKey="inlay.modelName.description"/>
         <!-- Warn when renaming a Java symbol referenced by Flowable model expressions (text, not auto-updated). -->
         <refactoring.elementListenerProvider
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>
-        <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
-        <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
-        <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab in the center editor
-             area (like a DB table); hides the raw-HTML "Text" tab for it. -->
-        <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasFileEditorProvider"/>
-        <!-- Second tab on the same *.explorer.html: the Flowable Expressions playground, so the map and
-             the playground share one window (no separate tool window needed). Placed after Atlas Explorer. -->
-        <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasExpressionEditorProvider"/>
+        <!-- What asks for attention: a failed pull, a rename not applied to the models, a sentence
+             explaining why nothing happened. See AtlasNotifications. -->
+        <notificationGroup id="Flowable Atlas" displayType="BALLOON"
+                           bundle="messages.FlowableAtlasBundle" key="notification.group.attention"/>
+        <!-- "It worked": the index was rebuilt, artifacts were generated, waivers were saved — its own
+             group, so it can be silenced in Settings → Notifications without silencing the warnings. -->
+        <notificationGroup id="Flowable Atlas Results" displayType="BALLOON"
+                           bundle="messages.FlowableAtlasBundle" key="notification.group.results"/>
+        <!-- The embedded "Atlas Explorer" editor tab is registered in flowable-atlas-jcef.xml: it needs
+             the bundled JCEF plugin, and a provider named here would be asked on every file open
+             whether or not that plugin is loaded. -->
+        <!-- "Models changed since this explorer was generated" banner above the page. -->
+        <editorNotificationProvider implementation="com.flowable.atlas.explorer.AtlasExplorerStaleNotificationProvider"/>
 
         <!-- ==================== Flowable Expression support ==================== -->
         <!-- Two dialects of one expression language: backend ${…}/#{…} (JUEL) and frontend {{…}} (flw.*). -->
@@ -775,6 +928,13 @@
             <category>Flowable</category>
         </intentionAction>
         <!-- Ctrl-Q / hover on a catalog function or root inside an expression → call head + doc line. -->
+        <!-- Ctrl-click on a backend expression's root (`${orderService.…}`) → the Spring bean's class, by its
+             default bean name; Ctrl-Q then shows that class's documentation. -->
+        <psi.referenceContributor language="FlowableBackendExpr"
+                  implementation="com.flowable.atlas.expr.navigation.FlowableExprBeanReferenceContributor"/>
+        <!-- environment.getProperty('k') → the line of every application*.properties|yml that sets k. -->
+        <psi.referenceContributor language="FlowableBackendExpr"
+                  implementation="com.flowable.atlas.expr.navigation.FlowableExprPropertyReferenceContributor"/>
         <lang.documentationProvider language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.documentation.FlowableExprDocumentationProvider"/>
         <lang.documentationProvider language="FlowableFrontendExpr"
@@ -829,94 +989,251 @@
              an unregistered extension resolves to UnknownFileType, which is binary, so the editor
              shows the "file type not associated" panel instead — most visibly for an entry opened
              out of a .bar/.zip. A <fileType> with no implementationClass only adds matchers to the
-             existing type (the same idiom the bundled javaFX and Maven plugins use). The list mirrors
-             ModelType.EXTENSIONS in :core. -->
+             existing type (the same idiom the bundled javaFX and Maven plugins use).
+             Only the extensions with no common meaning outside Flowable are mapped by name (the list is
+             FlowableJsonModelTypeDetector.NAME_MAPPED): a mapping is IDE-wide, and mapping .tpl, .service,
+             .policy or .data made a Helm _helpers.tpl, a systemd unit or a Java policy file in any project
+             a JSON file full of errors. Those, and the rest of ModelType.EXTENSIONS, are left to the
+             detector below, which claims a file as JSON only when it holds a JSON object. -->
         <fileType name="JSON"
-                  extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
+                  extensions="form;action;dictionary;masterdata;knowledgebase;dashboardcomponent;extractor;palette;agent;channel"/>
+        <fileTypeDetector implementation="com.flowable.atlas.model.FlowableJsonModelTypeDetector"/>
         <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
         <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
-        <!-- The Expression Playground: type an expression, get validation + completion. -->
-        <toolWindow id="Flowable Expressions"
+        <!-- A .bar is a zip under another name. As the platform's ARCHIVE a double-click expands it (see
+             ArchiveTreeStructureProvider) instead of asking which file type it is. -->
+        <fileType name="ARCHIVE" extensions="bar"/>
+
+        <!-- Schemas for that model XML. Without them a .bpmn / .cmmn / .dmn opens with an unresolved
+             namespace and no tag or attribute completion at all: the IDE ships no BPMN, CMMN or DMN
+             schemas of its own. The namespace-to-file table, what is deliberately left unvalidated, and
+             why this is a provider rather than the declarative standardResource bean: FlowableSchemas. -->
+        <standardResourceProvider implementation="com.flowable.atlas.schema.FlowableSchemas"/>
+        <!-- A model file wears its type's icon — the explorer's glyph and colour — in the Project view
+             and the editor tabs; a .bar the archive icon. Decided from the name alone. -->
+        <fileIconProvider implementation="com.flowable.atlas.icons.ModelFileIconProvider"/>
+        <!-- .zip / .bar nodes in the Project view list their entries — the platform drops them for an
+             archive inside a content root. -->
+        <treeStructureProvider implementation="com.flowable.atlas.model.ArchiveTreeStructureProvider"/>
+        <!-- A process, case, decision, form or page opens as text and picture side by side — loose or out
+             of an archive. The picture is painted in Swing, not JCEF, so it stays fast under Remote Dev. -->
+        <fileEditorProvider implementation="com.flowable.atlas.preview.FlowableModelPreviewEditorProvider"/>
+        <!-- The Structure tool window for a form/page (its components as nested in Design) and a
+             process/case (its elements by name). Asked before the language's builder; any other
+             JSON or XML file gets null and keeps its usual outline. -->
+        <structureViewBuilder key="JSON" factoryClass="com.flowable.atlas.structure.ModelStructureViewProvider"/>
+        <structureViewBuilder key="XML" factoryClass="com.flowable.atlas.structure.ModelStructureViewProvider"/>
+        <!-- Reader Mode's visual formatting layer crashes on minified single-line JSON, which is what a
+             Design model export is; order="last" is load-bearing, because the platform enables the layer
+             from this same extension point. See FlowableModelVisualFormattingGuard. -->
+        <readerModeProvider implementation="com.flowable.atlas.model.FlowableModelVisualFormattingGuard"
+                            order="last"/>
+        <!-- The Atlas Playground: expressions and scripts, validated, completed and evaluated. -->
+        <toolWindow id="Atlas Playground"
                     anchor="bottom"
                     secondary="true"
-                    icon="/META-INF/expr-toolwindow.svg"
+                    icon="/icons/atlas/playground.svg"
                     factoryClass="com.flowable.atlas.expr.toolwindow.FlowableExpressionToolWindowFactory"/>
         <!-- The Atlas Hub: the plugin's control center (model-index status, generated explorers,
              Flowable Design sync). Right anchor — the home of project control-center panels
              (Gradle, Maven, Database). -->
+        <!-- The explorer's findings in Swing: works under Remote Development and without JCEF. -->
+        <toolWindow id="Atlas Findings"
+                    anchor="bottom"
+                    icon="/icons/atlas/findings.svg"
+                    factoryClass="com.flowable.atlas.findings.AtlasFindingsToolWindowFactory"/>
         <toolWindow id="Atlas Hub"
                     anchor="right"
-                    icon="/META-INF/atlas-hub.svg"
+                    icon="/icons/atlas/hub.svg"
                     factoryClass="com.flowable.atlas.hub.AtlasHubToolWindowFactory"/>
+        <!-- "Report Flowable Atlas Problem…" in the IDE's error dialog: builds the report, copies it to
+             the clipboard and opens the issue tracker — nothing is transmitted by the plugin itself. -->
+        <errorHandler implementation="com.flowable.atlas.AtlasErrorReportSubmitter"/>
+        <!-- Starts the model-index build when a project opens, so the Hub, the markers and the
+             inspections do not wait for the first completion or Rebuild click to ask for one. -->
+        <postStartupActivity implementation="com.flowable.atlas.index.FlowableIndexWarmUp"/>
     </extensions>
 
     <projectListeners>
-        <!-- Regenerates the model-constants class when models are added/removed/edited. -->
+        <!-- Regenerates the model-constants class when the model index lands (a VFS listener fired on the
+             change that had just dropped the index and found nothing to generate from). -->
         <listener class="com.flowable.atlas.generate.ModelConstantsAutoRefresher"
-                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+                  topic="com.flowable.atlas.events.AtlasEventsListener"/>
+        <!-- Every way to a model ends in an editor tab; the Hub's Recent Models list listens there. -->
+        <listener class="com.flowable.atlas.hub.RecentModelsService$Listener"
+                  topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
+
+    <applicationListeners>
+        <!-- The Hub's list of generated explorer pages is remembered until a page appears or goes. -->
+        <listener class="com.flowable.atlas.explorer.AtlasExplorerFiles$Listener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </applicationListeners>
 
     <!-- Action/group texts and descriptions come from messages/FlowableAtlasBundle.properties
          (action.<id>.text / .description keys). Ellipsis convention: only actions that always need
          further input before they can complete carry one. -->
     <actions resource-bundle="messages.FlowableAtlasBundle">
-        <group id="Flowable.Menu" popup="true">
+        <group id="Flowable.Menu" popup="true" icon="/icons/atlas/model.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <!-- Open -->
+            <!-- Every opener is "Open Atlas …": the texts double as the Hub's button labels, which are verbs. -->
             <action id="Flowable.OpenAtlasHub"
-                    class="com.flowable.atlas.action.OpenAtlasHubAction"/>
-            <!-- Platform icons (AllIcons) on the actions the Atlas Hub toolbar reuses; no entry in
-                 the main toolbar — the hub is the plugin's visible surface, everything else stays
-                 in the menu. -->
+                    class="com.flowable.atlas.action.OpenAtlasHubAction"
+                    icon="/icons/atlas/hub.svg"/>
+            <!-- Icons: AtlasIcons (/icons/atlas) where the thing has a meaning of its own, platform icons
+                 for platform verbs (search, download). No entry in the main toolbar — the hub is the
+                 plugin's visible surface, everything else stays in the menu. -->
+            <action id="Flowable.OpenAtlasFindings"
+                    class="com.flowable.atlas.action.OpenAtlasFindingsAction"
+                    icon="/icons/atlas/findings.svg"/>
             <action id="Flowable.OpenAtlasExplorer"
                     class="com.flowable.atlas.action.OpenAtlasExplorerAction"
-                    icon="AllIcons.Nodes.PpWeb"/>
-            <action id="Flowable.OpenExpressionPlayground"
-                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"/>
+                    icon="/icons/atlas/explorer.svg">
+                <override-text place="AtlasHubSection"/>
+            </action>
+            <!-- Hidden unless the project generates the ER diagram page (Settings → Generation). Menu only — and so the
+                 Hub's ⋮ — not a button in the Hub's Explorer block: an occasional tool. -->
+            <action id="Flowable.OpenAtlasErDesigner"
+                    class="com.flowable.atlas.action.OpenAtlasErDesignerAction"
+                    icon="/icons/atlas/type-dataObject.svg"/>
+            <action id="Flowable.OpenAtlasPlayground"
+                    class="com.flowable.atlas.action.OpenAtlasPlaygroundAction"
+                    icon="/icons/atlas/playground.svg">
+                <!-- A Hub section's button: the section title already says what opens (FlowableActionIds.HUB_SECTION). -->
+                <override-text place="AtlasHubSection"/>
+            </action>
             <!-- Opens Search Everywhere on the "Flowable Model" tab — otherwise reachable only by
                  pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
-            <action id="Flowable.SearchModels"
-                    class="com.flowable.atlas.action.SearchFlowableModelsAction"
-                    icon="AllIcons.Actions.Search"/>
+            <action id="Flowable.GoToModel"
+                    class="com.flowable.atlas.action.GoToModelAction"
+                    icon="AllIcons.Actions.Search">
+                <!-- The one action that competes with Shift-Shift for the hand: worth a chord. -->
+                <keyboard-shortcut keymap="$default" first-keystroke="control alt shift M"/>
+            </action>
+            <!-- The same hits as the tab above, in a list that stays open: the popup is for reaching one
+                 place, this is for working through all of them. No second chord — it is reached from the
+                 popup with Shift+Enter, and from here.
+                 The icon is the Find tool window's own, not a second magnifier: Actions.Search and
+                 Actions.Find are near-identical glasses, and two adjacent entries that differ only in
+                 wording are exactly what made this pair hard to tell apart. -->
+            <action id="Flowable.FindInModels"
+                    class="com.flowable.atlas.action.FindInModelsAction"
+                    icon="AllIcons.Toolwindows.ToolWindowFind"/>
+            <!-- The key under the caret — a literal or constant at a Flowable API site in Java, a reference or
+                 the file's own key in a model file — onto the clipboard. Also in the editor's context menu. -->
+            <action id="Flowable.CopyModelKey"
+                    class="com.flowable.atlas.action.CopyModelKeyAction"
+                    icon="AllIcons.Actions.Copy"/>
+            <!-- The same model in two places: the entry inside an app export .bar/.zip and the file
+                 sitting in the project. Both directions, whichever end is selected. Also in the editor's
+                 context menu, which is how an entry opened by Go to Model is reached. -->
+            <action id="Flowable.CompareModelWithArchive"
+                    class="com.flowable.atlas.action.CompareModelWithArchiveAction"
+                    icon="AllIcons.Actions.Diff"/>
             <separator/>
 
-            <!-- Generate (submenu, with a nested Liquibase submenu) -->
+            <!-- Generate (submenu, with nested Liquibase and DTO submenus). Each action's own text is the
+                 whole sentence — what Find Action, a balloon and a Hub button show — and the menus, where
+                 the submenu already says "Generate", show the short one: <override-text> reads
+                 action.<id>.MainMenu.text. The Hub's ⋮ renders this same group ("popup@AtlasHub") and
+                 borrows the menu's text. -->
             <group id="Flowable.Generate" popup="true">
                 <action id="Flowable.GenerateAtlasExplorer"
                         class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
+                        icon="/icons/atlas/explorer.svg">
+                    <override-text place="MainMenu"/>
+                    <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    <override-text place="AtlasHubSection"/>
+                </action>
+                <!-- No ellipsis: it re-runs the existing page(s) with the settings as they are. Its text is
+                     what the Hub, the explorer banner and the post-pull balloon show (FlowableActionIds.text).
+                     The hammer is the platform's "build": a regenerated page is rebuilt, and Reload's arrows
+                     beside it on the explorer toolbar mean something else. -->
+                <action id="Flowable.RegenerateAtlasExplorer"
+                        class="com.flowable.atlas.action.RegenerateAtlasExplorerAction"
                         icon="AllIcons.Actions.Compile"/>
                 <action id="Flowable.GenerateModelConstants"
-                        class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
+                        class="com.flowable.atlas.action.GenerateModelConstantsAction">
+                    <override-text place="MainMenu"/>
+                    <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                </action>
                 <group id="Flowable.GenerateLiquibase" popup="true">
                     <action id="Flowable.GenerateLiquibaseFromDataObject"
-                            class="com.flowable.atlas.action.GenerateLiquibaseFromDataObjectAction"/>
+                            class="com.flowable.atlas.action.GenerateLiquibaseFromDataObjectAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                     <action id="Flowable.GenerateLiquibaseFromApps"
-                            class="com.flowable.atlas.action.GenerateLiquibaseFromAppsAction"/>
+                            class="com.flowable.atlas.action.GenerateLiquibaseFromAppsAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                 </group>
                 <group id="Flowable.GenerateDto" popup="true">
                     <action id="Flowable.GenerateDtoFromDataObject"
-                            class="com.flowable.atlas.action.GenerateDtoFromDataObjectAction"/>
+                            class="com.flowable.atlas.action.GenerateDtoFromDataObjectAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                     <action id="Flowable.GenerateDtoFromApps"
-                            class="com.flowable.atlas.action.GenerateDtoFromAppsAction"/>
+                            class="com.flowable.atlas.action.GenerateDtoFromAppsAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                 </group>
             </group>
             <separator/>
 
             <!-- Flowable Design -->
+            <action id="Flowable.SwitchDesignEnvironment"
+                    class="com.flowable.atlas.action.SwitchDesignEnvironmentAction"/>
             <action id="Flowable.PullFromDesign"
                     class="com.flowable.atlas.action.PullFromDesignAction"
                     icon="AllIcons.Actions.Download"/>
-            <action id="Flowable.ConfigureDesignConnection"
-                    class="com.flowable.atlas.action.ConfigureDesignConnectionAction"/>
+            <action id="Flowable.SwitchWorkEnvironment"
+                    class="com.flowable.atlas.action.SwitchWorkEnvironmentAction"/>
+            <!-- Every address in the catalog — Design, the app, Control, Hub — grouped by stage. It lives
+                 in the descriptor rather than in the Hub because the Hub's ⋮ renders this very group:
+                 an entry built only there is what made the two menus disagree. -->
+            <group id="Flowable.OpenEnvironmentInBrowser"
+                   class="com.flowable.atlas.action.OpenEnvironmentInBrowserGroup"
+                   popup="true"/>
+            <action id="Flowable.ManageEnvironments"
+                    class="com.flowable.atlas.action.ManageEnvironmentsAction"/>
             <separator/>
 
             <!-- Maintenance -->
             <action id="Flowable.RebuildModelIndex"
-                    class="com.flowable.atlas.action.RebuildModelIndexAction"/>
+                    class="com.flowable.atlas.action.RebuildModelIndexAction"
+                    icon="AllIcons.Actions.ForceRefresh"/>
             <!-- Debug helper; visible only with idea.is.internal=true. -->
             <action id="Flowable.DumpKeyIndex" internal="true"
                     class="com.flowable.atlas.action.DumpFlowableIndexAction"/>
+        </group>
+
+        <!-- Right-click on a folder, a model file, an archive or a .json in the Project view: the
+             actions that are about the thing under the cursor. Hidden elsewhere (FlowableProjectViewGroup). -->
+        <group id="Flowable.ProjectViewPopup" class="com.flowable.atlas.action.FlowableProjectViewGroup" popup="false">
+            <separator/>
+            <!-- A model file → its page. Not in Tools: it acts on the selected file and has no meaning
+                 without one; the editor has the intention for the same step. -->
+            <action id="Flowable.OpenModelInAtlasExplorer"
+                    class="com.flowable.atlas.action.OpenModelInAtlasExplorerAction"
+                    icon="/icons/atlas/explorer.svg"/>
+            <reference ref="Flowable.CompareModelWithArchive"/>
+            <reference ref="Flowable.GenerateAtlasExplorer"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </group>
+
+        <!-- The editor's context menu: the two actions about the key or model under the caret, as one
+             block behind a separator rather than two loose entries at the bottom. -->
+        <group id="Flowable.EditorPopup" popup="false">
+            <separator/>
+            <reference ref="Flowable.CopyModelKey"/>
+            <reference ref="Flowable.CompareModelWithArchive"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </group>
     </actions>
 </idea-plugin>

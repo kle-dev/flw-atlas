@@ -1,11 +1,9 @@
 package com.flowable.atlas.usage
 
-import com.intellij.openapi.diagnostic.logger
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.ImplicitUsageProvider
 import com.intellij.openapi.components.service
-import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiField
@@ -18,7 +16,6 @@ import com.intellij.psi.PsiMethod
  */
 class FlowableImplicitUsageProvider : ImplicitUsageProvider {
 
-    private val LOG = logger<FlowableImplicitUsageProvider>()
 
     override fun isImplicitUsage(element: PsiElement): Boolean {
         val index = indexOrNull(element) ?: return false
@@ -38,14 +35,12 @@ class FlowableImplicitUsageProvider : ImplicitUsageProvider {
 
     private fun indexOrNull(element: PsiElement): FlowableIndex? {
         if (element !is PsiClass && element !is PsiMethod && element !is PsiField) return null
-        return try {
-            element.project.service<FlowableModelIndexService>().index()
-        } catch (pce: ProcessCanceledException) {
-            throw pce                      // a cancelled action is not a failure
-        } catch (e: Exception) {
-            LOG.debug("index unavailable for implicit-usage check", e)
-            null
-        }
+        // The unused-declaration inspection holds the read lock while it asks; building the index here
+        // ran the whole model scan under that lock and froze typing on a large repository. Read the
+        // cache, ask for a background build, and answer "not implicitly used" until it lands — the
+        // daemon restarts then and asks again.
+        val service = element.project.service<FlowableModelIndexService>()
+        return service.cachedOrRequest()
     }
 
     private fun beanNameReferenced(cls: PsiClass, index: FlowableIndex): Boolean {

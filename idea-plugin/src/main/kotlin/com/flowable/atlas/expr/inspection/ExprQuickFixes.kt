@@ -9,6 +9,9 @@ import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
 
+/** One family for the "did you mean" fix, in the inspection and the annotator alike, so *Fix all* groups them. */
+const val REPLACE_FAMILY = "Replace with the suggested name"
+
 /**
  * Replaces the flagged range with the suggested text — the "did you mean" fix, as a [LocalQuickFix]
  * (the inspection counterpart of the annotator's IntentionAction fix). Works on injected fragments
@@ -16,7 +19,7 @@ import com.intellij.psi.PsiDocumentManager
  */
 class ReplaceExprRangeFix(private val replacement: String) : LocalQuickFix {
     override fun getName(): String = "Replace with '$replacement'"
-    override fun getFamilyName(): String = "Flowable expression"
+    override fun getFamilyName(): String = REPLACE_FAMILY
 
     override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val file = descriptor.psiElement?.containingFile ?: return
@@ -48,7 +51,7 @@ class AddToExpressionAllowlistFix(
         return "Add $what '$subject' to Flowable expression allowlist"
     }
 
-    override fun getFamilyName(): String = "Flowable expression allowlist"
+    override fun getFamilyName(): String = "Add to the Flowable expression allowlist"
 
     override fun startInWriteAction(): Boolean = false
 

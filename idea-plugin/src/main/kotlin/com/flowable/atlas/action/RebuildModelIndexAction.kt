@@ -1,26 +1,30 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasDetails
+import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 
 /**
  * Tools → Flowable Atlas → "Rebuild Model Index": rescans the project's Flowable models in the
  * background (non-modal, unlike the internal dump action) and reports the result as a balloon with
  * a per-type breakdown behind "Show details". The Atlas Hub's Rebuild button runs the same path.
  */
-class RebuildModelIndexAction : AnAction() {
+class RebuildModelIndexAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -37,7 +41,17 @@ class RebuildModelIndexAction : AnAction() {
         fun rebuild(project: Project) {
             object : Task.Backgroundable(project, "Indexing Flowable models", true) {
                 override fun run(indicator: ProgressIndicator) {
-                    val index = project.service<FlowableModelIndexService>().refresh()
+                    // A failed scan is a message for the user, not a red IDE error for the plugin.
+                    val index = try {
+                        project.service<FlowableModelIndexService>().refresh()
+                    } catch (pce: ProcessCanceledException) {
+                        throw pce
+                    } catch (e: Exception) {
+                        AtlasNotifications.group()
+                            .createNotification("Model index could not be rebuilt", e.message ?: e.javaClass.simpleName, NotificationType.WARNING)
+                            .notify(project)
+                        return
+                    }
                     ApplicationManager.getApplication().invokeLater {
                         if (!project.isDisposed) notifyRebuilt(project, index)
                     }
@@ -46,15 +60,14 @@ class RebuildModelIndexAction : AnAction() {
         }
 
         private fun notifyRebuilt(project: Project, index: FlowableIndex) {
-            NotificationGroupManager.getInstance()
-                .getNotificationGroup("Flowable Atlas")
+            AtlasNotifications.results()
                 .createNotification(
                     "Model index rebuilt",
                     "${index.distinctCount()} models indexed",
                     NotificationType.INFORMATION,
                 )
-                .addAction(NotificationAction.createSimple("Show details") {
-                    Messages.showMessageDialog(project, render(index), "Model Index", Messages.getInformationIcon())
+                .addAction(NotificationAction.createSimple(message("details.show")) {
+                    AtlasDetails.show(project, message("details.index"), render(index))
                 })
                 .notify(project)
         }
@@ -73,4 +86,6 @@ class RebuildModelIndexAction : AnAction() {
             return sb.toString()
         }
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }
