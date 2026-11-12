@@ -170,6 +170,10 @@ object GraphJsonRenderer {
         "dataIn" to "A model or changelog node's data lives once in the named top-level bucket — find it " +
             "by matching type+key there (e.g. data.dataIn='processes' -> .processes[] | select(.key==\"<key>\"), " +
             "data.dataIn='liquibase' -> .liquibase[] | select(.key==\"<key>\")).",
+        "liquibase" to "A changelog lists the columns of the tables it shapes as they stand once its run is " +
+            "over, each with the change set it comes `from`. A table several changelogs of one run shape is " +
+            "listed under one of them, and the others name that changelog in `columnsIn` ({table: key}); a " +
+            "table's columns are jq '[.liquibase[].columns[] | select(.table==\"T\")]'.",
         "java" to "javaByRole ({role: [class]}) and javaGlue list Java classes as {fqn, file, line}; what Atlas " +
             "read from a class — roles, bean names, methods, endpoints — is on the node 'java:<fqn>' (a class " +
             "Atlas gave no role, listed under 'other', mostly has none). Controllers are javaByRole.controller.",

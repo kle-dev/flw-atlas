@@ -6133,11 +6133,12 @@ function csRef(r, own){
 }
 /** Every column of the tables the changelog shapes, as they stand once every change set has run — which
  *  change set added each one, how far each is mapped through when a service reads the changelog, and the
- *  columns a later change set dropped or renamed away. */
+ *  columns a later change set dropped or renamed away. A table several changelogs of one run shape is
+ *  listed under one of them (`columnsIn` names it): the others link there instead of repeating it. */
 S.lqColumns={id:'columns', title:'Columns', hint:'per table, after every change set has run; the dot says how far a column is mapped through',
   count:(n,c)=>(c.d.columns||[]).length,
-  build:(n,c)=>{ const d=c.d, cs=d.columns||[], gone=d.dropped||[], goneT=d.droppedTables||[];
-    if(!cs.length&&!gone.length&&!goneT.length) return '';
+  build:(n,c)=>{ const d=c.d, cs=d.columns||[], gone=d.dropped||[], goneT=d.droppedTables||[], elsewhere=Object.entries(d.columnsIn||{});
+    if(!cs.length&&!gone.length&&!goneT.length&&!elsewhere.length) return '';
     const cov=d.coverage;                    // present only when a service references this changelog
     const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
     const stOf=k=>!inS.has(k)?'bad':(!inD.has(k)?'warn':'good');
@@ -6162,6 +6163,8 @@ S.lqColumns={id:'columns', title:'Columns', hint:'per table, after every change 
             from:(x.renamedTo?'renamed to <span class="mono">'+esc(x.renamedTo)+'</span> by ':'dropped by ')+csRef(x.by, n.file)}}))), {filter:false});
     });
     goneT.forEach(x=>{ b+='<div class="muted tbl-empty">Table <span class="mono">'+esc(x.table)+'</span> — dropped by '+csRef(x.by, n.file)+'</div>'; });
+    elsewhere.forEach(([t,k])=>{ const home=byId.get('liquibase:'+k);
+      b+='<div class="muted tbl-empty">Table <span class="mono">'+esc(t)+'</span> — its columns are listed under '+(home?vlink(home.id, home.label):'<span class="mono">'+esc(k)+'</span>')+'</div>'; });
     return b; }};
 /** Every change set, in the order Liquibase runs them: what it changes, and whether it ran — a failed
  *  precondition skips one, and one that already ran (the same id, author and logical path in another

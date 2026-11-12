@@ -566,7 +566,9 @@ The explorer never presents a guess as a fact:
   coverage badges. A changelog's page shows the columns of its tables as they stand once every change set
   has run, with the change set that added each one, a **PK** tag on the primary key (declared inline, by
   `addPrimaryKey` or in the SQL, and kept through a rename), and the columns and tables a later change set dropped
-  or renamed away; its *Details* tab lists every change set in run order — what it changes, and whether it
+  or renamed away. A table that several changelogs of one run shape is listed on one of their pages — the
+  one a service reads the table from, else the one that created it — and the others link there. Its
+  *Details* tab lists every change set in run order — what it changes, and whether it
   ran, was skipped by its precondition or had already run from another file (see
   [how changelogs are read](../checks/#how-changelogs-are-read)). An app's **copy** of one of the
   application's changelogs says which of its change sets differ from the code, if any. The **Schema coverage** table — every column from the changelog through the service

@@ -177,6 +177,11 @@ It is designed to make that easy:
 - A key whose value would be **null is not written**. `.file` or `.resultVariable` answers null either
   way, so a query reads the same; test a value rather than `has(...)`. The key cost bytes in the file and
   in every record cut from it — most of all in a form, whose fields each said `"value": null`.
+- **A changelog's columns** are listed once. A changelog in `liquibase` lists the columns of the tables
+  it shapes as they stand once its run is over, each with the change set it comes `from`. A table that
+  several changelogs of one run shape — an application that grows a table by one file per release — is
+  listed under one of them: the one a service reads the table from, else the one that created it. The
+  others name that changelog in `columnsIn`.
 - **Java classes** are references. `javaByRole` lists the classes by role (`controller`, `service`,
   `bot`, …) and `javaGlue` the delegates and listeners, each as `{fqn, file, line}`; what Atlas read from
   a class — its roles, bean names, methods and endpoints — is on its node `java:<fqn>`. The parser's raw

@@ -188,7 +188,7 @@ object GraphBuilder {
                     "tables" to lb["tables"], "effectiveTables" to lb["effectiveTables"],
                     "columns" to lb["columns"], "coverage" to lb["coverage"], "authority" to lb["authority"],
                 ).apply {
-                    for (k in listOf("origin", "logicalFilePath", "dropped", "droppedTables", "changeSets", "revisions", "includesMissing")) lb[k]?.let { put(k, it) }
+                    for (k in listOf("origin", "logicalFilePath", "columnsIn", "dropped", "droppedTables", "changeSets", "revisions", "includesMissing")) lb[k]?.let { put(k, it) }
                 },
             )
         }

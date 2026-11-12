@@ -113,6 +113,44 @@ class GraphSizeGuardTest {
         }
     }
 
+    /**
+     * A table grown by one changelog file per release is listed once, not once per file. Each file carried
+     * every column of the table, so twice the files — which is also twice the columns — made the section
+     * four times as large: on a real project it was 121 MB of a 172 MB graph.json, which no local project
+     * showed because none of them grows a table over more than one file.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aTableGrownOverManyChangelogsIsListedOnceNotOncePerFile() {
+        fun liquibase(files: Int): List<Map<String, Any?>> {
+            val tmp = Files.createTempDirectory("atlas-size-guard-liquibase").toFile()
+            try {
+                val dir = File(tmp, "src/main/resources/db/changelog/changes").apply { mkdirs() }
+                val head = "<databaseChangeLog xmlns=\"http://www.liquibase.org/xml/ns/dbchangelog\">"
+                File(dir.parentFile, "db.changelog-master.xml")
+                    .writeText("$head<includeAll path=\"classpath*:db/changelog/changes\"/></databaseChangeLog>")
+                for (i in 0 until files) {
+                    val change = if (i == 0) "<createTable tableName=\"DEMO_ORDER_\"><column name=\"ID_\" type=\"varchar(64)\"/></createTable>"
+                        else "<addColumn tableName=\"DEMO_ORDER_\">" +
+                            (0 until 3).joinToString("") { "<column name=\"C${i}_${it}_\" type=\"varchar(255)\"/>" } + "</addColumn>"
+                    File(dir, "DEMO-L%03d-order.xml".format(i))
+                        .writeText("$head<changeSet id=\"1\" author=\"demo\">$change</changeSet></databaseChangeLog>")
+                }
+                val json = MiniJson.parse(GraphJsonRenderer.render(Atlas.extract(tmp), generatedAt = Instant.EPOCH)) as Map<String, Any?>
+                return json["liquibase"] as List<Map<String, Any?>>
+            } finally {
+                tmp.deleteRecursively()
+            }
+        }
+        fun columns(entries: List<Map<String, Any?>>) = entries.sumOf { (it["columns"] as? List<*>).orEmpty().size }
+        val few = liquibase(6)
+        val many = liquibase(12)
+        assertTrue("6 files list ${columns(few)} columns for a table of 16", columns(few) == 1 + 3 * 5)
+        assertTrue("12 files list ${columns(many)} columns for a table of 34", columns(many) == 1 + 3 * 11)
+        val ratio = MiniJson.stringify(many).length.toDouble() / MiniJson.stringify(few).length
+        assertTrue("twice the changelog files made the section ${"%.2f".format(ratio)}× as large", ratio < 2.5)
+    }
+
     // ---- the copy detector ----
 
     private fun assertNoCopies(name: String, dir: File) {

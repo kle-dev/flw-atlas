@@ -31,6 +31,7 @@ object LiquibaseCoverage {
         enrichDataObjects(result)
         val bound = schemaCoverage(result, book)
         markLiquibaseAuthority(result, book, bound)
+        listEachTableOnce(book, bound)
     }
 
     /** The files-on-disk form of [apply]: [xmlFiles] relative to [root]. */
@@ -121,6 +122,50 @@ object LiquibaseCoverage {
         }
         for (e in entries) bucket.add(e.map)
         return Book(entries)
+    }
+
+    /**
+     * A table's columns are listed under one changelog of a run, and the others that shape it point there
+     * with `columnsIn`.
+     *
+     * Every changelog used to carry every column of every table it touches, as the table stands once the
+     * run is over. An application that grows a table over the years does so in one file per release, so a
+     * table of four hundred columns shaped by eighty files was listed eighty times: the section grew with
+     * files × columns, and on a real project it was 121 MB of a 172 MB graph.json — and as much again in
+     * the explorer's page. Which file added a column is on the column (`from`), and what a file did is in
+     * its change sets, so nothing a reader could ask is lost by saying the table once.
+     *
+     * The changelog that keeps the list is the one a reader goes to for the table: the one a service's
+     * coverage is read from, else the one that created the table, else the first that shapes it. Runs are
+     * kept apart — a definition replayed on its own builds its own version of a table the application also
+     * builds, and each says what it holds.
+     */
+    private fun listEachTableOnce(book: Book, bindings: List<Binding>) {
+        val byRun = LinkedHashMap<LiquibaseReplay.Run, MutableList<Entry>>()
+        for (e in book.entries) e.run?.let { byRun.getOrPut(it) { ArrayList() }.add(e) }
+        for ((run, entries) in byRun) {
+            val shapedBy = LinkedHashMap<String, MutableList<Entry>>()
+            for (e in entries) for (k in e.effective) shapedBy.getOrPut(k) { ArrayList() }.add(e)
+            for ((k, sharers) in shapedBy) {
+                if (sharers.size < 2) continue
+                val table = run.schema.tables[k] ?: continue
+                // The bound changelog, not "one with coverage": every changelog that shapes a service's
+                // table carries the coverage, so that test picked whichever came first.
+                val home = sharers.firstOrNull { e -> bindings.any { it.entry === e } }
+                    ?: sharers.firstOrNull { e -> e.copies.any { it.rel == table.createdBy.file } }
+                    ?: sharers.first()
+                for (e in sharers) {
+                    if (e === home) continue
+                    for (field in listOf("columns", "dropped")) {
+                        val listed = Dyn.mutableListOrNull(e.map[field]) ?: continue
+                        listed.removeAll { run.schema.resolve((it as? Map<*, *>)?.get("table").toString()) == k }
+                        if (field == "dropped" && listed.isEmpty()) e.map.remove(field)
+                    }
+                    @Suppress("UNCHECKED_CAST")
+                    (e.map.getOrPut("columnsIn") { LinkedHashMap<String, Any?>() } as MutableMap<String, Any?>)[table.name] = home.key
+                }
+            }
+        }
     }
 
     /**

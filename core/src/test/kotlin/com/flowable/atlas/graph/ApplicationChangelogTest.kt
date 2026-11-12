@@ -80,6 +80,56 @@ class ApplicationChangelogTest {
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any?>.authority(key: String) = list("liquibase").single { it["key"] == key }["authority"] as Map<String, Any?>?
 
+    /**
+     * A table grown over several changelog files is listed under one of them. Every file that touches a
+     * table used to carry all of its columns, so a table of four hundred columns shaped by eighty files was
+     * listed eighty times — the section grew with files × columns, and was most of a real project's
+     * graph.json. The others say where the list is.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aTableSeveralChangelogsShapeIsListedUnderTheOneThatCreatedIt() {
+        val phone = "src/main/resources/db/changelog/data-objects/DEMO-L2-phone.xml"
+        val r = extract(mapOf(
+            "src/main/resources/db/changelog/db.changelog-master.xml" to changelog(null, """<includeAll path="classpath*:db/changelog/data-objects"/>"""),
+            "src/main/resources/db/changelog/data-objects/DEMO-L1-customer.xml" to changelog(null, createCustomer),
+            phone to changelog(null, """<changeSet id="1" author="demo">
+                <addColumn tableName="DEMO_CUSTOMER_"><column name="PHONE_" type="varchar(32)"/></addColumn>
+                <dropColumn tableName="DEMO_CUSTOMER_" columnName="FAX_"/></changeSet>"""),
+        ))
+        val created = r.list("liquibase").single { it["key"] == "DEMO-L1-customer" }
+        val grown = r.list("liquibase").single { it["key"] == "DEMO-L2-phone" }
+        val columns = created["columns"] as List<Map<String, Any?>>
+        assertEquals(listOf("ID_", "NAME_", "PHONE_"), columns.map { it["name"] })
+        // which file added a column stays on the column, and what the other file dropped stays with the table
+        assertEquals(phone, (columns.last()["from"] as Map<String, Any?>)["file"])
+        assertEquals(listOf("FAX_"), (created["dropped"] as List<Map<String, Any?>>).map { it["name"] })
+        assertNull(created["columnsIn"])
+        assertEquals(emptyList<Any?>(), grown["columns"])
+        assertNull(grown["dropped"])
+        assertEquals(mapOf("DEMO_CUSTOMER_" to "DEMO-L1-customer"), grown["columnsIn"])
+        assertEquals("it still shapes the table", listOf("DEMO_CUSTOMER_"), grown["effectiveTables"])
+    }
+
+    /** The list sits where a reader goes for the table: under the changelog a service's coverage is read from. */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun theChangelogAServiceReadsItsTableFromKeepsTheColumns() {
+        val r = extract(mapOf(
+            "src/main/resources/db/changelog/db.changelog-master.xml" to changelog(null, """<includeAll path="classpath*:db/changelog/data-objects"/>"""),
+            "src/main/resources/db/changelog/data-objects/DEMO-L1-customer.xml" to changelog(null, createCustomer),
+            "src/main/resources/db/changelog/data-objects/DEMO-L2-phone.xml" to changelog(null, """<changeSet id="1" author="demo">
+                <addColumn tableName="DEMO_CUSTOMER_"><column name="PHONE_" type="varchar(32)"/></addColumn></changeSet>"""),
+            "services/customer.service" to service.replace("DEMO-D01Schema", "DEMO-L2-phone"),
+        ))
+        val created = r.list("liquibase").single { it["key"] == "DEMO-L1-customer" }
+        val named = r.list("liquibase").single { it["key"] == "DEMO-L2-phone" }
+        assertEquals(listOf("ID_", "NAME_", "FAX_", "PHONE_"), (named["columns"] as List<Map<String, Any?>>).map { it["name"] })
+        assertTrue("the coverage and the columns it marks are on one page", named["coverage"] != null)
+        assertEquals(mapOf("DEMO_CUSTOMER_" to "DEMO-L2-phone"), created["columnsIn"])
+        assertEquals(emptyList<Any?>(), created["columns"])
+    }
+
     @Test
     fun theServicesTableIsTheOneTheApplicationBuilds() {
         val r = project()
