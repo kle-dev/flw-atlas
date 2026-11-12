@@ -12,6 +12,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.31.2
+
+- **A table grown over many changelog files is listed once.** Every changelog carried every column of
+  every table it touches, as the table stands once its run is over. An application that grows a table by
+  one changelog file per release therefore listed a table of four hundred columns eighty times: the
+  Liquibase part of `graph.json` and of the explorer's page grew with files × columns, and on a real
+  project it was 121 MB of a 172 MB `graph.json`. A table that several changelogs of one run shape is now
+  listed under one of them — the one a service reads the table from, else the one that created it — and
+  the others name that changelog in `columnsIn`; in the explorer their pages link there. Which file added
+  a column is still on the column, and what a file did is in its change sets. A project whose tables are
+  each built by one changelog is unchanged. A `--changes` run against a `graph.json` written by an
+  earlier version lists the changelogs that now point elsewhere as changed once.
+
 ## 0.31.1
 
 - **`graph.json` is smaller, and a nested form no longer grows with its depth.** A key whose value would be

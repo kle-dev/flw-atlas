@@ -183,6 +183,21 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.31.2</h3>
+        <ul>
+          <li><b>A table grown over many changelog files is listed once.</b> Every changelog carried every
+              column of every table it touches, as the table stands once its run is over. An application
+              that grows a table by one changelog file per release therefore listed a table of four hundred
+              columns eighty times: the Liquibase part of <code>graph.json</code> and of the explorer's page
+              grew with files × columns, and on a real project it was 121 MB of a 172 MB
+              <code>graph.json</code>. A table that several changelogs of one run shape is now listed under
+              one of them — the one a service reads the table from, else the one that created it — and the
+              others name that changelog in <code>columnsIn</code>; in the explorer their pages link there.
+              Which file added a column is still on the column, and what a file did is in its change sets. A
+              project whose tables are each built by one changelog is unchanged. A <code>--changes</code>
+              run against a <code>graph.json</code> written by an earlier version lists the changelogs that
+              now point elsewhere as changed once.</li>
+        </ul>
         <h3>0.31.1</h3>
         <ul>
           <li><b><code>graph.json</code> is smaller, and a nested form no longer grows with its depth.</b> A
@@ -582,22 +597,6 @@
               nearly every key keeps it. Test fixtures no longer count towards a convention or appear under
               <i>Where to write</i>, and more than three archives in one folder are named by that folder and
               a count.</li>
-          <li><b>CLAUDE.md's "Run &amp; verify" line names the app that deploys the models.</b> It used to
-              name the alphabetically first <code>*-app</code> module, which in a build with Flowable
-              Control beside Work is the admin app. It now prefers the modules that start a Spring Boot
-              application, and among them the one holding the most models.</li>
-          <li><b>A CLAUDE.md written by the IDE plugin no longer tells anyone to run a CLI jar.</b> For one
-              model it sends the agent to the model's entry in the overview and to the graph's
-              <code>usedBy</code>, and it says to regenerate from <i>Tools → Flowable Atlas → Generate →
-              Atlas Explorer…</i>. It relies on the summary, the overview and the graph only when all three
-              are ticked, and otherwise names the checkboxes to tick. It also leaves out the CLI's
-              <code>--baseline</code> self-check.</li>
-          <li><b>A summary or report generated on its own no longer points at files that were not
-              written.</b> <code>--summary</code> and the default report used to send the reader to
-              <code>&lt;name&gt;.overview.md</code>, <code>&lt;name&gt;.graph.json</code>, the explorer and
-              the diagrams folder, which only <code>--all</code> writes. They now name only what was written
-              beside them, the plugin included, and otherwise say how to generate the rest. "Regenerate with
-              <code>atlas &lt;project-dir&gt;</code>" now gives the jar command and the IDE menu.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
