@@ -1421,24 +1421,7 @@ object OverviewRenderer {
     ) {
         val ind = "    ".repeat(depth)
         L.add("$ind- 📁 **${DesignTerms.label("el", node["type"])}** ${tree.own(node)}$titleSuffix")
-        // criteria of *this* stage's plan items, keyed by the definition the plan item refers to
-        val critByItem = LinkedHashMap<String, MutableList<Map<String, Any?>>>()
-        for (cAny in asList(node["criteria"])) {
-            val c = asMap(cAny)
-            val item = c["planItemDef"]?.toString()?.ifEmpty { null } ?: continue
-            critByItem.getOrPut(item) { ArrayList() }.add(c)
-        }
-        fun criteriaSuffix(ch: Map<String, Any?>): String {
-            val id = ch["id"]?.toString() ?: return ""
-            // Two plan items of one definition each have their own criteria; the plan item id tells
-            // them apart where the model has one.
-            val own = ch["planItemId"]?.toString()
-            val crits = critByItem[id].orEmpty().filter { c ->
-                val of = c["planItemId"]?.toString()
-                own == null || of == null || of == own
-            }
-            return criteriaText(crits, tree)
-        }
+        fun criteriaSuffix(ch: Map<String, Any?>): String = criteriaText(criteriaOf(node, ch), tree)
         for (chAny in asList(node["children"])) {
             val ch = asMap(chAny)
             val rules = asMap(ch["rules"]).entries.mapNotNull { ruleText(it.key, it.value) }
@@ -1458,6 +1441,20 @@ object OverviewRenderer {
                 L.add("$ind    - ${DesignTerms.label("el", ch["type"])} " +
                     "${tree.own(ch)}$extra${ioSuffix(tree.case, ch["id"])}$rules${criteriaSuffix(ch)}")
             }
+        }
+    }
+
+    /**
+     * The criteria of [stage] that sit on its plan item [ch], in the model's order. They are stored on
+     * the stage, keyed by the definition the plan item refers to; two plan items of one definition each
+     * have their own, and the plan item id tells them apart where the model has one.
+     */
+    internal fun criteriaOf(stage: Map<String, Any?>, ch: Map<String, Any?>): List<Map<String, Any?>> {
+        val id = ch["id"]?.toString() ?: return emptyList()
+        val own = ch["planItemId"]?.toString()
+        return asList(stage["criteria"]).map { asMap(it) }.filter { c ->
+            val of = c["planItemId"]?.toString()
+            c["planItemDef"]?.toString() == id && (own == null || of == null || of == own)
         }
     }
 
@@ -1486,15 +1483,22 @@ object OverviewRenderer {
      * them: an exit that *completes* its stage fires every sentry waiting for that stage to complete, a
      * plain one fires none of them.
      */
-    private fun criterionText(c: Map<String, Any?>, tree: CaseTree): String {
-        val gate = if (c["type"] == "exitCriterion") "exit" else "entry"
+    private fun criterionText(c: Map<String, Any?>, tree: CaseTree): String =
+        Fmt.join(if (c["type"] == "exitCriterion") "exit" else "entry", criterionWhat(c, tree))
+
+    /**
+     * What opens a criterion's gate, without the gate's name — blank for a criterion whose sentry the
+     * model does not hold. Apart from [criterionText] so a storyline, which says entry and exit in its
+     * own layout, words the sentry exactly as the plan tree does.
+     */
+    internal fun criterionWhat(c: Map<String, Any?>, tree: CaseTree): String {
         val ref = c["sentryRef"]?.toString()
-        val sen = ref?.let { tree.sentries[it] } ?: return gate
+        val sen = ref?.let { tree.sentries[it] } ?: return ""
         tree.shown.add(ref)
         val how = listOf("exitEventType", "exitType")
             .mapNotNull { k -> Fmt.scalar(c[k])?.ifBlank { null }?.let { "$k=$it" } }
         return Fmt.join(
-            gate, sentryText(sen, tree).ifEmpty { "at once (its sentry has no event and no condition)" },
+            sentryText(sen, tree).ifEmpty { "at once (its sentry has no event and no condition)" },
             if (how.isEmpty()) "" else "(${how.joinToString(", ")})",
         )
     }
@@ -1531,7 +1535,7 @@ object OverviewRenderer {
      * carries, so a reader could not tell which item has to complete — and had to open the graph to learn
      * it. [ref] says the item by the name its own line shows.
      */
-    private class CaseTree(val case: Map<String, Any?>, val sentries: Map<String, Map<String, Any?>>) {
+    internal class CaseTree(val case: Map<String, Any?>, val sentries: Map<String, Map<String, Any?>>) {
         /**
          * The sentries a plan-tree line already spells out. Listing them again after the tree was 42% of a
          * real report's case section; only the ones no criterion reaches are left to list.

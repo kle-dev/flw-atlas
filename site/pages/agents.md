@@ -48,6 +48,11 @@ value would be null is not written, so a record cut from it holds only what it s
 
 `<project>.overview.md` sits between 2 and 4 for a human reader.
 
+For one question none of the four answers well — *tell me what this process does, start to end* — there
+is `--flow`: the [storylines](../artifacts/#flowjson-the-storylines-as-data) as JSON, each process and
+case already nested the way it runs. An agent asked for prose has the order, the branches and where they
+meet in hand, and only has to word them.
+
 ## Why the graph is queryable rather than readable
 
 Three properties make `graph.json` usable by an agent without a retrieval layer:

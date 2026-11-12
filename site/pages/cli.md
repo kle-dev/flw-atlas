@@ -88,6 +88,7 @@ These nine are mutually exclusive — passing two is an error, not a silent pref
 | `--json` | The traversable graph | `APP_OVERVIEW.json` |
 | `--claude` | Drop-in agent context. Never replaces a `CLAUDE.md` Atlas did not write: if the project has its own, the run stops (exit 2) and asks for `-o` or `--stdout` | `CLAUDE.md` |
 | `--playwright` | The [agent's guide to driving Flowable Work](../artifacts/#playwrightmd-driving-flowable-work-in-a-browser) in a browser, with this project's stages, tasks, required fields and button conditions; also a Claude Code skill. One file: the project map `--all` writes beside it is inline here, and with no `graph.json` beside it, its lookups say how to make one | `APP_OVERVIEW.playwright.md` |
+| `--flow` | The [storylines](../artifacts/#flowjson-the-storylines-as-data) as JSON: each process and case as nested steps. Not part of `--all` — the explorer it writes carries the same stories | `APP_OVERVIEW.flow.json` |
 | `--changes` | [What changed](../artifacts/#changesmd-what-a-change-changed) since `--baseline`, which it needs (exit 2 without): the models added, removed and changed, with the ids of the elements that came, went or changed in each; the references added and removed; the findings the change brought and the ones it resolved. Short enough for a pull-request comment — see [Review a pull request](#review-a-pull-request) | `APP_OVERVIEW.changes.md` |
 | `--claude-template` | The project-independent Flowable primer. Needs **no** path | stdout |
 

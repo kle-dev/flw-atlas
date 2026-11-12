@@ -119,6 +119,10 @@ const DATA = JSON.parse(atlasIslandText(document.getElementById('atlas-data')));
 const PROJECT_SCOPE = DATA.projectKey || DATA.project || '_';
 const nodes = DATA.nodes, edges = DATA.edges;
 const byId = new Map(nodes.map(n => [n.id, n]));
+// The storylines: each process and case as nested steps, built by FlowStories — the same structure
+// `--flow` writes, so this page and flow.json cannot nest a gateway differently.
+const stories = DATA.stories || [];
+const storyByKey = new Map(stories.map(s => [s.kind+':'+s.key, s]));
 // Node-type labels. Wording follows Flowable Design's own `modelType.*` strings so a term you read here
 // is the term you look for in Design — "Decision tables", not "Decisions"; "AI agents", not "Agents".
 // [category (plural), sidebar section, one node (singular)]: a list is "Processes", the one thing on a page
@@ -219,6 +223,7 @@ const TYPE_ICONS={
   scripts:'<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/>',
   checks:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
   schema:'<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
+  flow:'<circle cx="5" cy="6" r="2"/><path d="M7 6h6a3 3 0 0 1 3 3v0a3 3 0 0 1-3 3h-2a3 3 0 0 0-3 3v0a3 3 0 0 0 3 3h6"/><path d="m15 15 3 3-3 3"/>',
   tree:'<path d="M3 5h6v4H3z"/><path d="M15 3h6v4h-6z"/><path d="M15 15h6v4h-6z"/><path d="M6 9v8h9"/><path d="M15 5H9"/>',
   elements:'<path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/>',
   _:'<circle cx="12" cy="12" r="10"/>',
@@ -1049,7 +1054,7 @@ function computeInsights(){
 //                    `c` the chip, `a` show-accepted, `l` the tree's lens — so a reload or a copied link
 //                    brings the report back as it was left, the way `&f=`/`&s=` already did for a list.
 // #/elements&t=form:attachment -> the Elements page with one palette entry picked (`t`, group:type).
-const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree',
+const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree','/flow':'flow',
   '/elements':'elements'};
 function parseHash(){
   const raw = location.hash.slice(1);
@@ -1091,6 +1096,7 @@ function syncHashContext(){
     if(state.acc) h+='&a='+enc(state.acc);
     if(state.view==='tree' && state.treeLens && state.treeLens!=='models') h+='&l='+enc(state.treeLens);
     if(state.view==='elements' && state.elt) h+='&t='+enc(state.elt);
+    if(state.view==='flow' && state.story) h+='&t='+enc(state.story);
     // keep the entry's state: it carries the page's place in the history (navStamp)
     if(location.hash.slice(1)!==h){ try{ history.replaceState(history.state, '', '#'+h); }catch(e){} }
     return;
@@ -1113,6 +1119,7 @@ function showView(v){
   document.getElementById('view-variables').hidden = v!=='variables';
   document.getElementById('view-tree').hidden = v!=='tree';
   document.getElementById('view-elements').hidden = v!=='elements';
+  document.getElementById('view-flow').hidden = v!=='flow';
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
@@ -1207,6 +1214,11 @@ function route(){
     state.view='elements'; state.sel=null; state.elt=r.elt||'';
     showView('elements'); renderElements();
     renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='flow'){
+    // `&t=` names the story as `process:<key>` or `case:<key>`: a process and a case may share a key
+    state.view='flow'; state.sel=null; state.story=storyByKey.has(r.elt||'')?r.elt:'';
+    showView('flow'); renderFlow();
+    renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     // the page's tab rides in the hash, so Back lands on the tab the reader left (select() carries it on)
     state.pane = r.p || 'overview';
@@ -1255,6 +1267,9 @@ function navItems(){
   if(elementIndex().total) items.push({route:'/elements', label:'Elements', sec:'Models', pri:0, icon:'elements',
     color:'var(--accent)',
     tip:'The palette entries this project uses, and the processes, cases, forms and pages holding each'});
+  if(stories.length) items.push({route:'/flow', label:'Storylines', sec:'Models', pri:0, icon:'flow',
+    color:color('process'), count:stories.length,
+    tip:'Storylines ('+stories.length+') — each process and case told in order: its branches, where they meet, what a called process does'});
   // red while an error is open, amber for a defect's warning, grey when only advice is open
   const openChecks=INSIGHTS.checksOpen, K0=kindCounts(), ot=openTone();
   items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
@@ -1418,6 +1433,10 @@ function renderCrumbs(){
   } else if(state.view==='tree'){
     h=link(DATA.project,'#/overview')+sep+cur('Reference tree');
     title='Reference tree — Flowable Atlas';
+  } else if(state.view==='flow'){
+    const st=state.story&&storyByKey.get(state.story);
+    h=link(DATA.project,'#/overview')+sep+(st?link('Storylines','#/flow')+sep+cur(st.name||st.key):cur('Storylines'));
+    title=(st?(st.name||st.key)+' — ':'')+'Storylines — Flowable Atlas';
   } else if(state.view==='elements'){
     const t=state.elt&&elementIndex().types.get(state.elt);
     h=link(DATA.project,'#/overview')+sep+(t?link('Elements','#/elements')+sep+cur(t.label):cur('Elements'));
@@ -3188,6 +3207,177 @@ function renderElements(){
   const srch=v.querySelector('[data-elt-search]');
   if(srch) srch.onclick=()=>openPalette('has:"'+srch.dataset.eltSearch.toLowerCase()+'" ');
   wireNodeLinks(v, '[data-goto],[data-id]');
+}
+
+// ---------- storylines (#/flow, #/flow&t=<kind>:<key>) ----------
+// One process or case as a reader would tell it: the steps in order, a gateway holding its branches,
+// what follows the join after the gateway, a called process opened one level deep. The nesting is
+// FlowStories' work; this only words it. Deterministic text, so the page says the same thing on
+// every run and offline.
+function renderFlow(){
+  const v=document.getElementById('view-flow');
+  const st=state.story&&storyByKey.get(state.story);
+  let h='<div class="dash">';
+  if(!st){
+    const nP=stories.filter(x=>x.kind==='process').length;
+    h+=pageHeader({icon:'flow', color:color('process'), title:'Storylines',
+      sub:'each process and case told in order — where it branches and under which condition, where the branches meet again, what a called process does inside',
+      facts:[['Processes',nP],['Cases',stories.length-nP]]});
+    if(!stories.length) h+=estateHtml({icon:typeIcon('flow',{color:color('process')}), title:'No storylines',
+      hint:'Nothing to tell — this project has no process and no case.'});
+    [['process','Processes'],['case','Cases']].forEach(g=>{
+      const rows=stories.filter(x=>x.kind===g[0]);
+      if(!rows.length) return;
+      h+='<h3 class="st-h">'+g[1]+'</h3><div class="st-list">'+rows.map(x=>{
+        const who=starters(x);
+        return '<a class="st-row" href="#/flow&t='+enc(x.kind+':'+x.key)+'">'+typeIcon(x.kind)+
+          '<span class="st-rn">'+esc(x.name||x.key)+'</span><span class="st-rk mono">'+esc(x.key)+'</span>'+
+          '<span class="st-rw">'+(who?'started by '+esc(who):'')+'</span></a>';
+      }).join('')+'</div>';
+    });
+  } else {
+    const id=st.kind+':'+st.key, who=starters(st), warns=st.warnings||[];
+    h+=pageHeader({icon:st.kind, color:color(st.kind), title:st.name||st.key,
+      sub:(st.documentation?esc(st.documentation)+'<br>':'')+
+        'The '+st.kind+' '+vlink(id, st.key, 'Open the '+st.kind)+
+        (who?', started by '+esc(who):'')+' — <span class="mono">'+esc(st.file||'')+'</span>'});
+    if(warns.length) h+='<p class="st-warn" role="note">'+warns.map(esc).join(' · ')+'</p>';
+    if(st.kind==='case') h+='<p class="muted st-note">A case has no fixed order: each plan item starts when its entry criterion is met. '+
+      'Within a stage, the items that wait for nothing are listed first and an item follows the ones it waits for.</p>';
+    h+=(st.steps||[]).length?'<div class="st-steps">'+storySteps(st.steps, {model:id, inCase:st.kind==='case', top:true})+'</div>'
+      :estateHtml({icon:typeIcon(st.kind), title:'Nothing to tell', hint:'This '+st.kind+' has no step a flow leads to.'});
+  }
+  v.innerHTML=h+'</div>';
+  wireReport(v);
+  wireNodeLinks(v, '[data-goto],[data-id]');
+}
+function starters(st){ const b=st.startedBy; return b?[].concat(b.groups||[], b.users||[]).join(', '):''; }
+/** `ctx.model` is the node a step's id belongs to — the story's own model, or the called process inside
+ *  an opened call — so a step's name opens that model at that element. */
+function storySteps(steps, ctx){ return (steps||[]).map(x=>storyStep(x, ctx)).join(''); }
+const stCode = x => '<code>'+esc(String(x==null?'':x))+'</code>';
+/** Criteria come worded by the report's plan tree, with Markdown code spans: the odd segments are code. */
+const stProse = x => String(x==null?'':x).split('`').map((p,i)=>i%2?'<code>'+esc(p)+'</code>':esc(p)).join('');
+const stList = xs => xs.map(stCode).join(xs.length>2?', ':' or ');
+function storyKindLabel(x, ctx){
+  const k=x.kind;
+  if(k==='start'||k==='entry') return 'Start event';
+  if(k==='end') return 'End event';
+  if(k==='event') return x.catching?'Intermediate catch event':'Intermediate throw event';
+  if(k==='boundary') return 'Boundary event';
+  if(k==='loop') return 'Loop';
+  if(k==='gateway') return x.implicit?'Fork':term('el', x.gatewayKind+'Gateway').label;
+  if(k==='call') return ctx.inCase||x.targetKind==='case'?term('el', x.targetKind==='case'?'caseTask':'processTask').label:'Call activity';
+  if(k==='subProcess') return x.eventSubProcess?'Event sub-process':'Sub-process';
+  if(k==='userTask') return ctx.inCase?'Human task':'User task';
+  if(k==='serviceTask'&&x.type&&DESIGN_TERMS['el:serviceTask/'+x.type]) return term('el','serviceTask/'+x.type).label;
+  return term('el', k).label;
+}
+function storyStep(x, ctx){
+  const k=x.kind, name=x.name||(k==='gateway'||k==='start'||k==='end'||k==='loop'?'':x.id)||'';
+  // the element in its model — except a loop, whose id is the step it returns to
+  const jump=k!=='loop'&&x.id&&byId.get(ctx.model);
+  let h='<div class="st-step" data-kind="'+esc(k)+'"><div class="st-t"><span class="st-k">'+esc(storyKindLabel(x, ctx))+'</span>'+
+    (name?(jump?'<span class="st-n vlink" data-goto="'+enc(ctx.model)+'" data-goto-el="'+esc(String(x.id))+'" tabindex="0" role="link" data-tip="Open this element in its model">'+esc(name)+'</span>'
+               :'<span class="st-n">'+esc(name)+'</span>'):'')+'</div>';
+  const said=storyProse(x, ctx);
+  if(said) h+='<div class="st-p">'+said+'</div>';
+  if(ctx.inCase) h+=storyCriteria(x, ctx);
+  h+='</div>';
+  const inner=Object.assign({}, ctx, {top:false});
+  if(x.branches){
+    h+='<div class="st-nest st-branches">'+x.branches.map((b,i)=>{
+      const label=b.condition?'If '+stCode(b.condition)+(b.name?' — '+esc(b.name):'')
+        :b.name?'“'+esc(b.name)+'”'+(b['default']?' (the default)':'')
+        :b['default']?'Otherwise':x.gatewayKind==='parallel'?'In parallel':'Path '+(i+1);
+      return '<div class="st-branch"><div class="st-bl">'+label+'</div>'+
+        ((b.steps||[]).length?storySteps(b.steps, inner):'<div class="st-p muted">nothing of its own — it continues below</div>')+'</div>';
+    }).join('')+'</div>';
+  } else if(x.steps&&k!=='boundary'&&k!=='entry'){
+    // an opened call's steps belong to the called process, a stage's stay plan items of this case
+    const sub=k==='call'?Object.assign({}, inner, {model:'process:'+x.targetKey, inCase:false}):inner;
+    h+='<div class="st-nest">'+(x.steps.length?storySteps(x.steps, sub):'<div class="st-p muted">nothing inside</div>')+'</div>';
+  } else if(x.steps){
+    h+='<div class="st-nest st-side">'+(x.steps.length?storySteps(x.steps, inner):x.rejoins?'':'<div class="st-p muted">no step follows it</div>')+
+      (x.rejoins?'<div class="st-p muted">'+(x.steps.length?'then it':'it')+' carries on at “'+esc(x.rejoins)+'”</div>':'')+'</div>';
+  }
+  return h;
+}
+function storyEvent(x){
+  const t=x.eventType, r=x.eventRef;
+  return t==='timer'?'the timer '+stCode(r||'')+' fires':t==='message'?'the message '+stCode(r||'')+' arrives'
+    :t==='signal'?'the signal '+stCode(r||'')+' is sent':t==='error'?'the error '+stCode(r||'any')+' is thrown'
+    :t==='escalation'?'the escalation '+stCode(r||'any')+' is raised':t==='conditional'?stCode(r||'')+' becomes true'
+    :t?'its '+esc(t)+' event occurs':'';
+}
+function storyProse(x, ctx){
+  const k=x.kind, form=x.formKey?(byId.get('form:'+x.formKey)?vlink('form:'+x.formKey, x.formKey):vlink('page:'+x.formKey, x.formKey)):'';
+  if(k==='start'||k==='entry'){
+    const ev=storyEvent(x);
+    return (k==='entry'?'Another way in: it also starts':'It starts')+(ev?' when '+ev:' when it is started')+(form?', with the form '+form:'')+'.';
+  }
+  if(k==='end'){
+    const t=x.eventType;
+    return t==='terminate'?'Everything ends here, including whatever else is still running.'
+      :t==='error'?'This path ends by throwing the error '+stCode(x.eventRef||'')+'.'
+      :t?'This path ends, and '+(t==='message'?'sends the message ':t==='signal'?'sends the signal ':'raises the '+esc(t)+' ')+stCode(x.eventRef||'')+'.'
+      :'This path ends here.';
+  }
+  if(k==='event'){
+    const ev=storyEvent(x);
+    return x.catching?'Waits until '+(ev||'its event occurs')+'.'
+      :(x.eventType==='message'||x.eventType==='signal'?'Sends the '+esc(x.eventType)+' '+stCode(x.eventRef||''):x.eventType?'Raises the '+esc(x.eventType)+' '+stCode(x.eventRef||''):'Passes through')+'.';
+  }
+  if(k==='boundary') return 'While the step above is active: when '+(storyEvent(x)||'its event occurs')+', '+
+    (x.interrupting?'that step is cancelled and the flow goes this way instead':'this runs as well, and the step above carries on')+'.';
+  if(k==='loop') return 'Goes back to '+(x.name?'“'+esc(x.name)+'”':stCode(x.id))+' and carries on from there.';
+  if(k==='userTask'){
+    const g=x.candidateGroups||[], u=x.candidateUsers||[];
+    const who=x.assignee?'Assigned to '+stCode(x.assignee):g.length?'Offered to the group'+(g.length>1?'s ':' ')+stList(g)
+      :u.length?'Offered to '+stList(u):'';
+    return [who, form?(who?'with':'With')+' the form '+form:''].filter(Boolean).join(', ')+(who||form?'.':'');
+  }
+  if(k==='serviceTask'){
+    const op=x.serviceModelKey&&x.operationKey?'the service operation '+vlink('serviceOperation:'+x.serviceModelKey+'#'+x.operationKey, x.serviceModelKey+'#'+x.operationKey)
+      :x.serviceModelKey?'the service '+vlink('service:'+x.serviceModelKey, x.serviceModelKey)
+      :x.agentModelKey?'the agent '+vlink('agent:'+x.agentModelKey, x.agentModelKey)
+      :x.dataObjectKey?'the data object '+vlink('dataObject:'+x.dataObjectKey, x.dataObjectKey)
+      :x['class']?'the Java class '+stCode(x['class']):x.delegateExpression?stCode(x.delegateExpression):x.expression?stCode(x.expression):'';
+    if(x.eventKey) return 'Sends the event '+vlink('event:'+x.eventKey, x.eventKey)+(x.channelKey?' on the channel '+vlink('channel:'+x.channelKey, x.channelKey):'')+'.';
+    const rv=x.resultVariable?(op?', and keeps':'Keeps')+' the result in '+vlink('variable:'+x.resultVariable, x.resultVariable):'';
+    return (op?'Runs '+op:'')+rv+(op||rv?'.':'')+(form?' With the form '+form+'.':'');
+  }
+  if(k==='scriptTask') return 'Runs a '+(x.format?esc(x.format)+' ':'')+'script'+(x.resultVariable?' and keeps the result in '+vlink('variable:'+x.resultVariable, x.resultVariable):'')+'.';
+  if(k==='decisionTask') return x.decisionRef?'Evaluates the decision table '+vlink('decision:'+x.decisionRef, x.decisionRef)+'.':'';
+  if(k==='gateway'){
+    const g=x.gatewayKind;
+    return x.implicit?(g==='parallel'?'From here every path below runs.':'From here every path below whose condition holds runs.')
+      :g==='exclusive'?'Exactly one of the paths below is taken.':g==='parallel'?'All the paths below run side by side.'
+      :g==='inclusive'?'Every path below whose condition holds runs.':g==='eventBased'?'Whichever event below happens first decides the path.':'';
+  }
+  if(k==='call'){
+    const t=x.targetKey?vlink(x.targetKind+':'+x.targetKey, x.targetName||x.targetKey):'';
+    const what=x.targetKind==='case'?'the case ':'the process ', no=x.notOpened;
+    return !no?'Runs '+what+t+' — its steps:'
+      :no==='nested'?'Runs '+what+t+', which has a storyline of its own.'
+      :no==='case'?'Starts '+what+t+', which has a storyline of its own.'
+      :no==='dynamic'?'Runs whatever '+stCode(x.targetKey)+' names when it gets here.'
+      :no==='no target'?'Names nothing to run.'
+      :'Runs '+what+stCode(x.targetKey)+', which is not in this project.';
+  }
+  if(k==='subProcess') return x.eventSubProcess?'Runs only when its start event below fires, whatever else is going on.':'';
+  return '';
+}
+/** What a plan item waits for and what ends it, in the plan tree's words (FlowStories takes them from there). */
+function storyCriteria(x, ctx){
+  const lines=[], en=x.entry||[], ex=x.exit||[];
+  lines.push(en.length?'Starts '+en.map(stProse).join(' — or ')
+    :'Starts with '+(ctx.top?'the case':'its stage')+(x.manualActivation?'':', waiting for nothing'));
+  if(x.manualActivation) lines.push('A user starts it by hand once it is available');
+  if(x.repetition) lines.push('It can run more than once');
+  if(x.required) lines.push('Its stage cannot complete before it has');
+  if(ex.length) lines.push('Ended '+ex.map(stProse).join(' — or '));
+  return '<div class="st-c">'+lines.join(' · ')+'</div>';
 }
 
 // ---------- browse: list column ----------

@@ -70,6 +70,9 @@ object ExplorerHtmlRenderer {
         payload["waiverAuthor"] = waiverAuthor ?: ""
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
+        // The storylines, as `--flow` writes them: built here rather than in the page, so the page and
+        // flow.json are one structure and cannot nest the same gateway differently.
+        payload["stories"] = FlowStories.build(result)
         val data = dataIsland(payload)
         // Stamp the version before the data island so a version like "__ATLAS_VERSION__" can't collide
         // with anything inside the (already-built) JSON.

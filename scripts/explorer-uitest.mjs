@@ -2015,6 +2015,55 @@ const probe = `<script>
   steps.push(()=>{
     const v=document.getElementById('view-elements');
     ok('a pick in the URL is restored', !!v.querySelector('.pchip.on[data-elt="form:upload"]') && v.querySelectorAll('.elrow').length===1);
+    location.hash='#/flow';
+  });
+
+  // --- the Storylines page: every process and case, and one of them told as nested steps ---
+  steps.push(()=>{
+    const v=document.getElementById('view-flow');
+    ok('the storylines route renders', state.view==='flow' && !v.hidden, state.view);
+    ok('its sidebar entry is the active one', !!document.querySelector('#nav .side-item.on[data-route="/flow"]'));
+    const rows=[...v.querySelectorAll('.st-row')];
+    ok('it lists every process and case', rows.length===DATA.nodes.filter(n=>n.type==='process'||n.type==='case').length, rows.length+' rows');
+    ok('a model says who starts it', rows.some(r=>r.textContent.indexOf('Order Process')>=0 && r.textContent.indexOf('started by sales')>=0));
+    click(rows.find(r=>r.textContent.indexOf('Order Process')>=0));
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-flow');
+    ok('a story rides in the URL', decodeURIComponent(location.hash).indexOf('t=process:orderProcess')>=0, location.hash);
+    ok('the crumb names the story', (document.getElementById('crumbs').textContent||'').indexOf('Order Process')>=0);
+    const top=[...v.querySelectorAll('.st-steps > .st-step')].map(x=>x.dataset.kind);
+    ok('the steps are in the order the flows give', top[0]==='start' && top[top.length-1]==='end' && top.indexOf('call')>0, top.join());
+    const call=v.querySelector('.st-steps > .st-step[data-kind="call"]'), nest=call&&call.nextElementSibling;
+    ok('a called process is opened under its call', !!nest && nest.classList.contains('st-nest') &&
+      !!nest.querySelector('[data-goto-el="packTask"]'), nest?nest.textContent.slice(0,80):'(no nest)');
+    const branches=nest?[...nest.querySelectorAll('.st-branch')]:[];
+    ok('a gateway holds its branches, each under its condition or name', branches.length===2 &&
+      branches[0].textContent.indexOf('subTotal > 5')>=0 && branches[1].textContent.indexOf('pickup')>=0, branches.map(b=>b.textContent.slice(0,40)).join(' | '));
+    ok('a branch with nothing of its own says that it continues', branches.length===2 && branches[1].textContent.indexOf('continues below')>=0);
+    ok('what follows the join follows the gateway, not a branch', !!nest && [...nest.children].some(c=>
+      c.classList.contains('st-step') && !!c.querySelector('[data-goto-el="stockOk"]')));
+    ok('a boundary event hangs on its step with its own path', !!nest && !!nest.querySelector('.st-step[data-kind="boundary"] + .st-side'));
+    ok('a call inside the opened process is named, not opened again', !!nest && !!nest.querySelector('[data-goto-el="callCourier"]') &&
+      nest.textContent.indexOf('not in this project')>=0);
+    ok('a decision task links its table', !!v.querySelector('.st-p .vlink[data-id="'+encodeURIComponent('decision:orderDecision')+'"]'));
+    location.hash='#/flow&t=case:reviewCase';
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-flow');
+    ok('a story in the URL is restored', (v.querySelector('.dtitle')||{}).textContent==='Review Case');
+    const crit=[...v.querySelectorAll('.st-steps > .st-step .st-c')];
+    ok('a plan item says what it waits for', crit.length===3 && crit.every(c=>c.textContent.indexOf('Starts with the case')>=0), crit.map(c=>c.textContent).join(' | '));
+    ok('a human task is named as the case names it', (v.querySelector('.st-step[data-kind="userTask"] .st-k')||{}).textContent==='Human task');
+    click(v.querySelector('.st-n[data-goto-el="reviewTask"]'));
+  });
+  steps.push(()=>{
+    ok('a step opens its element in the model', state.view==='browse' && state.sel==='case:reviewCase', state.view+' '+state.sel);
+    location.hash='#/flow&t=process:nosuch';
+  });
+  steps.push(()=>{
+    ok('a story this project does not have falls back to the list', state.view==='flow' && !state.story &&
+      document.querySelectorAll('#view-flow .st-row').length>0);
     location.hash='#/overview';
     openPalette('{{}}');
   });

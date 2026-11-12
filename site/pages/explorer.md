@@ -27,6 +27,7 @@ view you are looking at can be copied as a link.
 | *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans and bots, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps, and the entry points — each user group once, with the models it can start (the first eight, the rest a click away) |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
 | `#/elements` | [Elements](#elements): the palette entries the project's processes, cases, forms and pages use, grouped as Design's palette groups them — pick one to list every model holding it |
+| `#/flow` | [Storylines](#storylines): each process and case told in order, as nested steps |
 | `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows under one line saying what it means (*why · what to do* opens beneath it), the accept controls, and what the project already accepted — with its reasons |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
@@ -36,7 +37,7 @@ view you are looking at can be copied as a link.
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
 | `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
 | `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order (`name`, `key`, `file`, `refs`, `out`, `findings`; a leading `-` reverses it). Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
-| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…`, `#/elements&t=form:upload&f=…` | On a report route: the filter text (`f`), the active chip (`c` — a tone (`error`, `warning`, `advice`), a script group, a write construct), *show accepted* (`a`), on the tree the lens (`l`) and on the Elements page the palette entry picked (`t`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left. A filter that matches nothing on the page says so under its bar — headings with nothing left under them go too — and offers to clear it or to search everything |
+| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…`, `#/elements&t=form:upload&f=…`, `#/flow&t=process:orderProcess` | On a report route: the filter text (`f`), the active chip (`c` — a tone (`error`, `warning`, `advice`), a script group, a write construct), *show accepted* (`a`), on the tree the lens (`l`) on the Elements page the palette entry picked and on the Storylines page the story open (both `t`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left. A filter that matches nothing on the page says so under its bar — headings with nothing left under them go too — and offers to clear it or to search everything |
 
 The ER diagram designer — the project's tables on a canvas, with the relations between them — is a page
 of its own beside the explorer, `<project>.erd.html`: see [The ER diagram designer](../erd/).
@@ -66,6 +67,42 @@ rebuilding a shared subtree per path is exponential. An edge back into the path 
 The filter takes the same [search grammar](#search) as ⌘K, and a row survives it if it matches **or** a
 descendant does, so the path to a hit is never hidden. The **models** lens shows Design models only;
 **everything** adds the expressions, variables and Java the graph also holds.
+
+## Storylines
+
+`#/flow` tells each process and each case in the order a person would: what happens first, where it
+branches and under which condition, where the branches meet again. A model's own page lists its elements
+in execution order with what follows each; that is complete, and it is a list — which steps belong to the
+*rejected* path, and where that path rejoins, is left to the reader. A storyline is the same sequence
+flows, nested:
+
+- A **gateway** holds its branches, each under its condition or the flow's name, the default path last.
+  A branch holds only what is its own; what follows the point where the branches meet follows the
+  gateway. A branch that skips straight to that point says that it continues below.
+- A **loop** is one step naming the step it goes back to, not the same steps a second time.
+- A **boundary event** follows the step it is attached to, with its own path — up to where it gets back onto the
+  main one — and whether it cancels that step.
+- A **sub-process** holds its own flow. An event sub-process, and a second start event, follow the main
+  flow as further ways in.
+- A **call activity** — and a process task in a case — is opened one level deep: the called process's
+  steps sit under the call. A call inside those is named and links to its own storyline, which is also
+  what keeps a process that calls itself finite. A call whose target is an expression, or is not in the
+  project, says so.
+
+A **case** has no flow to follow: a plan item starts when its entry criterion is met. Its storyline is
+the plan tree with, on each item, what it waits for and what ends it, in the words the
+[report](../artifacts/#projectoverviewmd-the-full-report) uses for the same sentry — and whether a user
+has to start it, whether it repeats, whether its stage waits for it. Within a stage, the items that wait
+for nothing come first and an item follows the ones it waits for; the page says that this is a reading
+order and not a sequence.
+
+The page opens on the list of every process and case, with who may start each where the model names
+them. A step's name opens that element in its model; forms, decision tables, service operations,
+variables and called models are links. The text is generated from the model, the same on every run: a
+storyline never picks a branch and never guesses a runtime value. A model whose branches never meet
+again repeats what follows them under each, and a story that would pass 4,000 steps that way is cut off
+and says so. The same structure is available as JSON — see
+[`flow.json`](../artifacts/#flowjson-the-storylines-as-data).
 
 ## Elements
 

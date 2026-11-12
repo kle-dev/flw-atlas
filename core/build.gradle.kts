@@ -79,6 +79,7 @@ val updateGoldens by tasks.registering(Test::class) {
         includeTestsMatching("com.flowable.atlas.render.SummaryRendererTest")
         includeTestsMatching("com.flowable.atlas.render.OverviewRendererTest")
         includeTestsMatching("com.flowable.atlas.render.ChangesRendererTest")
+        includeTestsMatching("com.flowable.atlas.render.FlowStoriesTest")
         includeTestsMatching("com.flowable.atlas.render.ClaudeTemplateSyncTest")
         // CHANGELOG.md is generated from the plugin descriptor's <change-notes>; re-baseline it here
         // together with the other generated repo files instead of hand-editing it.

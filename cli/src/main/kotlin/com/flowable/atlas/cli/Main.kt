@@ -14,6 +14,7 @@ import com.flowable.atlas.render.ChangesRenderer
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
+import com.flowable.atlas.render.FlowStories
 import com.flowable.atlas.render.Fmt
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.JUnitRenderer
@@ -69,7 +70,7 @@ private class Options {
     var path: String? = null
     var output: String? = null
     var all = false; var json = false; var html = false; var erd = false; var summary = false; var claude = false
-    var playwright = false; var changes = false
+    var playwright = false; var changes = false; var flow = false
     var claudeTemplate = false
     var stdout = false; var open = false; var noCustom = false; var quiet = false
     var pretty = false
@@ -87,7 +88,7 @@ private class Options {
 
 /** The flags that take no value: `--all=foo` or `--stdout=false` is a misuse, not a silent `--stdout`. */
 private val BOOLEAN_FLAGS = setOf(
-    "--all", "--json", "--html", "--erd", "--summary", "--claude", "--playwright", "--changes", "--claude-template", "--pretty",
+    "--all", "--json", "--html", "--erd", "--summary", "--claude", "--playwright", "--changes", "--flow", "--claude-template", "--pretty",
     "--stdout", "--open", "--no-custom-functions", "--no-waivers", "--fail-on-stale-waivers", "--verbose", "--quiet",
     "--help",
 )
@@ -176,6 +177,7 @@ private fun parse(args: Array<String>, o: Options): Int? {
                     "--claude" -> o.claude = true
                     "--playwright" -> o.playwright = true
                     "--changes" -> o.changes = true
+                    "--flow" -> o.flow = true
                     "--claude-template" -> o.claudeTemplate = true
                     "--pretty" -> o.pretty = true
                     "--slice" -> {
@@ -244,8 +246,8 @@ private fun parse(args: Array<String>, o: Options): Int? {
     }
 
     // Mutually-exclusive format group (argparse errors with exit code 2).
-    if (listOf(o.all, o.json, o.html, o.erd, o.summary, o.claude, o.playwright, o.changes, o.claudeTemplate).count { it } > 1) {
-        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--playwright/--changes/--claude-template: " +
+    if (listOf(o.all, o.json, o.html, o.erd, o.summary, o.claude, o.playwright, o.changes, o.flow, o.claudeTemplate).count { it } > 1) {
+        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--playwright/--changes/--flow/--claude-template: " +
             "not allowed with one another")
         return EXIT_MISUSE
     }
@@ -660,6 +662,7 @@ private fun execute(o: Options): Int {
         o.html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = o.waiverAuthor)
         o.erd -> ErdHtmlRenderer.render(result, root)
         o.json -> GraphJsonRenderer.render(result, pretty = o.pretty)
+        o.flow -> FlowStories.render(result, root)
         else -> OverviewRenderer.render(result, root, Siblings.NONE)
     }
 
@@ -689,6 +692,7 @@ private fun defaultFileName(o: Options): String = when {
     o.html -> "APP_OVERVIEW.html"
     o.erd -> "APP_OVERVIEW.erd.html"
     o.json -> "APP_OVERVIEW.json"
+    o.flow -> "APP_OVERVIEW.flow.json"
     else -> "APP_OVERVIEW.md"
 }
 
@@ -755,6 +759,9 @@ output (mutually exclusive):
                       one file, the project map inline
   --changes           what changed since --baseline (needed): models and their elements added, removed or
                       changed, references, and findings new and resolved — for a pull request's review
+  --flow              the storylines as JSON: each process and case as nested steps — a gateway holds its
+                      branches, a called process is opened one level deep (the explorer's Storylines page
+                      shows the same)
   --claude-template   the project-independent Flowable primer (needs no path)
   Without -o, a single artifact is written into the project directory (an archive's or model file's folder).
 

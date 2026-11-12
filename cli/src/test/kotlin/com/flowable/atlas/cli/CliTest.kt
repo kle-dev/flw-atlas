@@ -430,6 +430,22 @@ class CliTest {
     }
 
     /**
+     * `--flow` writes the storylines alone, as the file the golden pins; `--all` does not write them — the
+     * explorer it writes carries them — and with another output the flag is a misuse.
+     */
+    @Test
+    fun flowWritesTheStorylinesAlone() {
+        val out = File(tempDir(), "stories/order.flow.json")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--flow", "-o", out.path, "-q")))
+        assertEquals(goldenFile("miniproject.flow.json").readText(), out.readText() + "\n")
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--flow", "--json", "-q")))
+        val all = tempDir()
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", all.path, "-q")))
+        assertTrue(all.listFiles()!!.none { it.name.endsWith(".flow.json") })
+        assertTrue("the explorer holds the stories", File(all, "miniproject.explorer.html").readText().contains("\"stories\":"))
+    }
+
+    /**
      * The ER diagram designer is an artifact of its own: `--erd` writes it alone, `--all` beside the explorer
      * it links into, and the explorer carries none of it. Asked for with another output, it is a misuse.
      */

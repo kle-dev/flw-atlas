@@ -4,6 +4,7 @@ atlas-output/
 *.summary.md
 *.overview.md
 *.graph.json
+*.flow.json
 APP_OVERVIEW.*
 APP_SUMMARY.*
 APP_EXPLORER.*
@@ -54,6 +55,7 @@ lib/*.jar
 !core/src/test/resources/golden/*.summary.md
 !core/src/test/resources/golden/*.overview.md
 !core/src/test/resources/golden/*.graph.json
+!core/src/test/resources/golden/*.flow.json
 
 # Plugin-signing material — never committed (see idea-plugin/build.gradle.kts).
 *.pem

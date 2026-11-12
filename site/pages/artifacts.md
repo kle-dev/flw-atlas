@@ -330,6 +330,49 @@ Every list is capped, so a change to hundreds of models still fits in a pull-req
 that did not change says so in one line. The [CLI reference](../cli/#review-a-pull-request) has the
 recipe for a pull request.
 
+## `flow.json` — the storylines as data
+
+Not a file the full run writes: `--flow` writes it alone, to `APP_OVERVIEW.flow.json` or to `-o`. It is
+what the explorer's [Storylines](../explorer/#storylines) page is drawn from — each process and each case
+as nested steps — for a script, or for an agent asked to retell a process in prose, which then has the
+order and the branching in hand instead of reconstructing them from sequence flows.
+
+```json
+{ "version": 1, "project": "order-management", "stories": [
+  { "kind": "process", "key": "orderProcess", "name": "Order Process", "file": "processes/order.bpmn",
+    "startedBy": { "groups": ["sales"], "users": [] },
+    "steps": [
+      { "kind": "start", "id": "start" },
+      { "kind": "gateway", "id": "check", "gatewayKind": "exclusive", "branches": [
+        { "condition": "${total > 100}", "steps": [ { "kind": "userTask", "id": "approve", "name": "Approve order" } ] },
+        { "default": true, "steps": [] } ] },
+      { "kind": "end", "id": "end" } ] } ] }
+```
+
+A story is `kind` (`process` or `case`), `key`, `name`, `file`, the model's `documentation` and
+`startedBy` where it has them, and `steps`. A member without a value is not written. Every step has a
+`kind`, the element's `id` and its `name`; the rest depends on the kind:
+
+| `kind` | What it carries |
+|---|---|
+| `start`, `end`, `event` | `eventType` (`timer`, `message`, `signal`, `error`, …; absent on a plain one) and `eventRef`, what it names; `formKey` on a start; `catching` on an intermediate event |
+| `userTask` | `assignee`, `candidateGroups`, `candidateUsers` (lists), `formKey` |
+| `serviceTask` | whichever it has of `class`, `delegateExpression`, `expression`, `type`, `resultVariable`, `serviceModelKey` + `operationKey`, `agentModelKey`, `dataObjectKey`, and `eventKey` + `channelKey` on a send-event task |
+| `scriptTask`, `decisionTask` | `format` and `resultVariable`; `decisionRef` |
+| `gateway` | `gatewayKind` and `branches`, each with its `condition`, the flow's `name`, `default: true` on the default path, and its own `steps` — up to the point where the branches meet, which is the step after the gateway. `implicit: true` marks an activity that forks without a gateway |
+| `boundary` | the event, `attachedTo` (the step before it), `interrupting`, the `steps` of its path, and `rejoins` — the name of the step where that path gets back onto the main one, which is where its `steps` stop |
+| `subProcess` | `steps`; `eventSubProcess: true` for one that an event starts |
+| `entry` | a further start event of the process, with the `steps` from there |
+| `loop` | `id` and `name` are the step the flow goes back to |
+| `call` | `targetKind` (`process` or `case`), `targetKey`, `targetName`, and either `steps` — the called process, opened — or `notOpened`: `nested` (a call inside an opened process), `case`, `dynamic` (the target is an expression), `not in this project`, `no target` |
+| `stage` | a case's stage, with its plan items as `steps` |
+| anything else | the element's own type: `receiveTask`, `manualTask`, `milestone`, `userEventListener`, … |
+
+A plan item of a case also carries `entry` and `exit` — one text per criterion, worded as in the report's
+plan tree, alternatives when there are several — and `manualActivation`, `repetition` and `required`
+where the model sets the rule. A story that had something to report has `warnings`, and `truncated:
+true` when it was cut off at 4,000 steps.
+
 ## `--slice <type:key>` — one model in context
 
 Not a file the full run writes, but the tier between the summary and the graph, printed to stdout or to

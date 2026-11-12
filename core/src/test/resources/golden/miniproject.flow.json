@@ -1,0 +1,325 @@
+{
+  "version": 1,
+  "project": "miniproject",
+  "stories": [
+    {
+      "kind": "process",
+      "key": "archivedProcess",
+      "name": "Archived Process",
+      "file": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
+      "steps": [
+        {
+          "kind": "start",
+          "id": "start"
+        },
+        {
+          "kind": "userTask",
+          "id": "confirm",
+          "name": "Confirm order",
+          "formKey": "orderForm"
+        },
+        {
+          "kind": "end",
+          "id": "end"
+        }
+      ]
+    },
+    {
+      "kind": "process",
+      "key": "fulfilmentProcess",
+      "name": "Fulfilment Process",
+      "file": "processes/fulfilment.bpmn",
+      "documentation": "Ships an approved order and reports the shipping total back to its caller.",
+      "steps": [
+        {
+          "kind": "start",
+          "id": "fStart"
+        },
+        {
+          "kind": "scriptTask",
+          "id": "packTask",
+          "name": "Pack shipment",
+          "format": "groovy"
+        },
+        {
+          "kind": "gateway",
+          "id": "shipGw",
+          "name": "Courier needed?",
+          "gatewayKind": "exclusive",
+          "branches": [
+            {
+              "condition": "${subTotal > 5}",
+              "name": "courier",
+              "steps": [
+                {
+                  "kind": "call",
+                  "id": "callCourier",
+                  "name": "Book courier",
+                  "targetKind": "process",
+                  "targetKey": "courierProcess",
+                  "notOpened": "not in this project"
+                },
+                {
+                  "kind": "boundary",
+                  "id": "courierLate",
+                  "name": "Courier late",
+                  "eventType": "timer",
+                  "eventRef": "PT2H",
+                  "attachedTo": "callCourier",
+                  "interrupting": false,
+                  "steps": [],
+                  "rejoins": "fEnd"
+                }
+              ]
+            },
+            {
+              "name": "pickup",
+              "default": true,
+              "steps": []
+            }
+          ]
+        },
+        {
+          "kind": "event",
+          "id": "stockOk",
+          "name": "Stock confirmed",
+          "eventType": "conditional",
+          "eventRef": "${stockLevel > 0}",
+          "catching": true
+        },
+        {
+          "kind": "end",
+          "id": "fEnd"
+        }
+      ]
+    },
+    {
+      "kind": "process",
+      "key": "orderProcess",
+      "name": "Order Process",
+      "file": "processes/order.bpmn",
+      "documentation": "Handles an order from entry to approval.",
+      "startedBy": {
+        "groups": [
+          "sales"
+        ],
+        "users": []
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "id": "start"
+        },
+        {
+          "kind": "serviceTask",
+          "id": "calcTask",
+          "name": "Calculate total",
+          "expression": "${demoBean.run(execution)}",
+          "resultVariable": "total"
+        },
+        {
+          "kind": "userTask",
+          "id": "approveTask",
+          "name": "Approve order",
+          "candidateGroups": [
+            "backoffice"
+          ],
+          "formKey": "orderForm"
+        },
+        {
+          "kind": "serviceTask",
+          "id": "notifyTask",
+          "name": "Notify",
+          "delegateExpression": "${notifierBean}"
+        },
+        {
+          "kind": "call",
+          "id": "callSub",
+          "name": "Fulfil",
+          "targetKind": "process",
+          "targetKey": "fulfilmentProcess",
+          "targetName": "Fulfilment Process",
+          "steps": [
+            {
+              "kind": "start",
+              "id": "fStart"
+            },
+            {
+              "kind": "scriptTask",
+              "id": "packTask",
+              "name": "Pack shipment",
+              "format": "groovy"
+            },
+            {
+              "kind": "gateway",
+              "id": "shipGw",
+              "name": "Courier needed?",
+              "gatewayKind": "exclusive",
+              "branches": [
+                {
+                  "condition": "${subTotal > 5}",
+                  "name": "courier",
+                  "steps": [
+                    {
+                      "kind": "call",
+                      "id": "callCourier",
+                      "name": "Book courier",
+                      "targetKind": "process",
+                      "targetKey": "courierProcess",
+                      "notOpened": "not in this project"
+                    },
+                    {
+                      "kind": "boundary",
+                      "id": "courierLate",
+                      "name": "Courier late",
+                      "eventType": "timer",
+                      "eventRef": "PT2H",
+                      "attachedTo": "callCourier",
+                      "interrupting": false,
+                      "steps": [],
+                      "rejoins": "fEnd"
+                    }
+                  ]
+                },
+                {
+                  "name": "pickup",
+                  "default": true,
+                  "steps": []
+                }
+              ]
+            },
+            {
+              "kind": "event",
+              "id": "stockOk",
+              "name": "Stock confirmed",
+              "eventType": "conditional",
+              "eventRef": "${stockLevel > 0}",
+              "catching": true
+            },
+            {
+              "kind": "end",
+              "id": "fEnd"
+            }
+          ]
+        },
+        {
+          "kind": "decisionTask",
+          "id": "decideTask",
+          "name": "Decide approval",
+          "decisionRef": "orderDecision"
+        },
+        {
+          "kind": "receiveTask",
+          "id": "waitShipped",
+          "name": "Wait for shipment"
+        },
+        {
+          "kind": "scriptTask",
+          "id": "stampTask",
+          "name": "Stamp order",
+          "format": "groovy"
+        },
+        {
+          "kind": "end",
+          "id": "end"
+        }
+      ]
+    },
+    {
+      "kind": "case",
+      "key": "reviewCase",
+      "name": "Review Case",
+      "file": "cases/review.cmmn",
+      "startedBy": {
+        "groups": [
+          "auditors"
+        ],
+        "users": []
+      },
+      "steps": [
+        {
+          "kind": "userTask",
+          "id": "reviewTask",
+          "name": "Review order",
+          "candidateGroups": [
+            "auditors"
+          ],
+          "formKey": "orderForm"
+        },
+        {
+          "kind": "call",
+          "id": "startOrder",
+          "name": "Start order",
+          "targetKind": "process",
+          "targetKey": "orderProcess",
+          "targetName": "Order Process",
+          "steps": [
+            {
+              "kind": "start",
+              "id": "start"
+            },
+            {
+              "kind": "serviceTask",
+              "id": "calcTask",
+              "name": "Calculate total",
+              "expression": "${demoBean.run(execution)}",
+              "resultVariable": "total"
+            },
+            {
+              "kind": "userTask",
+              "id": "approveTask",
+              "name": "Approve order",
+              "candidateGroups": [
+                "backoffice"
+              ],
+              "formKey": "orderForm"
+            },
+            {
+              "kind": "serviceTask",
+              "id": "notifyTask",
+              "name": "Notify",
+              "delegateExpression": "${notifierBean}"
+            },
+            {
+              "kind": "call",
+              "id": "callSub",
+              "name": "Fulfil",
+              "targetKind": "process",
+              "targetKey": "fulfilmentProcess",
+              "targetName": "Fulfilment Process",
+              "notOpened": "nested"
+            },
+            {
+              "kind": "decisionTask",
+              "id": "decideTask",
+              "name": "Decide approval",
+              "decisionRef": "orderDecision"
+            },
+            {
+              "kind": "receiveTask",
+              "id": "waitShipped",
+              "name": "Wait for shipment"
+            },
+            {
+              "kind": "scriptTask",
+              "id": "stampTask",
+              "name": "Stamp order",
+              "format": "groovy"
+            },
+            {
+              "kind": "end",
+              "id": "end"
+            }
+          ]
+        },
+        {
+          "kind": "serviceTask",
+          "id": "lookupTask",
+          "name": "Lookup customer",
+          "serviceModelKey": "customerService",
+          "operationKey": "findAll"
+        }
+      ]
+    }
+  ]
+}
