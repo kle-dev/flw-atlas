@@ -183,6 +183,25 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.33.0</h3>
+        <ul>
+          <li><b>Your environment list survives Remote Development.</b> The list from <i>Settings →
+              Environments</i> was kept only in the IDE's configuration, which is IDE-wide on a desktop and
+              per project on a Remote Development backend — so an environment added in one project was
+              missing from the next, and gone with a rebuilt backend. It is now also written to
+              <code>~/.flowable-atlas/environments.xml</code>, and that copy wins when the IDE starts and
+              whenever another IDE process of yours has changed it. An existing list is carried over on
+              first start. The file holds names, URLs and usernames; passwords and access tokens stay in the
+              IDE password safe and are asked for once where that safe is new.</li>
+          <li><b>A + beside the Design environment picker.</b> Adding a Design server no longer means a trip
+              to the settings: the Atlas Hub's pull block asks for the URL, a name and the login, puts the
+              environment into the same list the settings page edits, and switches the pull to it. A name
+              that already exists gains the Design server instead of a second environment being made.</li>
+          <li><b>An app list that could not be fetched says so.</b> When Flowable Design was not reachable —
+              typically right after the IDE started — the pull block showed only the apps already ticked,
+              which read as a workspace holding just those, until <i>Refresh</i>. The reason now appears
+              under the workspace picker with <i>Retry</i>, as it already did for the workspace list.</li>
+        </ul>
         <h3>0.32.0</h3>
         <ul>
           <li><b>Storylines: each process and case told in the order a person would.</b> The explorer has a
@@ -583,22 +602,6 @@
               were placed before they were filled. When one opened low on the page, its last button (Remove,
               Delete) ran off the bottom, out of reach. Panels are now placed once filled, and they scroll
               inside themselves when they grow.</li>
-          <li><b>Tables added without a drop land beside what is already drawn.</b> +, Enter, a search
-              result and a new hand-made table now put the card in the nearest free place where you are
-              looking, clear of other cards and frames. Before, they piled up on top of each other, and the
-              sixth landed exactly on the first.</li>
-          <li><b><code>+</code> in the ER designer's table list no longer also zooms the canvas.</b> The
-              list also keeps its focus after + or Enter, so the arrow keys still move through it.</li>
-          <li><b>A relation dropped onto the other table's key starts as many to one.</b> Dropped onto a
-              table's one-column primary key, a new relation is a lookup and starts as <code>0..n:1</code>.
-              Anywhere else it still starts as <code>1:0..n</code>.</li>
-          <li><b>A slice now shows what a model contains, and who uses a variable.</b> <code>--slice</code>
-              on a process, case, decision, form or page adds its <i>Contents</i> exactly as the overview
-              lists them (the steps in execution order with what follows each, the plan tree, the rule rows,
-              the fields) and its <i>Variables</i>, each with the elements that set and read it. The slice
-              of a variable, an expression or a service operation names the models that use it, and a
-              variable's slice lists under <i>Set by</i> and <i>Read by</i> the element and how. Before,
-              these slices said "Nothing references this node".</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

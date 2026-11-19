@@ -12,6 +12,24 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.33.0
+
+- **Your environment list survives Remote Development.** The list from *Settings → Environments* was
+  kept only in the IDE's configuration, which is IDE-wide on a desktop and per project on a Remote
+  Development backend — so an environment added in one project was missing from the next, and gone with
+  a rebuilt backend. It is now also written to `~/.flowable-atlas/environments.xml`, and that copy wins
+  when the IDE starts and whenever another IDE process of yours has changed it. An existing list is
+  carried over on first start. The file holds names, URLs and usernames; passwords and access tokens
+  stay in the IDE password safe and are asked for once where that safe is new.
+- **A + beside the Design environment picker.** Adding a Design server no longer means a trip to the
+  settings: the Atlas Hub's pull block asks for the URL, a name and the login, puts the environment into
+  the same list the settings page edits, and switches the pull to it. A name that already exists gains
+  the Design server instead of a second environment being made.
+- **An app list that could not be fetched says so.** When Flowable Design was not reachable — typically
+  right after the IDE started — the pull block showed only the apps already ticked, which read as a
+  workspace holding just those, until *Refresh*. The reason now appears under the workspace picker with
+  *Retry*, as it already did for the workspace list.
+
 ## 0.32.0
 
 - **Storylines: each process and case told in the order a person would.** The explorer has a new page,
