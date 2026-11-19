@@ -8,8 +8,10 @@ import com.flowable.atlas.design.DesignPullSelection
 import com.flowable.atlas.design.DesignPullService
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasDesignTarget
+import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.auth.AtlasCredentials
+import com.flowable.atlas.hub.AddDesignEnvironmentDialog
 import com.flowable.atlas.hub.EnvironmentPicker
 import com.flowable.atlas.hub.HubAge
 import com.flowable.atlas.hub.HubLayout
@@ -17,16 +19,20 @@ import com.flowable.atlas.hub.HubLists
 import com.flowable.atlas.hub.HubText
 import com.flowable.atlas.hub.HubSnapshot
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.CheckBoxList
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
+import com.intellij.ui.dsl.builder.actionButton
 import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
 import com.intellij.util.ui.NamedColorUtil
 import com.intellij.util.ui.UIUtil
@@ -119,6 +125,8 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     private var fetchedWorkspaces: List<DesignClient.Workspace>? = null
     /** Whether a workspace fetch is in flight, so the combo can say "loading" rather than "none". EDT only. */
     private var loadingWorkspaces = false
+    /** Whether the problem row is reporting a failed *app* fetch — the one a later app fetch may clear. EDT only. */
+    private var problemFromApps = false
 
     /**
      * Set by a listener on whatever thread published, honoured later on the EDT. The topic's contract is
@@ -138,6 +146,11 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     override fun build(panel: Panel) {
         panel.row(message("hub.design.environment")) {
             environment.placeIn(this)
+            // Adding a server is something you find out you need *here*, a click away from the pull it is
+            // for; the settings page is where it is edited afterwards.
+            actionButton(object : DumbAwareAction(message("hub.design.addEnvironment"), null, AllIcons.General.Add) {
+                override fun actionPerformed(e: AnActionEvent) = addEnvironment()
+            })
         }
         manageRow = panel.row {
             link(FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)) {
@@ -253,7 +266,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
 
     /** Fetches the workspace's apps once (or on demand) so the checkboxes show real names. */
     private fun loadApps(force: Boolean) {
-        if (AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) == null) return
+        val selected = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) ?: return
         val workspaceKey = currentSelection().workspaceKey
         if (!force && fetchedAppsWorkspace == workspaceKey) return
         fetchedAppsWorkspace = workspaceKey
@@ -271,8 +284,18 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
                 loadingApps = false
                 // A failed fetch leaves the list as it was and is not remembered as a fetch, so the next
                 // refresh tries again instead of treating an empty list as this workspace's answer.
-                if (apps == null) fetchedAppsWorkspace = null
+                if (apps == null) {
+                    fetchedAppsWorkspace = null
+                    // Said out loud, like a failed workspace fetch: the list below is then only the stored
+                    // selection, and a list of three ticked apps reads as "this workspace has three apps".
+                    showProblem(
+                        (result as? DesignClient.Result.Failed)?.message
+                            ?: message("hub.design.problem.noCredentials", selected.baseUrl),
+                        fromApps = true,
+                    )
+                }
                 if (apps != null) {
+                    if (problemFromApps) showProblem(null)
                     val checked = DesignAppListUi.checkedAppKeys(appList).toSet()
                         .ifEmpty { currentSelection().appKeys.toSet() }
                     populateApps(apps, checked)
@@ -356,6 +379,36 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
         }
     }
 
+    /**
+     * The **+** beside the picker: asks for a Design server and its login, puts it into the IDE-wide
+     * catalog and switches the pull to it. The password is written first and off the EDT — the keychain
+     * can block — so the list fetch the switch triggers already finds it.
+     */
+    private fun addEnvironment() {
+        val dialog = AddDesignEnvironmentDialog(project)
+        if (!dialog.showAndGet()) return
+        val name = dialog.environmentName
+        val baseUrl = dialog.baseUrl
+        val username = dialog.username
+        val password = dialog.password
+        ApplicationManager.getApplication().executeOnPooledThread {
+            AtlasCredentials.save(baseUrl, username, password)
+            ApplicationManager.getApplication().invokeLater({
+                if (project.isDisposed) return@invokeLater
+                val catalog = AtlasEnvironments.getInstance()
+                val environmentId = catalog.environments().firstOrNull { it.name.equals(name, ignoreCase = true) }?.id
+                    ?: catalog.addEnvironment(name)
+                // Null when that environment gained a Design server while the dialog was open; the
+                // picker then simply shows what is there.
+                catalog.addConnection(environmentId, ConnectionKind.DESIGN, baseUrl, username)?.let {
+                    AtlasConnectionSelection.select(project, ConnectionKind.DESIGN, it)
+                }
+                invalidate()
+                host.requestRefresh()
+            }, ModalityState.any())
+        }
+    }
+
     /** Store the picked workspace. Apps do not carry over — the next workspace does not have them. */
     fun selectWorkspace(workspaceKey: String) {
         val current = currentSelection()
@@ -379,7 +432,8 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     }
 
     /** Why the lists could not be read, under the picker that stayed empty — or nothing, with [text] null. */
-    private fun showProblem(text: String?) {
+    private fun showProblem(text: String?, fromApps: Boolean = false) {
+        problemFromApps = fromApps && text != null
         problem.text = text.orEmpty()
         problemRow?.visible(text != null)
         problemLinksRow?.visible(text != null)

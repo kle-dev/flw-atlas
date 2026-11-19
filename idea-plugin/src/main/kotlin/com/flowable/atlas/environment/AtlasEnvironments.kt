@@ -54,6 +54,16 @@ import com.intellij.openapi.components.service
  * Roaming stays on: the environment list should follow the developer through Settings Sync. The
  * secrets do not — they live in the PasswordSafe, keyed by base URL
  * ([com.flowable.atlas.design.DesignCredentials], [com.flowable.atlas.expr.inspect.InspectCredentials]).
+ *
+ * ### …and a copy in the home directory, which wins
+ *
+ * "Application-level" is only IDE-wide on a desktop. A Remote Development backend keeps its
+ * configuration per project, so there the file above is one project's, and an environment added in one
+ * was gone in the next. Every mutation is therefore also written to [HomeEnvironmentsFile]
+ * (`~/.flowable-atlas/environments.xml`), and that file is adopted on load and whenever another IDE
+ * process has rewritten it. It wins over the IDE's copy because it is the one every process of this
+ * user shares — the IDE's copy is then only what Settings Sync carries to a machine that has no such
+ * file yet.
  */
 @Service(Service.Level.APP)
 @State(name = "FlowableAtlasEnvironments", storages = [Storage("flowable-atlas-environments.xml")])
@@ -130,6 +140,13 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
     private var state = State()
     private val lock = Any()
 
+    /** The home-directory copy, or null for "none" (tests). `internal var` so a test can point it at a temp file. */
+    internal var homeFile: java.nio.file.Path? = HomeEnvironmentsFile.defaultPath()
+
+    /** The home file's timestamp as of our last read or write of it — a different one means another process wrote. */
+    private var homeStamp: java.nio.file.attribute.FileTime? = null
+    private var homeCheckedAt = 0L
+
     // ---- PersistentStateComponent -----------------------------------------------------------
 
     /**
@@ -141,19 +158,81 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
     override fun getState(): State = synchronized(lock) { sanitize(state) }
 
     override fun loadState(newState: State) {
-        synchronized(lock) { state = sanitize(newState) }
+        synchronized(lock) {
+            state = sanitize(newState)
+            adoptHome(seedWhenMissing = true)
+        }
+    }
+
+    /** The case this exists for: a backend whose configuration has never seen the list. */
+    override fun noStateLoaded() {
+        synchronized(lock) { adoptHome(seedWhenMissing = false) }
+    }
+
+    /**
+     * Takes the home file's list when there is one. With none yet and [seedWhenMissing], the list the
+     * IDE just loaded becomes the home file — which is how an existing installation gets one without
+     * anybody doing anything. Call with [lock] held.
+     */
+    private fun adoptHome(seedWhenMissing: Boolean): Boolean {
+        val file = homeFile ?: return false
+        homeCheckedAt = System.currentTimeMillis()
+        val stamp = HomeEnvironmentsFile.stamp(file)
+        if (stamp == null) {
+            if (seedWhenMissing && (state.environments.isNotEmpty() || state.connections.isNotEmpty())) writeHome()
+            return false
+        }
+        val fromHome = HomeEnvironmentsFile.read(file) ?: return false
+        homeStamp = stamp
+        state = sanitize(fromHome)
+        return true
+    }
+
+    /** Call with [lock] held. */
+    private fun writeHome() {
+        val file = homeFile ?: return
+        if (HomeEnvironmentsFile.write(file, state)) homeStamp = HomeEnvironmentsFile.stamp(file)
+        homeCheckedAt = System.currentTimeMillis()
+    }
+
+    /**
+     * Picks up a list another IDE process wrote. A `stat` at most once a second, because the readers
+     * below are called from renderers; [force] is for a mutation, which must start from the newest list
+     * or it would write an old one back over somebody else's addition. Returns whether the list changed.
+     * Call with [lock] held.
+     */
+    private fun refreshFromHome(force: Boolean): Boolean {
+        val file = homeFile ?: return false
+        val now = System.currentTimeMillis()
+        if (!force && now - homeCheckedAt < HOME_CHECK_INTERVAL_MS) return false
+        homeCheckedAt = now
+        val stamp = HomeEnvironmentsFile.stamp(file) ?: return false
+        if (stamp == homeStamp) return false
+        return adoptHome(seedWhenMissing = false)
+    }
+
+    /** For the readers: refresh, then tell the listeners *after* the lock is released. */
+    private fun pickUpForeignChanges() {
+        if (homeFile == null) return
+        val changed = synchronized(lock) { refreshFromHome(force = false) }
+        if (changed) AtlasEvents.environmentsChanged()
     }
 
     // ---- reads: snapshots only --------------------------------------------------------------
 
-    fun environments(): List<AtlasEnvironmentSnapshot> = synchronized(lock) {
+    fun environments(): List<AtlasEnvironmentSnapshot> = pickUpForeignChanges().let { readEnvironments() }
+
+    private fun readEnvironments(): List<AtlasEnvironmentSnapshot> = synchronized(lock) {
         state.environments.map { AtlasEnvironmentSnapshot(it.id, it.name, it.requireConfirmation) }
     }
 
     fun environment(id: String): AtlasEnvironmentSnapshot? = environments().firstOrNull { it.id == id }
 
     /** Every connection, or only those of [kind]. In catalog order, which is the user's order. */
-    fun connections(kind: ConnectionKind? = null): List<AtlasConnection> = synchronized(lock) {
+    fun connections(kind: ConnectionKind? = null): List<AtlasConnection> =
+        pickUpForeignChanges().let { readConnections(kind) }
+
+    private fun readConnections(kind: ConnectionKind?): List<AtlasConnection> = synchronized(lock) {
         val byId = state.environments.associateBy { it.id }
         state.connections.mapNotNull { connection ->
             val resolved = connection.resolvedKind() ?: return@mapNotNull null
@@ -267,13 +346,21 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
      * cannot forget to notify.
      */
     private inline fun <T> mutate(block: () -> T): T {
-        val result = synchronized(lock) { block().also { state = sanitize(state) } }
+        val result = synchronized(lock) {
+            refreshFromHome(force = true)
+            block().also {
+                state = sanitize(state)
+                writeHome()
+            }
+        }
         AtlasEvents.environmentsChanged()
         return result
     }
 
     companion object {
         fun getInstance(): AtlasEnvironments = service()
+
+        private const val HOME_CHECK_INTERVAL_MS = 1_000L
 
         /**
          * Drops what cannot mean anything and repairs what can, so a hand-edited or badly merged file

@@ -299,7 +299,9 @@ hand leaves *Keep the generated class in sync* as you set it.
 
 ### → Environments
 
-The DEV/QA/UAT/PROD list, **shared by every project in this IDE**. A tree of environments on the left,
+The DEV/QA/UAT/PROD list, **shared by every project in this IDE** — and, through its copy in
+`~/.flowable-atlas/environments.xml`, by every IDE process of yours on the machine, which is what keeps
+it under Remote Development. A tree of environments on the left,
 the selected node's form on the right; `+` adds an environment or a connection, the copy button clones
 the selected environment with its connections (it is disabled on a connection), the share button puts an
 environment into — or takes it out of — the project's committed file, and the arrows reorder — the list is

@@ -95,7 +95,10 @@ fetched the first time you open it rather than every time the panel is drawn —
 workspaces…* while it is. When a list cannot be read — no credentials, a server error, no workspace
 visible to you — the reason appears under the workspace picker with **Retry** and *Manage
 Environments…* beside it; it used to be a balloon, gone by the time anyone looked at the picker that had
-not filled. An app row shows the app's name; its key and version are in the tooltip.
+not filled — a failed app fetch included, since the list below it is then only the stored selection.
+The **+** beside the environment picker adds a Design server without leaving the Hub: URL, a name and
+the login, into the same IDE-wide list *Settings → Environments* edits, and the pull switches to it. An
+app row shows the app's name; its key and version are in the tooltip.
 
 What you pick there **is** the project's setting — there is no second copy of it in a settings page.
 An earlier cut had a shared default in Settings and a personal override in the Hub, and the pair could
@@ -782,7 +785,11 @@ file under `.idea`; your own choices live in the workspace file, and secrets in 
 
 Servers are a third thing again, and they sit one level up: an environment list is **IDE-wide**, because
 a DEV or QA URL is the same in every Flowable repository you open, and typing it once per project is the
-tedium this removes. Settings holds only that list — which environment a given thing uses is picked at
+tedium this removes. The list is also written to `~/.flowable-atlas/environments.xml`, and that copy
+wins when the IDE starts: under Remote Development a backend keeps its settings per project, so without
+it an environment added in one project was missing from the next, and gone with a rebuilt backend. The
+file holds names, URLs and usernames — passwords and tokens stay in the IDE password safe and are asked
+for once where that safe is new. Settings holds only that list — which environment a given thing uses is picked at
 that thing, in the Atlas Hub or the playground, which is what keeps the two from ever disagreeing.
 An environment can hold four addresses: the **Design** server and the **Work** app that Atlas signs in
 to and calls, plus **Control** and **Hub**, which it only ever hands to a browser. Those two are a URL
